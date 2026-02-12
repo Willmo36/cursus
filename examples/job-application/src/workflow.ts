@@ -1,6 +1,6 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
 // ABOUTME: Demonstrates sequential waitFor calls with a final submission activity.
-import type { WorkflowContext, WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "react-workflow";
 
 type PersonalInfo = {
 	name: string;
@@ -12,17 +12,23 @@ type Education = {
 	degree: string;
 };
 
+type ApplicationSignals = {
+	"personal-info": PersonalInfo;
+	education: Education;
+};
+
 type Application = {
 	personalInfo: PersonalInfo;
 	education: Education;
 	confirmationId: string;
 };
 
-export const applicationWorkflow: WorkflowFunction<Application> = function* (
-	ctx: WorkflowContext,
-) {
-	const personalInfo = yield* ctx.waitFor<PersonalInfo>("personal-info");
-	const education = yield* ctx.waitFor<Education>("education");
+export const applicationWorkflow: WorkflowFunction<
+	Application,
+	ApplicationSignals
+> = function* (ctx) {
+	const personalInfo = yield* ctx.waitFor("personal-info");
+	const education = yield* ctx.waitFor("education");
 
 	const confirmationId = yield* ctx.activity("submit", async () => {
 		await new Promise((r) => setTimeout(r, 1500));

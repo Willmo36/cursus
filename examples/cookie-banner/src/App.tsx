@@ -2,7 +2,7 @@
 // ABOUTME: Shows a banner overlay until consent is given, with accept/reject/customize options.
 import { useState } from "react";
 import { LocalStorage, useWorkflow } from "react-workflow";
-import type { CookiePreferences } from "./workflow";
+import type { CookieChoice, CookiePreferences } from "./workflow";
 import { cookieWorkflow } from "./workflow";
 
 const storage = new LocalStorage();
@@ -63,7 +63,7 @@ function PreferencesSummary({
 
 function Banner({
 	signal,
-}: { signal: (name: string, payload: unknown) => void }) {
+}: { signal: (name: "cookie-choice", payload: CookieChoice) => void }) {
 	const [showCustomize, setShowCustomize] = useState(false);
 	const [analytics, setAnalytics] = useState(false);
 	const [marketing, setMarketing] = useState(false);

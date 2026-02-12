@@ -9,6 +9,7 @@ export type {
 	Command,
 	ParallelCommand,
 	SleepCommand,
+	WaitAllCommand,
 	WaitForCommand,
 	Workflow,
 	WorkflowContext,

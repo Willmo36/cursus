@@ -1,10 +1,14 @@
 // ABOUTME: Login workflow with retry loop for failed authentication attempts.
 // ABOUTME: Demonstrates waitFor + activity in a loop with conditional branching.
-import type { WorkflowContext, WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "react-workflow";
 
 type Credentials = {
 	username: string;
 	password: string;
+};
+
+type LoginSignals = {
+	credentials: Credentials;
 };
 
 type UserProfile = {
@@ -13,11 +17,12 @@ type UserProfile = {
 	loginTime: string;
 };
 
-export const loginWorkflow: WorkflowFunction<UserProfile> = function* (
-	ctx: WorkflowContext,
-) {
+export const loginWorkflow: WorkflowFunction<
+	UserProfile,
+	LoginSignals
+> = function* (ctx) {
 	for (;;) {
-		const creds = yield* ctx.waitFor<Credentials>("credentials");
+		const creds = yield* ctx.waitFor("credentials");
 
 		const authenticated = yield* ctx.activity(
 			"authenticate",
