@@ -5,14 +5,23 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import type { WorkflowContext, WorkflowFunction } from "./types";
 
-type TestRuntimeOptions = {
+type TestRuntimeOptions<
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+> = {
 	activities?: Record<string, (...args: unknown[]) => unknown>;
-	signals?: Array<{ name: string; payload?: unknown }>;
+	signals?: Array<
+		{
+			[K in keyof SignalMap & string]: { name: K; payload: SignalMap[K] };
+		}[keyof SignalMap & string]
+	>;
 };
 
-export async function createTestRuntime<T>(
-	workflowFn: WorkflowFunction<T>,
-	options: TestRuntimeOptions,
+export async function createTestRuntime<
+	T,
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+>(
+	workflowFn: WorkflowFunction<T, SignalMap>,
+	options: TestRuntimeOptions<SignalMap>,
 ): Promise<T> {
 	const { activities = {}, signals = [] } = options;
 	const signalQueue = [...signals];

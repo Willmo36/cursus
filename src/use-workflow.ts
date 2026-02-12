@@ -11,20 +11,29 @@ type UseWorkflowOptions = {
 	storage?: WorkflowStorage;
 };
 
-type UseWorkflowResult<T> = {
+type UseWorkflowResult<
+	T,
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+> = {
 	state: WorkflowState;
 	result: T | undefined;
 	error: string | undefined;
-	waitingFor: string | undefined;
-	signal: (name: string, payload?: unknown) => void;
+	waitingFor: (keyof SignalMap & string) | undefined;
+	signal: <K extends keyof SignalMap & string>(
+		name: K,
+		payload: SignalMap[K],
+	) => void;
 	reset: () => void;
 };
 
-export function useWorkflow<T>(
+export function useWorkflow<
+	T,
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+>(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T>,
+	workflowFn: WorkflowFunction<T, SignalMap>,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T> {
+): UseWorkflowResult<T, SignalMap> {
 	const storage = options?.storage ?? new MemoryStorage();
 	const [state, setState] = useState<WorkflowState>("running");
 	const [result, setResult] = useState<T | undefined>(undefined);
@@ -98,5 +107,12 @@ export function useWorkflow<T>(
 		restart();
 	}, [workflowId]);
 
-	return { state, result, error, waitingFor, signal, reset };
+	return {
+		state,
+		result,
+		error,
+		waitingFor: waitingFor as (keyof SignalMap & string) | undefined,
+		signal: signal as UseWorkflowResult<T, SignalMap>["signal"],
+		reset,
+	};
 }
