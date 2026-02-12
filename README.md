@@ -1,4 +1,4 @@
 Tech stack:
 - React
 - Biome
-- Vitess
+- Vitest
