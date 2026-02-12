@@ -254,10 +254,11 @@ export class Interpreter {
 		// Live: pause until signal() is called
 		this._state = "waiting";
 		this._waitingFor = command.signal;
-		this.notifyChange();
 
 		return new Promise((resolve) => {
 			this.pendingSignal = { resolve };
+			// Notify after pendingSignal is set so signal() can resolve the promise
+			this.notifyChange();
 		});
 	}
 
