@@ -51,9 +51,24 @@ describe("EventLog", () => {
 
 	it("finds a completed event by seq", () => {
 		const log = new EventLog();
-		log.append({ type: "activity_scheduled", name: "fetch", seq: 1, timestamp: 1 });
-		log.append({ type: "activity_completed", seq: 1, result: "data", timestamp: 2 });
-		log.append({ type: "activity_scheduled", name: "save", seq: 2, timestamp: 3 });
+		log.append({
+			type: "activity_scheduled",
+			name: "fetch",
+			seq: 1,
+			timestamp: 1,
+		});
+		log.append({
+			type: "activity_completed",
+			seq: 1,
+			result: "data",
+			timestamp: 2,
+		});
+		log.append({
+			type: "activity_scheduled",
+			name: "save",
+			seq: 2,
+			timestamp: 3,
+		});
 
 		const found = log.findCompleted(1, "activity_completed");
 		expect(found).toEqual({
@@ -66,7 +81,12 @@ describe("EventLog", () => {
 
 	it("returns undefined when no matching completed event exists", () => {
 		const log = new EventLog();
-		log.append({ type: "activity_scheduled", name: "fetch", seq: 1, timestamp: 1 });
+		log.append({
+			type: "activity_scheduled",
+			name: "fetch",
+			seq: 1,
+			timestamp: 1,
+		});
 
 		const found = log.findCompleted(1, "activity_completed");
 		expect(found).toBeUndefined();
@@ -74,7 +94,13 @@ describe("EventLog", () => {
 
 	it("finds signal_received events by seq", () => {
 		const log = new EventLog();
-		log.append({ type: "signal_received", signal: "submit", payload: { x: 1 }, seq: 1, timestamp: 1 });
+		log.append({
+			type: "signal_received",
+			signal: "submit",
+			payload: { x: 1 },
+			seq: 1,
+			timestamp: 1,
+		});
 
 		const found = log.findCompleted(1, "signal_received");
 		expect(found).toEqual({
@@ -88,7 +114,12 @@ describe("EventLog", () => {
 
 	it("finds timer_fired events by seq", () => {
 		const log = new EventLog();
-		log.append({ type: "timer_started", seq: 1, durationMs: 1000, timestamp: 1 });
+		log.append({
+			type: "timer_started",
+			seq: 1,
+			durationMs: 1000,
+			timestamp: 1,
+		});
 		log.append({ type: "timer_fired", seq: 1, timestamp: 2 });
 
 		const found = log.findCompleted(1, "timer_fired");
@@ -101,8 +132,20 @@ describe("EventLog", () => {
 
 	it("finds child_completed events by seq", () => {
 		const log = new EventLog();
-		log.append({ type: "child_started", name: "sub", workflowId: "parent/sub", seq: 1, timestamp: 1 });
-		log.append({ type: "child_completed", workflowId: "parent/sub", seq: 1, result: "done", timestamp: 2 });
+		log.append({
+			type: "child_started",
+			name: "sub",
+			workflowId: "parent/sub",
+			seq: 1,
+			timestamp: 1,
+		});
+		log.append({
+			type: "child_completed",
+			workflowId: "parent/sub",
+			seq: 1,
+			result: "done",
+			timestamp: 2,
+		});
 
 		const found = log.findCompleted(1, "child_completed");
 		expect(found).toEqual({

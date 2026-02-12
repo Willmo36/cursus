@@ -86,8 +86,8 @@ describe("LocalStorage", () => {
 		await storage.append("wf-1", testEvents);
 
 		const raw = localStorage.getItem(`${prefix}:wf-1`);
-		expect(raw).not.toBeNull();
-		expect(JSON.parse(raw!)).toEqual(testEvents);
+		expect(raw).toBeDefined();
+		expect(JSON.parse(raw as string)).toEqual(testEvents);
 	});
 
 	it("clears events for a workflow", async () => {

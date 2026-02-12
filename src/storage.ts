@@ -39,7 +39,10 @@ export class LocalStorage implements WorkflowStorage {
 
 	async append(workflowId: string, events: WorkflowEvent[]): Promise<void> {
 		const existing = await this.load(workflowId);
-		localStorage.setItem(this.key(workflowId), JSON.stringify([...existing, ...events]));
+		localStorage.setItem(
+			this.key(workflowId),
+			JSON.stringify([...existing, ...events]),
+		);
 	}
 
 	async clear(workflowId: string): Promise<void> {

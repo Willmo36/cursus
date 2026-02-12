@@ -3,7 +3,7 @@
 
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { Command, WorkflowContext, WorkflowFunction } from "./types";
+import type { WorkflowContext, WorkflowFunction } from "./types";
 
 type TestRuntimeOptions = {
 	activities?: Record<string, (...args: unknown[]) => unknown>;
@@ -41,7 +41,8 @@ export async function createTestRuntime<T>(
 	// Auto-send signals when the interpreter enters waiting state
 	interpreter.onStateChange(() => {
 		if (interpreter.state === "waiting" && signalQueue.length > 0) {
-			const nextSignal = signalQueue.shift()!;
+			const nextSignal = signalQueue.shift();
+			if (!nextSignal) return;
 			if (interpreter.waitingFor === nextSignal.name) {
 				interpreter.signal(nextSignal.name, nextSignal.payload);
 			}

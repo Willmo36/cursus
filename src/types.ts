@@ -24,7 +24,7 @@ export type SleepCommand = {
 
 export type ParallelCommand = {
 	type: "parallel";
-	activities: Array<{ name: string; fn: () => Promise<unknown> }>;
+	activities: Array<{ name: string; fn: () => Promise<unknown>; seq: number }>;
 	seq: number;
 };
 
@@ -152,13 +152,19 @@ export type WorkflowState = "running" | "waiting" | "completed" | "failed";
 // --- Context (provided to workflow generators) ---
 
 export type WorkflowContext = {
-	activity: <T>(name: string, fn: () => Promise<T>) => Generator<Command, T, unknown>;
+	activity: <T>(
+		name: string,
+		fn: () => Promise<T>,
+	) => Generator<Command, T, unknown>;
 	waitFor: <T = unknown>(signal: string) => Generator<Command, T, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	parallel: <T>(
 		activities: Array<{ name: string; fn: () => Promise<T> }>,
 	) => Generator<Command, T[], unknown>;
-	child: <T>(name: string, workflow: WorkflowFunction<T>) => Generator<Command, T, unknown>;
+	child: <T>(
+		name: string,
+		workflow: WorkflowFunction<T>,
+	) => Generator<Command, T, unknown>;
 };
 
 // --- Storage ---

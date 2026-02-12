@@ -1,7 +1,7 @@
 // ABOUTME: React hook that runs a durable workflow and provides reactive state.
 // ABOUTME: Wraps the interpreter, manages storage sync, and exposes signal/reset controls.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { MemoryStorage } from "./storage";
@@ -30,10 +30,11 @@ export function useWorkflow<T>(
 	const [result, setResult] = useState<T | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
-	const [version, setVersion] = useState(0);
+	const [runId, restart] = useReducer((x: number) => x + 1, 0);
 	const interpreterRef = useRef<Interpreter | null>(null);
 	const storageRef = useRef(storage);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runId triggers re-run on reset
 	useEffect(() => {
 		let cancelled = false;
 
@@ -76,7 +77,7 @@ export function useWorkflow<T>(
 		return () => {
 			cancelled = true;
 		};
-	}, [workflowId, workflowFn, version]);
+	}, [workflowId, workflowFn, runId]);
 
 	const signal = useCallback((name: string, payload?: unknown) => {
 		interpreterRef.current?.signal(name, payload);
@@ -89,7 +90,7 @@ export function useWorkflow<T>(
 		setResult(undefined);
 		setError(undefined);
 		setWaitingFor(undefined);
-		setVersion((v) => v + 1);
+		restart();
 	}, [workflowId]);
 
 	return { state, result, error, waitingFor, signal, reset };

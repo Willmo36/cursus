@@ -20,7 +20,10 @@ export class EventLog {
 		return [...this.log];
 	}
 
-	findCompleted(seq: number, type: EventWithSeq["type"]): WorkflowEvent | undefined {
+	findCompleted(
+		seq: number,
+		type: EventWithSeq["type"],
+	): WorkflowEvent | undefined {
 		return this.log.find(
 			(e): e is EventWithSeq => "seq" in e && e.seq === seq && e.type === type,
 		);

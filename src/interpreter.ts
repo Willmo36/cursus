@@ -21,9 +21,11 @@ export class Interpreter {
 	private _result: unknown;
 	private _error: string | undefined;
 	private _waitingFor: string | undefined;
-	private pendingSignal: {
-		resolve: (payload: unknown) => void;
-	} | undefined;
+	private pendingSignal:
+		| {
+				resolve: (payload: unknown) => void;
+		  }
+		| undefined;
 	private onChange?: () => void;
 
 	constructor(workflowFn: WorkflowFunction<unknown>, log: EventLog) {
@@ -42,7 +44,11 @@ export class Interpreter {
 			waitFor: <T = unknown>(signalName: string) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
-					const result = yield { type: "waitFor" as const, signal: signalName, seq };
+					const result = yield {
+						type: "waitFor" as const,
+						signal: signalName,
+						seq,
+					};
 					return result as T;
 				})();
 			},
@@ -52,7 +58,9 @@ export class Interpreter {
 					yield { type: "sleep" as const, durationMs, seq };
 				})();
 			},
-			parallel: <T>(activities: Array<{ name: string; fn: () => Promise<T> }>) => {
+			parallel: <T>(
+				activities: Array<{ name: string; fn: () => Promise<T> }>,
+			) => {
 				const seq = ++this.seq;
 				// Pre-allocate seq numbers for each activity within the parallel block
 				const seqActivities = activities.map((a) => ({
@@ -194,8 +202,10 @@ export class Interpreter {
 				return this.executeParallel(command);
 			case "child":
 				return this.executeChild(command);
-			default:
-				throw new Error(`Command type "${command.type}" not implemented yet`);
+			default: {
+				const _exhaustive: never = command;
+				throw new Error(`Unknown command type: ${_exhaustive}`);
+			}
 		}
 	}
 
@@ -349,11 +359,15 @@ export class Interpreter {
 		return Promise.all(promises);
 	}
 
-	private verifyActivityReplay(command: Extract<Command, { type: "activity" }>): void {
-		const scheduled = this.log.events().find(
-			(e): e is ActivityScheduledEvent =>
-				e.type === "activity_scheduled" && e.seq === command.seq,
-		);
+	private verifyActivityReplay(
+		command: Extract<Command, { type: "activity" }>,
+	): void {
+		const scheduled = this.log
+			.events()
+			.find(
+				(e): e is ActivityScheduledEvent =>
+					e.type === "activity_scheduled" && e.seq === command.seq,
+			);
 		if (scheduled && scheduled.name !== command.name) {
 			throw new Error(
 				`Non-determinism detected: activity at seq ${command.seq} was "${scheduled.name}" but is now "${command.name}"`,

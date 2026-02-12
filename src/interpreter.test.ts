@@ -4,11 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { Command, Workflow, WorkflowContext, WorkflowFunction } from "./types";
-
-function createContext(interpreter: Interpreter): WorkflowContext {
-	return interpreter.context;
-}
+import type { WorkflowFunction } from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -49,9 +45,20 @@ describe("Interpreter", () => {
 
 			const events = log.events();
 			expect(events[0]).toMatchObject({ type: "workflow_started" });
-			expect(events[1]).toMatchObject({ type: "activity_scheduled", name: "greet", seq: 1 });
-			expect(events[2]).toMatchObject({ type: "activity_completed", seq: 1, result: "hello" });
-			expect(events[3]).toMatchObject({ type: "workflow_completed", result: "hello" });
+			expect(events[1]).toMatchObject({
+				type: "activity_scheduled",
+				name: "greet",
+				seq: 1,
+			});
+			expect(events[2]).toMatchObject({
+				type: "activity_completed",
+				seq: 1,
+				result: "hello",
+			});
+			expect(events[3]).toMatchObject({
+				type: "workflow_completed",
+				result: "hello",
+			});
 		});
 
 		it("propagates activity failure to workflow", async () => {
@@ -70,7 +77,11 @@ describe("Interpreter", () => {
 
 			const events = log.events();
 			expect(events).toContainEqual(
-				expect.objectContaining({ type: "activity_failed", seq: 1, error: "boom" }),
+				expect.objectContaining({
+					type: "activity_failed",
+					seq: 1,
+					error: "boom",
+				}),
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({ type: "workflow_failed", error: "boom" }),
@@ -110,7 +121,12 @@ describe("Interpreter", () => {
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{ type: "activity_scheduled", name: "first", seq: 1, timestamp: 2 },
-				{ type: "activity_completed", seq: 1, result: "replayed", timestamp: 3 },
+				{
+					type: "activity_completed",
+					seq: 1,
+					result: "replayed",
+					timestamp: 3,
+				},
 			]);
 
 			const interpreter = new Interpreter(workflow, log);
@@ -127,7 +143,12 @@ describe("Interpreter", () => {
 
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
-				{ type: "activity_scheduled", name: "original-name", seq: 1, timestamp: 2 },
+				{
+					type: "activity_scheduled",
+					name: "original-name",
+					seq: 1,
+					timestamp: 2,
+				},
 				{ type: "activity_completed", seq: 1, result: "x", timestamp: 3 },
 			]);
 
@@ -170,7 +191,13 @@ describe("Interpreter", () => {
 
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
-				{ type: "signal_received", signal: "submit", payload: "saved-data", seq: 1, timestamp: 2 },
+				{
+					type: "signal_received",
+					signal: "submit",
+					payload: "saved-data",
+					seq: 1,
+					timestamp: 2,
+				},
 				{ type: "workflow_completed", result: "got: saved-data", timestamp: 3 },
 			]);
 
@@ -232,7 +259,11 @@ describe("Interpreter", () => {
 
 			const events = log.events();
 			expect(events).toContainEqual(
-				expect.objectContaining({ type: "timer_started", seq: 1, durationMs: 1000 }),
+				expect.objectContaining({
+					type: "timer_started",
+					seq: 1,
+					durationMs: 1000,
+				}),
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({ type: "timer_fired", seq: 1 }),
@@ -362,11 +393,17 @@ describe("Interpreter", () => {
 				expect.objectContaining({ type: "child_started", name: "sub" }),
 			);
 			expect(parentEvents).toContainEqual(
-				expect.objectContaining({ type: "child_completed", result: "child-result" }),
+				expect.objectContaining({
+					type: "child_completed",
+					result: "child-result",
+				}),
 			);
 			// Child's activity events should NOT be in the parent log
 			expect(parentEvents).not.toContainEqual(
-				expect.objectContaining({ type: "activity_scheduled", name: "childTask" }),
+				expect.objectContaining({
+					type: "activity_scheduled",
+					name: "childTask",
+				}),
 			);
 		});
 
@@ -384,8 +421,20 @@ describe("Interpreter", () => {
 
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
-				{ type: "child_started", name: "sub", workflowId: "sub", seq: 1, timestamp: 2 },
-				{ type: "child_completed", workflowId: "sub", seq: 1, result: "child-result", timestamp: 3 },
+				{
+					type: "child_started",
+					name: "sub",
+					workflowId: "sub",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "child_completed",
+					workflowId: "sub",
+					seq: 1,
+					result: "child-result",
+					timestamp: 3,
+				},
 				{ type: "workflow_completed", result: "child-result", timestamp: 4 },
 			]);
 

@@ -71,9 +71,7 @@ describe("createTestRuntime", () => {
 			});
 		};
 
-		await expect(
-			createTestRuntime(workflow, {}),
-		).rejects.toThrow("boom");
+		await expect(createTestRuntime(workflow, {})).rejects.toThrow("boom");
 	});
 
 	it("supports multiple sequential signals", async () => {
