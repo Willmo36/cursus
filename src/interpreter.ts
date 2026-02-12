@@ -9,6 +9,7 @@ import type {
 	SignalReceivedEvent,
 	WaitAllCompletedEvent,
 	WorkflowContext,
+	WorkflowEvent,
 	WorkflowFunction,
 	WorkflowRegistryInterface,
 	WorkflowState,
@@ -148,6 +149,10 @@ export class Interpreter {
 
 	private notifyChange(): void {
 		this.onChange?.();
+	}
+
+	get events(): WorkflowEvent[] {
+		return this.log.events();
 	}
 
 	get state(): WorkflowState {

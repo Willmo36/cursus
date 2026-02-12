@@ -211,6 +211,54 @@ describe("WorkflowRegistry", () => {
 		expect(states).toContain("completed");
 	});
 
+	it("getWorkflowIds() returns all registered workflow IDs", () => {
+		const workflowA: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("a", async () => "a");
+		};
+		const workflowB: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("b", async () => "b");
+		};
+
+		const storage = new MemoryStorage();
+		const registry = new WorkflowRegistry(
+			{ alpha: workflowA, beta: workflowB },
+			storage,
+		);
+
+		const ids = registry.getWorkflowIds();
+		expect(ids).toContain("alpha");
+		expect(ids).toContain("beta");
+		expect(ids).toHaveLength(2);
+	});
+
+	it("getEvents() returns events for a started workflow", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("greet", async () => "hello");
+		};
+
+		const storage = new MemoryStorage();
+		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		await registry.start("greet");
+
+		const events = registry.getEvents("greet");
+		expect(events[0]).toMatchObject({ type: "workflow_started" });
+		expect(events).toContainEqual(
+			expect.objectContaining({ type: "workflow_completed", result: "hello" }),
+		);
+	});
+
+	it("getEvents() returns empty array for an unstarted workflow", () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("greet", async () => "hello");
+		};
+
+		const storage = new MemoryStorage();
+		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+
+		const events = registry.getEvents("greet");
+		expect(events).toEqual([]);
+	});
+
 	it("onStateChange returns unsubscribe function", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const data = yield* ctx.waitFor<string>("submit");

@@ -5,6 +5,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import type {
 	AnyWorkflowFunction,
+	WorkflowEvent,
 	WorkflowRegistryInterface,
 	WorkflowState,
 	WorkflowStorage,
@@ -138,6 +139,16 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	signal(id: string, name: string, payload?: unknown): void {
 		const entry = this.getEntry(id);
 		entry.interpreter?.signal(name, payload);
+	}
+
+	getEvents(id: string): WorkflowEvent[] {
+		const entry = this.entries.get(id);
+		if (!entry?.interpreter) return [];
+		return entry.interpreter.events;
+	}
+
+	getWorkflowIds(): string[] {
+		return [...this.entries.keys()];
 	}
 
 	getInterpreter(id: string): Interpreter | undefined {

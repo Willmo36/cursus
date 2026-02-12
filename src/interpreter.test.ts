@@ -568,6 +568,29 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("events getter", () => {
+		it("returns the event log entries", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			const events = interpreter.events;
+			expect(events[0]).toMatchObject({ type: "workflow_started" });
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "activity_completed",
+					result: "hello",
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({ type: "workflow_completed" }),
+			);
+		});
+	});
+
 	describe("Phase H: waitForWorkflow", () => {
 		it("delegates to registry and returns the result", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
