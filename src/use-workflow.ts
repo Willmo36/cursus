@@ -1,9 +1,17 @@
 // ABOUTME: React hook that runs a durable workflow and provides reactive state.
 // ABOUTME: Wraps the interpreter, manages storage sync, and exposes signal/reset controls.
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+	useCallback,
+	useContext,
+	useEffect,
+	useReducer,
+	useRef,
+	useState,
+} from "react";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
+import { RegistryContext } from "./registry-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction, WorkflowState, WorkflowStorage } from "./types";
 
@@ -34,6 +42,7 @@ export function useWorkflow<
 	workflowFn: WorkflowFunction<T, SignalMap>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap> {
+	const registry = useContext(RegistryContext);
 	const storage = options?.storage ?? new MemoryStorage();
 	const [state, setState] = useState<WorkflowState>("running");
 	const [result, setResult] = useState<T | undefined>(undefined);
@@ -55,6 +64,7 @@ export function useWorkflow<
 			const interpreter = new Interpreter(
 				workflowFn as WorkflowFunction<unknown>,
 				log,
+				registry ?? undefined,
 			);
 			interpreterRef.current = interpreter;
 

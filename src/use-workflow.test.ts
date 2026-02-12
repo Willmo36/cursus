@@ -2,7 +2,9 @@
 // ABOUTME: Covers initial state, completion, signals, reset, replay, and waiting state.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkflowRegistryProvider } from "./registry-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
@@ -219,6 +221,37 @@ describe("useWorkflow", () => {
 		await waitFor(() => {
 			expect(result2.current.state).toBe("waiting");
 			expect(result2.current.waitingFor).toBe("password");
+		});
+	});
+
+	it("useWorkflow inside provider can use waitForWorkflow", async () => {
+		const loginWorkflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("login", async () => "user-123");
+		};
+
+		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow<string>("login");
+			return `local got: ${user}`;
+		};
+
+		const storage = new MemoryStorage();
+		const workflows = { login: loginWorkflow };
+
+		const wrapper = ({ children }: { children: React.ReactNode }) =>
+			createElement(
+				WorkflowRegistryProvider,
+				{ workflows, storage },
+				children,
+			);
+
+		const { result } = renderHook(
+			() => useWorkflow("local", localWorkflow, { storage }),
+			{ wrapper },
+		);
+
+		await waitFor(() => {
+			expect(result.current.state).toBe("completed");
+			expect(result.current.result).toBe("local got: user-123");
 		});
 	});
 });
