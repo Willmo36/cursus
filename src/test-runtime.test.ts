@@ -105,4 +105,36 @@ describe("createTestRuntime", () => {
 
 		expect(result).toBe("test@example.com:secret123");
 	});
+
+	it("mocks waitForWorkflow with workflowResults", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow<string>("login");
+			return `got: ${user}`;
+		};
+
+		const result = await createTestRuntime(workflow, {
+			workflowResults: {
+				login: "test-user",
+			},
+		});
+
+		expect(result).toBe("got: test-user");
+	});
+
+	it("workflowResults works alongside activities and signals", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow<string>("login");
+			const greeting = yield* ctx.activity("greet", async () => "real");
+			const confirm = yield* ctx.waitFor<string>("confirm");
+			return `${user}:${greeting}:${confirm}`;
+		};
+
+		const result = await createTestRuntime(workflow, {
+			workflowResults: { login: "mock-user" },
+			activities: { greet: () => "mock-hello" },
+			signals: [{ name: "confirm", payload: "yes" }],
+		});
+
+		expect(result).toBe("mock-user:mock-hello:yes");
+	});
 });

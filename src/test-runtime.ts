@@ -3,7 +3,11 @@
 
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { WorkflowContext, WorkflowFunction } from "./types";
+import type {
+	WorkflowContext,
+	WorkflowFunction,
+	WorkflowRegistryInterface,
+} from "./types";
 
 type TestRuntimeOptions<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
@@ -14,6 +18,7 @@ type TestRuntimeOptions<
 			[K in keyof SignalMap & string]: { name: K; payload: SignalMap[K] };
 		}[keyof SignalMap & string]
 	>;
+	workflowResults?: Record<string, unknown>;
 };
 
 export async function createTestRuntime<
@@ -23,8 +28,24 @@ export async function createTestRuntime<
 	workflowFn: WorkflowFunction<T, SignalMap>,
 	options: TestRuntimeOptions<SignalMap>,
 ): Promise<T> {
-	const { activities = {}, signals = [] } = options;
+	const { activities = {}, signals = [], workflowResults } = options;
 	const signalQueue = [...signals];
+
+	// Build a mock registry if workflowResults are provided
+	let mockRegistry: WorkflowRegistryInterface | undefined;
+	if (workflowResults) {
+		mockRegistry = {
+			async waitFor<R>(workflowId: string): Promise<R> {
+				if (!(workflowId in workflowResults)) {
+					throw new Error(
+						`No mock result for workflow "${workflowId}" in workflowResults`,
+					);
+				}
+				return workflowResults[workflowId] as R;
+			},
+			async start(): Promise<void> {},
+		};
+	}
 
 	// Wrap the workflow to intercept activity calls with mocks
 	const wrappedWorkflow: WorkflowFunction<unknown> = function* (ctx) {
@@ -47,7 +68,7 @@ export async function createTestRuntime<
 	};
 
 	const log = new EventLog();
-	const interpreter = new Interpreter(wrappedWorkflow, log);
+	const interpreter = new Interpreter(wrappedWorkflow, log, mockRegistry);
 
 	// Auto-send signals when the interpreter enters waiting state
 	interpreter.onStateChange(() => {
