@@ -9,6 +9,7 @@ import type {
 	WaitAllCompletedEvent,
 	WorkflowContext,
 	WorkflowFunction,
+	WorkflowRegistryInterface,
 	WorkflowState,
 } from "./types";
 
@@ -38,10 +39,16 @@ export class Interpreter {
 		  }
 		| undefined;
 	private onChange?: () => void;
+	private registry?: WorkflowRegistryInterface;
 
-	constructor(workflowFn: WorkflowFunction<unknown>, log: EventLog) {
+	constructor(
+		workflowFn: WorkflowFunction<unknown>,
+		log: EventLog,
+		registry?: WorkflowRegistryInterface,
+	) {
 		this.workflowFn = workflowFn;
 		this.log = log;
+		this.registry = registry;
 		this.seq = 0;
 
 		this.context = {
@@ -108,6 +115,22 @@ export class Interpreter {
 						seq,
 					};
 					return result;
+				})();
+			},
+			waitForWorkflow: <T>(
+				workflowId: string,
+				options?: { start?: boolean },
+			) => {
+				const seq = ++this.seq;
+				const start = options?.start ?? true;
+				return (function* (): Generator<Command, T, unknown> {
+					const result = yield {
+						type: "waitForWorkflow" as const,
+						workflowId,
+						start,
+						seq,
+					};
+					return result as T;
 				})();
 			},
 		};
@@ -270,6 +293,8 @@ export class Interpreter {
 				return this.executeParallel(command);
 			case "child":
 				return this.executeChild(command);
+			case "waitForWorkflow":
+				return this.executeWaitForWorkflow(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -441,6 +466,47 @@ export class Interpreter {
 		this.log.append({
 			type: "child_completed",
 			workflowId: command.name,
+			seq: command.seq,
+			result,
+			timestamp: Date.now(),
+		});
+
+		return result;
+	}
+
+	private async executeWaitForWorkflow(
+		command: Extract<Command, { type: "waitForWorkflow" }>,
+	): Promise<unknown> {
+		// Check for replay
+		const completed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_completed",
+		);
+		if (completed) {
+			return (completed as { result: unknown }).result;
+		}
+
+		// Live: require registry
+		if (!this.registry) {
+			throw new Error(
+				"waitForWorkflow requires a WorkflowRegistry. Wrap your app in a WorkflowRegistryProvider.",
+			);
+		}
+
+		this.log.append({
+			type: "workflow_dependency_started",
+			workflowId: command.workflowId,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		const result = await this.registry.waitFor(command.workflowId, {
+			start: command.start,
+		});
+
+		this.log.append({
+			type: "workflow_dependency_completed",
+			workflowId: command.workflowId,
 			seq: command.seq,
 			result,
 			timestamp: Date.now(),

@@ -41,6 +41,7 @@ export async function createTestRuntime<
 			parallel: ctx.parallel,
 			child: ctx.child,
 			waitAll: ctx.waitAll,
+			waitForWorkflow: ctx.waitForWorkflow,
 		};
 		return yield* (workflowFn as WorkflowFunction<unknown>)(wrappedCtx);
 	};

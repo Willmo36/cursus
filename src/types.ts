@@ -41,13 +41,21 @@ export type ChildCommand = {
 	seq: number;
 };
 
+export type WaitForWorkflowCommand = {
+	type: "waitForWorkflow";
+	workflowId: string;
+	start: boolean;
+	seq: number;
+};
+
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
 	| WaitAllCommand
 	| SleepCommand
 	| ParallelCommand
-	| ChildCommand;
+	| ChildCommand
+	| WaitForWorkflowCommand;
 
 // --- Events (recorded in the event log) ---
 
@@ -136,6 +144,21 @@ export type WaitAllCompletedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowDependencyStartedEvent = {
+	type: "workflow_dependency_started";
+	workflowId: string;
+	seq: number;
+	timestamp: number;
+};
+
+export type WorkflowDependencyCompletedEvent = {
+	type: "workflow_dependency_completed";
+	workflowId: string;
+	seq: number;
+	result: unknown;
+	timestamp: number;
+};
+
 export type WorkflowCompletedEvent = {
 	type: "workflow_completed";
 	result: unknown;
@@ -161,6 +184,8 @@ export type WorkflowEvent =
 	| ChildStartedEvent
 	| ChildCompletedEvent
 	| ChildFailedEvent
+	| WorkflowDependencyStartedEvent
+	| WorkflowDependencyCompletedEvent
 	| WorkflowCompletedEvent
 	| WorkflowFailedEvent;
 
@@ -174,6 +199,13 @@ export type WorkflowFunction<
 > = (ctx: WorkflowContext<SignalMap>) => Workflow<T>;
 
 export type WorkflowState = "running" | "waiting" | "completed" | "failed";
+
+// --- Registry interface (avoids circular imports) ---
+
+export type WorkflowRegistryInterface = {
+	waitFor<T>(workflowId: string, options?: { start?: boolean }): Promise<T>;
+	start(workflowId: string): Promise<void>;
+};
 
 // --- Context (provided to workflow generators) ---
 
@@ -198,6 +230,10 @@ export type WorkflowContext<
 	waitAll: <K extends (keyof SignalMap & string)[]>(
 		...signals: K
 	) => Generator<Command, { [I in keyof K]: SignalMap[K[I]] }, unknown>;
+	waitForWorkflow: <T>(
+		workflowId: string,
+		options?: { start?: boolean },
+	) => Generator<Command, T, unknown>;
 };
 
 // --- Storage ---
