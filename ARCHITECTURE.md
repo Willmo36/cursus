@@ -163,12 +163,14 @@ The test interpreter runs the generator synchronously, injecting results without
 5. **Simpler event types** — we don't need workflow tasks, task queues, or the scheduling/dispatch layer.
 6. **No continue-as-new** — browser workflows are unlikely to hit event log size limits. If needed, we can add this later.
 
-## Open Questions
+## Decisions
 
-1. **Should `waitFor` render UI?** One approach: `waitFor` just pauses the workflow. The React component inspects the workflow's "waiting for" state and decides what to render. This keeps the workflow function pure and the rendering in React-land.
+1. **`waitFor` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
 
-2. **Error handling / compensation (saga pattern)** — Should we build in saga support from day one, or defer it? I'd suggest deferring — the generator's natural try/catch already gives basic compensation ability.
+2. **Parallel activities supported.** `yield* ctx.parallel([...])` for concurrent activities (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
-3. **Concurrency within a workflow** — Should we support parallel activities (like `Promise.all`)? Something like `yield* ctx.parallel([activity1, activity2])`? Temporal supports this. Useful but adds complexity to replay logic.
+3. **History compaction deferred.** Not needed for initial version.
 
-4. **History compaction** — For long-running workflows (chat room), the event log could grow large. Should we support snapshotting/compaction from the start?
+## Future Work
+
+- **Saga/compensation pattern.** A first-class `ctx.compensate()` primitive for registering undo actions that execute in LIFO order on failure. Deferred because try/catch in generators handles basic cases, and none of the initial examples require it. Promote to a primitive if the pattern recurs.
