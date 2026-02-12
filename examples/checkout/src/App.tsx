@@ -1,8 +1,8 @@
 // ABOUTME: Checkout UI with a global profile workflow and a local checkout workflow.
 // ABOUTME: Demonstrates waitForWorkflow: checkout blocks until profile is complete.
 import { useState } from "react";
-import { useGlobalWorkflow, useWorkflow } from "react-workflow";
-import { DebugPanel } from "./DebugPanel";
+import { WorkflowDebugPanel, useGlobalWorkflow, useWorkflow } from "react-workflow";
+import { storage } from "./storage";
 import type { UserProfile } from "./workflows";
 import { checkoutWorkflow } from "./workflows";
 
@@ -28,7 +28,13 @@ export function App() {
 				/>
 				<CheckoutForm />
 			</div>
-			<DebugPanel />
+			<WorkflowDebugPanel
+				onClear={async () => {
+					await storage.clear("profile");
+					await storage.clear("checkout");
+					window.location.reload();
+				}}
+			/>
 		</>
 	);
 }

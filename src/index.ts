@@ -26,5 +26,8 @@ export type {
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
+export { WorkflowDebugPanel } from "./debug-panel";
 export { useGlobalWorkflow } from "./use-global-workflow";
 export { useWorkflow } from "./use-workflow";
+export { useWorkflowEvents } from "./use-workflow-events";
+export type { WorkflowEventLog } from "./use-workflow-events";
