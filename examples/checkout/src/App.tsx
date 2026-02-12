@@ -2,25 +2,34 @@
 // ABOUTME: Demonstrates waitForWorkflow: checkout blocks until profile is complete.
 import { useState } from "react";
 import { useGlobalWorkflow, useWorkflow } from "react-workflow";
+import { DebugPanel } from "./DebugPanel";
 import type { UserProfile } from "./workflows";
 import { checkoutWorkflow } from "./workflows";
 
 export function App() {
 	return (
-		<div
-			style={{ maxWidth: 520, margin: "40px auto", fontFamily: "system-ui" }}
-		>
-			<h1>Checkout</h1>
-			<ProfileForm />
-			<hr
+		<>
+			<div
 				style={{
-					margin: "24px 0",
-					border: "none",
-					borderTop: "1px solid #ddd",
+					maxWidth: 520,
+					margin: "40px auto",
+					paddingBottom: 60,
+					fontFamily: "system-ui",
 				}}
-			/>
-			<CheckoutForm />
-		</div>
+			>
+				<h1>Checkout</h1>
+				<ProfileForm />
+				<hr
+					style={{
+						margin: "24px 0",
+						border: "none",
+						borderTop: "1px solid #ddd",
+					}}
+				/>
+				<CheckoutForm />
+			</div>
+			<DebugPanel />
+		</>
 	);
 }
 

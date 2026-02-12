@@ -46,9 +46,8 @@ export const checkoutWorkflow: WorkflowFunction<
 	OrderConfirmation,
 	CheckoutSignals
 > = function* (ctx) {
-	const profile = yield* ctx.waitForWorkflow<UserProfile>("profile");
-
 	const payment = yield* ctx.waitFor("payment");
+	const profile = yield* ctx.waitForWorkflow<UserProfile>("profile");
 
 	const order = yield* ctx.activity("place-order", async () => {
 		await new Promise((r) => setTimeout(r, 1000));

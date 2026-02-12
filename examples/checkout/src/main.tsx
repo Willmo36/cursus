@@ -2,11 +2,11 @@
 // ABOUTME: Wraps the app in WorkflowRegistryProvider with the profile workflow registered globally.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { LocalStorage, WorkflowRegistryProvider } from "react-workflow";
+import { WorkflowRegistryProvider } from "react-workflow";
 import { App } from "./App";
+import { storage } from "./storage";
 import { profileWorkflow } from "./workflows";
 
-const storage = new LocalStorage();
 const workflows = {
 	profile: profileWorkflow,
 };
