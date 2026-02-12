@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkflowRegistryProvider } from "./registry-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
+import { useGlobalWorkflow } from "./use-global-workflow";
 import { useWorkflow } from "./use-workflow";
 
 describe("useWorkflow", () => {
@@ -221,6 +222,70 @@ describe("useWorkflow", () => {
 		await waitFor(() => {
 			expect(result2.current.state).toBe("waiting");
 			expect(result2.current.waitingFor).toBe("password");
+		});
+	});
+
+	it("signal then waitForWorkflow then activity completes", async () => {
+		const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
+			ctx,
+		) {
+			const profile = yield* ctx.waitFor<{ name: string }>("profile");
+			return profile;
+		};
+
+		const checkoutWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const payment = yield* ctx.waitFor<string>("payment");
+			const profile = yield* ctx.waitForWorkflow<{ name: string }>("profile");
+			const order = yield* ctx.activity("place-order", async () => {
+				return `${profile.name}:${payment}`;
+			});
+			return order;
+		};
+
+		const storage = new MemoryStorage();
+		const workflows = { profile: profileWorkflow };
+
+		const wrapper = ({ children }: { children: React.ReactNode }) =>
+			createElement(WorkflowRegistryProvider, { workflows, storage }, children);
+
+		const { result } = renderHook(
+			() => ({
+				checkout: useWorkflow("checkout", checkoutWorkflow, { storage }),
+				profile: useGlobalWorkflow("profile"),
+			}),
+			{ wrapper },
+		);
+
+		// Profile should be waiting for "profile" signal
+		await waitFor(() => {
+			expect(result.current.profile.state).toBe("waiting");
+			expect(result.current.profile.waitingFor).toBe("profile");
+		});
+
+		// Checkout should be waiting for "payment" signal
+		await waitFor(() => {
+			expect(result.current.checkout.state).toBe("waiting");
+			expect(result.current.checkout.waitingFor).toBe("payment");
+		});
+
+		// Send profile signal first
+		act(() => {
+			result.current.profile.signal("profile", { name: "Max" });
+		});
+
+		await waitFor(() => {
+			expect(result.current.profile.state).toBe("completed");
+		});
+
+		// Send payment signal
+		act(() => {
+			result.current.checkout.signal("payment", "1234");
+		});
+
+		// Checkout should complete after waitForWorkflow resolves and activity runs
+		await waitFor(() => {
+			expect(result.current.checkout.state).toBe("completed");
+			expect(result.current.checkout.result).toBe("Max:1234");
 		});
 	});
 
