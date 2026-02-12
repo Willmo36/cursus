@@ -166,15 +166,12 @@ export type WorkflowEvent =
 
 // --- Workflow types ---
 
-export type Workflow<
-	T,
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-> = Generator<Command, T, unknown>;
+export type Workflow<T> = Generator<Command, T, unknown>;
 
 export type WorkflowFunction<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-> = (ctx: WorkflowContext<SignalMap>) => Workflow<T, SignalMap>;
+> = (ctx: WorkflowContext<SignalMap>) => Workflow<T>;
 
 export type WorkflowState = "running" | "waiting" | "completed" | "failed";
 

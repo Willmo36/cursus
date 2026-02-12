@@ -14,7 +14,9 @@ export function App() {
 	);
 
 	return (
-		<div style={{ maxWidth: 400, margin: "40px auto", fontFamily: "system-ui" }}>
+		<div
+			style={{ maxWidth: 400, margin: "40px auto", fontFamily: "system-ui" }}
+		>
 			<h1>Signup Wizard</h1>
 
 			{state === "waiting" && (
@@ -48,7 +50,9 @@ export function App() {
 
 function SignupForm({
 	onSubmit,
-}: { onSubmit: (email: string, password: string) => void }) {
+}: {
+	onSubmit: (email: string, password: string) => void;
+}) {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 

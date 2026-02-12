@@ -162,7 +162,7 @@ export class Interpreter {
 		}
 
 		// waitAll path
-		if (this.pendingWaitAll && this.pendingWaitAll.needed.has(name)) {
+		if (this.pendingWaitAll?.needed.has(name)) {
 			const pending = this.pendingWaitAll;
 			pending.collected.set(name, payload);
 			pending.needed.delete(name);

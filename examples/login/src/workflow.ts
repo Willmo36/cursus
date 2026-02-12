@@ -17,35 +17,28 @@ type UserProfile = {
 	loginTime: string;
 };
 
-export const loginWorkflow: WorkflowFunction<
-	UserProfile,
-	LoginSignals
-> = function* (ctx) {
-	for (;;) {
-		const creds = yield* ctx.waitFor("credentials");
+export const loginWorkflow: WorkflowFunction<UserProfile, LoginSignals> =
+	function* (ctx) {
+		for (;;) {
+			const creds = yield* ctx.waitFor("credentials");
 
-		const authenticated = yield* ctx.activity(
-			"authenticate",
-			async () => {
+			const authenticated = yield* ctx.activity("authenticate", async () => {
 				await new Promise((r) => setTimeout(r, 800));
 				return creds.password === "secret";
-			},
-		);
+			});
 
-		if (authenticated) {
-			const profile = yield* ctx.activity(
-				"load-profile",
-				async () => {
+			if (authenticated) {
+				const profile = yield* ctx.activity("load-profile", async () => {
 					await new Promise((r) => setTimeout(r, 500));
 					return {
 						username: creds.username,
-						displayName: creds.username.charAt(0).toUpperCase() + creds.username.slice(1),
+						displayName:
+							creds.username.charAt(0).toUpperCase() + creds.username.slice(1),
 						loginTime: new Date().toLocaleTimeString(),
 					};
-				},
-			);
+				});
 
-			return profile;
+				return profile;
+			}
 		}
-	}
-};
+	};

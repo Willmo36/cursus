@@ -12,11 +12,10 @@ type SsoSession = {
 	accessToken: string;
 };
 
-export const ssoWorkflow: WorkflowFunction<
-	SsoSession,
-	SsoSignals
-> = function* (ctx) {
-	const authUrl = yield* ctx.activity("initiate-sso", async () => {
+export const ssoWorkflow: WorkflowFunction<SsoSession, SsoSignals> = function* (
+	ctx,
+) {
+	const _authUrl = yield* ctx.activity("initiate-sso", async () => {
 		await new Promise((r) => setTimeout(r, 1000));
 		return "https://provider.example.com/authorize?client_id=demo&state=abc123";
 	});

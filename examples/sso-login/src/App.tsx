@@ -13,7 +13,9 @@ export function App() {
 	);
 
 	return (
-		<div style={{ maxWidth: 480, margin: "40px auto", fontFamily: "system-ui" }}>
+		<div
+			style={{ maxWidth: 480, margin: "40px auto", fontFamily: "system-ui" }}
+		>
 			<h1>SSO Login</h1>
 
 			{state === "running" && !result && (
@@ -74,9 +76,5 @@ export function App() {
 }
 
 function StatusMessage({ text }: { text: string }) {
-	return (
-		<p style={{ color: "#666", fontStyle: "italic" }}>
-			{text}
-		</p>
-	);
+	return <p style={{ color: "#666", fontStyle: "italic" }}>{text}</p>;
 }

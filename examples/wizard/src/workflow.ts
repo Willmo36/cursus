@@ -12,16 +12,14 @@ type SignupResult = {
 	token: string;
 };
 
-export const signupWorkflow: WorkflowFunction<
-	SignupResult,
-	SignupSignals
-> = function* (ctx) {
-	const [email, password] = yield* ctx.waitAll("email", "password");
+export const signupWorkflow: WorkflowFunction<SignupResult, SignupSignals> =
+	function* (ctx) {
+		const [email, password] = yield* ctx.waitAll("email", "password");
 
-	const token = yield* ctx.activity("create-account", async () => {
-		await new Promise((r) => setTimeout(r, 1500));
-		return btoa(`${email}:${password}:${Date.now()}`);
-	});
+		const token = yield* ctx.activity("create-account", async () => {
+			await new Promise((r) => setTimeout(r, 1500));
+			return btoa(`${email}:${password}:${Date.now()}`);
+		});
 
-	return { email, token };
-};
+		return { email, token };
+	};

@@ -41,7 +41,9 @@ export function App() {
 
 function PreferencesSummary({
 	preferences,
-}: { preferences: CookiePreferences }) {
+}: {
+	preferences: CookiePreferences;
+}) {
 	return (
 		<div
 			style={{
@@ -63,7 +65,9 @@ function PreferencesSummary({
 
 function Banner({
 	signal,
-}: { signal: (name: "cookie-choice", payload: CookieChoice) => void }) {
+}: {
+	signal: (name: "cookie-choice", payload: CookieChoice) => void;
+}) {
 	const [showCustomize, setShowCustomize] = useState(false);
 	const [analytics, setAnalytics] = useState(false);
 	const [marketing, setMarketing] = useState(false);
@@ -91,9 +95,7 @@ function Banner({
 				<div style={{ display: "flex", gap: 8 }}>
 					<button
 						type="button"
-						onClick={() =>
-							signal("cookie-choice", { type: "accept-all" })
-						}
+						onClick={() => signal("cookie-choice", { type: "accept-all" })}
 						style={{
 							padding: "8px 16px",
 							background: "#4CAF50",
@@ -107,9 +109,7 @@ function Banner({
 					</button>
 					<button
 						type="button"
-						onClick={() =>
-							signal("cookie-choice", { type: "reject-all" })
-						}
+						onClick={() => signal("cookie-choice", { type: "reject-all" })}
 						style={{
 							padding: "8px 16px",
 							background: "#f44336",

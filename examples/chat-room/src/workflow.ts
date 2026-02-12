@@ -16,23 +16,21 @@ type ChatSignals = {
 	"chat-event": ChatEvent;
 };
 
-export const chatWorkflow: WorkflowFunction<
-	ChatMessage[],
-	ChatSignals
-> = function* (ctx) {
-	const messages: ChatMessage[] = [];
+export const chatWorkflow: WorkflowFunction<ChatMessage[], ChatSignals> =
+	function* (ctx) {
+		const messages: ChatMessage[] = [];
 
-	for (;;) {
-		const event = yield* ctx.waitFor("chat-event");
+		for (;;) {
+			const event = yield* ctx.waitFor("chat-event");
 
-		if (event.type === "close") {
-			return messages;
+			if (event.type === "close") {
+				return messages;
+			}
+
+			messages.push({
+				username: event.username,
+				text: event.text,
+				timestamp: Date.now(),
+			});
 		}
-
-		messages.push({
-			username: event.username,
-			text: event.text,
-			timestamp: Date.now(),
-		});
-	}
-};
+	};
