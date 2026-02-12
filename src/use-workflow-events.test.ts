@@ -32,7 +32,7 @@ describe("useWorkflowEvents", () => {
 
 		const greetLog = result.current.find((l) => l.id === "greet");
 		expect(greetLog).toBeDefined();
-		expect(greetLog!.events).toEqual([]);
+		expect(greetLog?.events).toEqual([]);
 	});
 
 	it("returns events in realtime as workflow progresses", async () => {
@@ -57,9 +57,9 @@ describe("useWorkflowEvents", () => {
 
 		await waitFor(() => {
 			const greetLog = result.current.events.find((l) => l.id === "greet");
-			expect(greetLog!.events.length).toBeGreaterThan(0);
-			expect(greetLog!.events[0]).toMatchObject({ type: "workflow_started" });
-			expect(greetLog!.events).toContainEqual(
+			expect(greetLog?.events.length).toBeGreaterThan(0);
+			expect(greetLog?.events[0]).toMatchObject({ type: "workflow_started" });
+			expect(greetLog?.events).toContainEqual(
 				expect.objectContaining({ type: "workflow_completed" }),
 			);
 		});
@@ -89,7 +89,7 @@ describe("useWorkflowEvents", () => {
 		// Events should include workflow_started at minimum
 		await waitFor(() => {
 			const formLog = result.current.events.find((l) => l.id === "form");
-			expect(formLog!.events[0]).toMatchObject({ type: "workflow_started" });
+			expect(formLog?.events[0]).toMatchObject({ type: "workflow_started" });
 		});
 
 		act(() => {
@@ -102,10 +102,10 @@ describe("useWorkflowEvents", () => {
 
 		await waitFor(() => {
 			const formLog = result.current.events.find((l) => l.id === "form");
-			expect(formLog!.events).toContainEqual(
+			expect(formLog?.events).toContainEqual(
 				expect.objectContaining({ type: "signal_received", signal: "submit" }),
 			);
-			expect(formLog!.events).toContainEqual(
+			expect(formLog?.events).toContainEqual(
 				expect.objectContaining({ type: "workflow_completed" }),
 			);
 		});

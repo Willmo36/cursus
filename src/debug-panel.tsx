@@ -3,7 +3,10 @@
 
 import { useState } from "react";
 import type { WorkflowEvent } from "./types";
-import { type WorkflowEventLog, useWorkflowEvents } from "./use-workflow-events";
+import {
+	useWorkflowEvents,
+	type WorkflowEventLog,
+} from "./use-workflow-events";
 
 type WorkflowDebugPanelProps = {
 	onClear?: () => void;
@@ -54,9 +57,7 @@ export function WorkflowDebugPanel({ onClear }: WorkflowDebugPanelProps) {
 			</button>
 
 			{open && (
-				<div
-					style={{ maxHeight: 300, overflow: "auto", padding: "8px 12px" }}
-				>
+				<div style={{ maxHeight: 300, overflow: "auto", padding: "8px 12px" }}>
 					<div
 						style={{
 							display: "flex",
