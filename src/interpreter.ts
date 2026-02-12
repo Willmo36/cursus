@@ -267,7 +267,6 @@ export class Interpreter {
 
 			this._result = next.value;
 			this._state = "completed";
-			this.notifyChange();
 			if (!this.isReplayingEvent("workflow_completed")) {
 				this.log.append({
 					type: "workflow_completed",
@@ -275,13 +274,13 @@ export class Interpreter {
 					timestamp: Date.now(),
 				});
 			}
+			this.notifyChange();
 
 			return next.value;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			this._state = "failed";
 			this._error = message;
-			this.notifyChange();
 			if (!this.isReplayingEvent("workflow_failed")) {
 				this.log.append({
 					type: "workflow_failed",
@@ -289,6 +288,7 @@ export class Interpreter {
 					timestamp: Date.now(),
 				});
 			}
+			this.notifyChange();
 			return undefined;
 		}
 	}
