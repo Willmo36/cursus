@@ -413,7 +413,7 @@ export class Interpreter {
 		const registry = this.registry;
 		if (workflowItems.length > 0 && !registry) {
 			throw new Error(
-				"waitAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowRegistryProvider.",
+				"waitAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
 			);
 		}
 
@@ -574,7 +574,7 @@ export class Interpreter {
 		// Live: require registry
 		if (!this.registry) {
 			throw new Error(
-				"waitForWorkflow requires a WorkflowRegistry. Wrap your app in a WorkflowRegistryProvider.",
+				"waitForWorkflow requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
 			);
 		}
 

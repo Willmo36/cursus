@@ -1,5 +1,5 @@
 // ABOUTME: React context provider that creates a WorkflowRegistry from a layer.
-// ABOUTME: Replaces WorkflowRegistryProvider with a typed layer-based API.
+// ABOUTME: Provides typed workflow layers to the component tree via context.
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import type { WorkflowLayer } from "./layer";

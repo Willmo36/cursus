@@ -1,40 +1,7 @@
-// ABOUTME: React context provider that makes a WorkflowRegistry available to the component tree.
-// ABOUTME: Components use useWorkflowRegistry() to access the registry instance.
+// ABOUTME: Shared React context for the workflow registry.
+// ABOUTME: Used internally by WorkflowLayerProvider, useWorkflow, and useWorkflowEvents.
 
-import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { WorkflowRegistry } from "./registry";
-import type { AnyWorkflowFunction, WorkflowStorage } from "./types";
+import { createContext } from "react";
+import type { WorkflowRegistry } from "./registry";
 
 export const RegistryContext = createContext<WorkflowRegistry | null>(null);
-
-type WorkflowRegistryProviderProps = {
-	workflows: Record<string, AnyWorkflowFunction>;
-	storage: WorkflowStorage;
-	children: ReactNode;
-};
-
-export function WorkflowRegistryProvider({
-	workflows,
-	storage,
-	children,
-}: WorkflowRegistryProviderProps) {
-	const registry = useMemo(
-		() => new WorkflowRegistry(workflows, storage),
-		[workflows, storage],
-	);
-	return (
-		<RegistryContext.Provider value={registry}>
-			{children}
-		</RegistryContext.Provider>
-	);
-}
-
-export function useWorkflowRegistry(): WorkflowRegistry {
-	const registry = useContext(RegistryContext);
-	if (!registry) {
-		throw new Error(
-			"useWorkflowRegistry must be used within a WorkflowRegistryProvider",
-		);
-	}
-	return registry;
-}

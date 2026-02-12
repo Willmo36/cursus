@@ -2,11 +2,10 @@
 // ABOUTME: Re-exports all public types and hooks.
 
 export { WorkflowDebugPanel } from "./debug-panel";
+export type { WorkflowLayer } from "./layer";
+export { createLayer } from "./layer";
+export { WorkflowLayerProvider } from "./layer-provider";
 export { WorkflowRegistry } from "./registry";
-export {
-	useWorkflowRegistry,
-	WorkflowRegistryProvider,
-} from "./registry-provider";
 export { LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {
@@ -29,7 +28,6 @@ export type {
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
-export { useGlobalWorkflow } from "./use-global-workflow";
 export { useWorkflow } from "./use-workflow";
 export type { WorkflowEventLog } from "./use-workflow-events";
 export { useWorkflowEvents } from "./use-workflow-events";

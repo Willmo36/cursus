@@ -5,10 +5,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
-import { WorkflowRegistryProvider } from "./registry-provider";
+import { createLayer } from "./layer";
+import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
-import { useGlobalWorkflow } from "./use-global-workflow";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -16,8 +16,9 @@ function createWrapper(
 	workflows: Record<string, WorkflowFunction<unknown>>,
 	storage: MemoryStorage,
 ) {
+	const layer = createLayer(workflows, storage);
 	return ({ children }: { children: ReactNode }) =>
-		createElement(WorkflowRegistryProvider, { workflows, storage }, children);
+		createElement(WorkflowLayerProvider, { layer }, children);
 }
 
 describe("useWorkflowEvents", () => {
@@ -47,7 +48,7 @@ describe("useWorkflowEvents", () => {
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				wf: useGlobalWorkflow("greet"),
+				wf: useWorkflow("greet"),
 			}),
 			{ wrapper },
 		);
@@ -78,7 +79,7 @@ describe("useWorkflowEvents", () => {
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				wf: useGlobalWorkflow("form"),
+				wf: useWorkflow("form"),
 			}),
 			{ wrapper },
 		);
@@ -195,6 +196,6 @@ describe("useWorkflowEvents", () => {
 	it("throws when used outside a provider", () => {
 		expect(() => {
 			renderHook(() => useWorkflowEvents());
-		}).toThrow(/WorkflowRegistryProvider/);
+		}).toThrow(/WorkflowLayerProvider/);
 	});
 });

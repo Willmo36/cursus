@@ -1,8 +1,8 @@
 // ABOUTME: React hook that returns realtime event logs for all registered workflows.
 // ABOUTME: Reads events from the interpreter's in-memory log via the registry.
 
-import { useEffect, useReducer } from "react";
-import { useWorkflowRegistry } from "./registry-provider";
+import { useContext, useEffect, useReducer } from "react";
+import { RegistryContext } from "./registry-provider";
 import type { WorkflowEvent } from "./types";
 
 export type WorkflowEventLog = {
@@ -20,7 +20,12 @@ function readLogs(registry: {
 }
 
 export function useWorkflowEvents(): WorkflowEventLog[] {
-	const registry = useWorkflowRegistry();
+	const registry = useContext(RegistryContext);
+	if (!registry) {
+		throw new Error(
+			"useWorkflowEvents must be used within a WorkflowLayerProvider",
+		);
+	}
 	const [, forceRender] = useReducer((x: number) => x + 1, 0);
 
 	useEffect(() => {

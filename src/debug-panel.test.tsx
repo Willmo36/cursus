@@ -7,17 +7,19 @@ import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkflowDebugPanel } from "./debug-panel";
-import { WorkflowRegistryProvider } from "./registry-provider";
+import { createLayer } from "./layer";
+import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
-import { useGlobalWorkflow } from "./use-global-workflow";
+import { useWorkflow } from "./use-workflow";
 
 function createWrapper(
 	workflows: Record<string, WorkflowFunction<unknown>>,
 	storage: MemoryStorage,
 ) {
+	const layer = createLayer(workflows, storage);
 	return ({ children }: { children: ReactNode }) =>
-		createElement(WorkflowRegistryProvider, { workflows, storage }, children);
+		createElement(WorkflowLayerProvider, { layer }, children);
 }
 
 describe("WorkflowDebugPanel", () => {
@@ -43,7 +45,7 @@ describe("WorkflowDebugPanel", () => {
 		const Wrapper = createWrapper({ greet: workflow }, storage);
 
 		function TestApp() {
-			useGlobalWorkflow("greet");
+			useWorkflow("greet");
 			return createElement(WorkflowDebugPanel);
 		}
 
@@ -74,7 +76,7 @@ describe("WorkflowDebugPanel", () => {
 		const onClear = vi.fn();
 
 		function TestApp() {
-			useGlobalWorkflow("greet");
+			useWorkflow("greet");
 			return createElement(WorkflowDebugPanel, { onClear });
 		}
 
@@ -111,8 +113,8 @@ describe("WorkflowDebugPanel", () => {
 		);
 
 		function TestApp() {
-			useGlobalWorkflow("alpha");
-			useGlobalWorkflow("beta");
+			useWorkflow("alpha");
+			useWorkflow("beta");
 			return createElement(WorkflowDebugPanel);
 		}
 

@@ -1,5 +1,5 @@
 // ABOUTME: React hook that runs a durable workflow and provides reactive state.
-// ABOUTME: Wraps the interpreter, manages storage sync, and exposes signal/reset controls.
+// ABOUTME: Supports both inline workflows and layer-provided workflows.
 
 import {
 	useCallback,
@@ -40,6 +40,12 @@ type UseWorkflowResult<
 	reset: () => void;
 };
 
+// Overload 1: consume a workflow from the layer by ID
+export function useWorkflow<T = unknown>(
+	workflowId: string,
+): UseWorkflowResult<T>;
+
+// Overload 2: run an inline workflow with optional layer deps
 export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
@@ -48,11 +54,21 @@ export function useWorkflow<
 	workflowId: string,
 	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap> {
+): UseWorkflowResult<T, SignalMap>;
+
+// Implementation
+export function useWorkflow(
+	workflowId: string,
+	workflowFn?: AnyWorkflowFunction,
+	options?: UseWorkflowOptions,
+): UseWorkflowResult<unknown> {
 	const registry = useContext(RegistryContext);
+	const isLayerMode = workflowFn === undefined;
+
+	// For inline workflows, use provided or default storage
 	const storage = options?.storage ?? new MemoryStorage();
 	const [state, setState] = useState<WorkflowState>("running");
-	const [result, setResult] = useState<T | undefined>(undefined);
+	const [result, setResult] = useState<unknown>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
 	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
@@ -64,6 +80,40 @@ export function useWorkflow<
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runId triggers re-run on reset
 	useEffect(() => {
+		if (isLayerMode) {
+			// Layer mode: delegate to registry
+			if (!registry) {
+				throw new Error(
+					"useWorkflow without a workflow function requires a WorkflowLayerProvider",
+				);
+			}
+
+			let cancelled = false;
+
+			function syncState() {
+				if (cancelled) return;
+				const interpreter = registry!.getInterpreter(workflowId);
+				if (!interpreter) return;
+				setState(interpreter.state);
+				setResult(interpreter.result);
+				setError(interpreter.error);
+				setWaitingFor(interpreter.waitingFor);
+				setWaitingForAll(interpreter.waitingForAll);
+			}
+
+			const unsubscribe = registry.onStateChange(workflowId, syncState);
+
+			registry.start(workflowId).then(() => {
+				if (!cancelled) syncState();
+			});
+
+			return () => {
+				cancelled = true;
+				unsubscribe();
+			};
+		}
+
+		// Inline mode: run the workflow directly
 		let cancelled = false;
 
 		async function start() {
@@ -72,7 +122,7 @@ export function useWorkflow<
 			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
-				workflowFn as AnyWorkflowFunction,
+				workflowFn!,
 				log,
 				registry ?? undefined,
 			);
@@ -91,7 +141,7 @@ export function useWorkflow<
 			function syncState() {
 				if (cancelled) return;
 				setState(interpreter.state);
-				setResult(interpreter.result as T | undefined);
+				setResult(interpreter.result);
 				setError(interpreter.error);
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
@@ -117,8 +167,12 @@ export function useWorkflow<
 	}, [workflowId, workflowFn, runId]);
 
 	const signal = useCallback((name: string, payload?: unknown) => {
-		interpreterRef.current?.signal(name, payload);
-	}, []);
+		if (isLayerMode && registry) {
+			registry.signal(workflowId, name, payload);
+		} else {
+			interpreterRef.current?.signal(name, payload);
+		}
+	}, [isLayerMode, registry, workflowId]);
 
 	const reset = useCallback(() => {
 		storageRef.current.clear(workflowId);
@@ -135,9 +189,9 @@ export function useWorkflow<
 		state,
 		result,
 		error,
-		waitingFor: waitingFor as (keyof SignalMap & string) | undefined,
+		waitingFor,
 		waitingForAll,
-		signal: signal as UseWorkflowResult<T, SignalMap>["signal"],
+		signal,
 		reset,
 	};
 }
