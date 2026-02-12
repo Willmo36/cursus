@@ -3,12 +3,12 @@
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { WorkflowRegistry } from "./registry";
-import type { WorkflowFunction, WorkflowStorage } from "./types";
+import type { AnyWorkflowFunction, WorkflowStorage } from "./types";
 
 export const RegistryContext = createContext<WorkflowRegistry | null>(null);
 
 type WorkflowRegistryProviderProps = {
-	workflows: Record<string, WorkflowFunction<unknown>>;
+	workflows: Record<string, AnyWorkflowFunction>;
 	storage: WorkflowStorage;
 	children: ReactNode;
 };

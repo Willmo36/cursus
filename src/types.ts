@@ -198,6 +198,12 @@ export type WorkflowFunction<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 > = (ctx: WorkflowContext<SignalMap>) => Workflow<T>;
 
+// Accepts any WorkflowFunction regardless of its result type or signal map.
+// Uses `any` for SignalMap to bypass contravariance — safe because the registry
+// only forwards the context it constructs, never reads SignalMap directly.
+// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
+export type AnyWorkflowFunction = WorkflowFunction<any, any>;
+
 export type WorkflowState = "running" | "waiting" | "completed" | "failed";
 
 // --- Registry interface (avoids circular imports) ---
@@ -230,6 +236,30 @@ export type WorkflowContext<
 	waitAll: <K extends (keyof SignalMap & string)[]>(
 		...signals: K
 	) => Generator<Command, { [I in keyof K]: SignalMap[K[I]] }, unknown>;
+	waitForWorkflow: <T>(
+		workflowId: string,
+		options?: { start?: boolean },
+	) => Generator<Command, T, unknown>;
+};
+
+// Internal context type for the interpreter. Matches WorkflowContext structurally
+// but without generic constraints that TypeScript can't satisfy at the erased level.
+// WorkflowFunction narrows this to the user-facing WorkflowContext<SignalMap>.
+export type InternalWorkflowContext = {
+	activity: <T>(
+		name: string,
+		fn: () => Promise<T>,
+	) => Generator<Command, T, unknown>;
+	waitFor: (signal: string) => Generator<Command, unknown, unknown>;
+	sleep: (durationMs: number) => Generator<Command, void, unknown>;
+	parallel: <T>(
+		activities: Array<{ name: string; fn: () => Promise<T> }>,
+	) => Generator<Command, T[], unknown>;
+	child: <T, CS extends Record<string, unknown>>(
+		name: string,
+		workflow: WorkflowFunction<T, CS>,
+	) => Generator<Command, T, unknown>;
+	waitAll: (...signals: string[]) => Generator<Command, unknown, unknown>;
 	waitForWorkflow: <T>(
 		workflowId: string,
 		options?: { start?: boolean },

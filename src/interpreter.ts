@@ -5,6 +5,7 @@ import { EventLog } from "./event-log";
 import type {
 	ActivityScheduledEvent,
 	Command,
+	InternalWorkflowContext,
 	SignalReceivedEvent,
 	WaitAllCompletedEvent,
 	WorkflowContext,
@@ -14,7 +15,7 @@ import type {
 } from "./types";
 
 export class Interpreter {
-	readonly context: WorkflowContext;
+	readonly context: InternalWorkflowContext;
 
 	private workflowFn: WorkflowFunction<unknown>;
 	private log: EventLog;
@@ -96,7 +97,10 @@ export class Interpreter {
 					return result as T[];
 				})();
 			},
-			child: <T>(name: string, workflow: WorkflowFunction<T>) => {
+			child: <T, CS extends Record<string, unknown>>(
+				name: string,
+				workflow: WorkflowFunction<T, CS>,
+			) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
 					const result = yield {
@@ -135,7 +139,7 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-		} as WorkflowContext;
+		};
 	}
 
 	onStateChange(callback: () => void): void {
@@ -238,7 +242,10 @@ export class Interpreter {
 			this.log.append({ type: "workflow_started", timestamp: Date.now() });
 		}
 
-		const gen = this.workflowFn(this.context);
+		// InternalWorkflowContext is structurally identical to WorkflowContext at
+		// runtime. The only gap is waitAll's mapped-tuple return type which TS
+		// can't unify with `unknown` for a generic K — a known TS limitation.
+		const gen = this.workflowFn(this.context as unknown as WorkflowContext);
 
 		try {
 			let next = gen.next();

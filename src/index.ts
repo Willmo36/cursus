@@ -10,6 +10,7 @@ export { LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {
 	ActivityCommand,
+	AnyWorkflowFunction,
 	ChildCommand,
 	Command,
 	ParallelCommand,

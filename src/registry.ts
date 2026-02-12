@@ -4,14 +4,14 @@
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import type {
-	WorkflowFunction,
+	AnyWorkflowFunction,
 	WorkflowRegistryInterface,
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
 
 type WorkflowEntry = {
-	fn: WorkflowFunction<unknown>;
+	fn: AnyWorkflowFunction;
 	interpreter?: Interpreter;
 	result?: unknown;
 	completed: boolean;
@@ -29,7 +29,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private storage: WorkflowStorage;
 
 	constructor(
-		workflows: Record<string, WorkflowFunction<unknown>>,
+		workflows: Record<string, AnyWorkflowFunction>,
 		storage: WorkflowStorage,
 	) {
 		this.storage = storage;
