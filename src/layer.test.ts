@@ -1,0 +1,39 @@
+// ABOUTME: Tests for createLayer and WorkflowLayer.
+// ABOUTME: Covers layer creation with typed workflows and storage.
+
+import { describe, expect, it } from "vitest";
+import { createLayer } from "./layer";
+import { MemoryStorage } from "./storage";
+import type { WorkflowFunction, WorkflowStorage } from "./types";
+
+describe("createLayer", () => {
+	it("returns a layer with workflows and storage", () => {
+		const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
+			ctx,
+		) {
+			return yield* ctx.activity("fetch", async () => ({ name: "Max" }));
+		};
+
+		const storage = new MemoryStorage();
+		const layer = createLayer({ profile: profileWorkflow }, storage);
+
+		expect(layer.workflows).toHaveProperty("profile");
+		expect(layer.workflows.profile).toBe(profileWorkflow);
+		expect(layer.storage).toBe(storage);
+	});
+
+	it("accepts multiple workflows", () => {
+		const wfA: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("a", async () => "a");
+		};
+		const wfB: WorkflowFunction<number> = function* (ctx) {
+			return yield* ctx.activity("b", async () => 42);
+		};
+
+		const storage = new MemoryStorage();
+		const layer = createLayer({ alpha: wfA, beta: wfB }, storage);
+
+		expect(Object.keys(layer.workflows)).toEqual(["alpha", "beta"]);
+		expect(layer.storage).toBe(storage);
+	});
+});
