@@ -6,6 +6,7 @@ import type {
 	ActivityScheduledEvent,
 	Command,
 	SignalReceivedEvent,
+	WaitAllCompletedEvent,
 	WorkflowContext,
 	WorkflowFunction,
 	WorkflowState,
@@ -26,6 +27,16 @@ export class Interpreter {
 				resolve: (payload: unknown) => void;
 		  }
 		| undefined;
+	private _waitingForAll: string[] | undefined;
+	private pendingWaitAll:
+		| {
+				collected: Map<string, unknown>;
+				needed: Set<string>;
+				signals: string[];
+				resolve: (results: Record<string, unknown>) => void;
+				seq: number;
+		  }
+		| undefined;
 	private onChange?: () => void;
 
 	constructor(workflowFn: WorkflowFunction<unknown>, log: EventLog) {
@@ -41,15 +52,15 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-			waitFor: <T = unknown>(signalName: string) => {
+			waitFor: (signalName: string) => {
 				const seq = ++this.seq;
-				return (function* (): Generator<Command, T, unknown> {
+				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
 						type: "waitFor" as const,
 						signal: signalName,
 						seq,
 					};
-					return result as T;
+					return result;
 				})();
 			},
 			sleep: (durationMs: number) => {
@@ -88,6 +99,17 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
+			waitAll: (...signals: string[]) => {
+				const seq = ++this.seq;
+				return (function* (): Generator<Command, unknown, unknown> {
+					const result = yield {
+						type: "waitAll" as const,
+						signals,
+						seq,
+					};
+					return result;
+				})();
+			},
 		};
 	}
 
@@ -115,22 +137,66 @@ export class Interpreter {
 		return this._waitingFor;
 	}
 
+	get waitingForAll(): string[] | undefined {
+		return this._waitingForAll;
+	}
+
 	signal(name: string, payload?: unknown): void {
-		if (this._state !== "waiting" || this._waitingFor !== name) {
+		if (this._state !== "waiting") return;
+
+		// Single waitFor path
+		if (this._waitingFor === name) {
+			this.log.append({
+				type: "signal_received",
+				signal: name,
+				payload,
+				seq: this.findWaitingSeq(),
+				timestamp: Date.now(),
+			});
+			this._state = "running";
+			this._waitingFor = undefined;
+			this.notifyChange();
+			this.pendingSignal?.resolve(payload);
+			this.pendingSignal = undefined;
 			return;
 		}
-		this.log.append({
-			type: "signal_received",
-			signal: name,
-			payload,
-			seq: this.findWaitingSeq(),
-			timestamp: Date.now(),
-		});
-		this._state = "running";
-		this._waitingFor = undefined;
-		this.notifyChange();
-		this.pendingSignal?.resolve(payload);
-		this.pendingSignal = undefined;
+
+		// waitAll path
+		if (this.pendingWaitAll && this.pendingWaitAll.needed.has(name)) {
+			const pending = this.pendingWaitAll;
+			pending.collected.set(name, payload);
+			pending.needed.delete(name);
+
+			this.log.append({
+				type: "signal_received",
+				signal: name,
+				payload,
+				seq: pending.seq,
+				timestamp: Date.now(),
+			});
+
+			this._waitingForAll = [...pending.needed];
+
+			if (pending.needed.size === 0) {
+				const results: Record<string, unknown> = {};
+				for (const [k, v] of pending.collected) {
+					results[k] = v;
+				}
+				this.log.append({
+					type: "wait_all_completed",
+					seq: pending.seq,
+					results,
+					timestamp: Date.now(),
+				});
+				this._state = "running";
+				this._waitingForAll = undefined;
+				this.pendingWaitAll = undefined;
+				this.notifyChange();
+				pending.resolve(results);
+			} else {
+				this.notifyChange();
+			}
+		}
 	}
 
 	private findWaitingSeq(): number {
@@ -196,6 +262,8 @@ export class Interpreter {
 				return this.executeActivity(command);
 			case "waitFor":
 				return this.executeWaitFor(command);
+			case "waitAll":
+				return this.executeWaitAll(command);
 			case "sleep":
 				return this.executeSleep(command);
 			case "parallel":
@@ -268,6 +336,42 @@ export class Interpreter {
 		return new Promise((resolve) => {
 			this.pendingSignal = { resolve };
 			// Notify after pendingSignal is set so signal() can resolve the promise
+			this.notifyChange();
+		});
+	}
+
+	private async executeWaitAll(
+		command: Extract<Command, { type: "waitAll" }>,
+	): Promise<unknown> {
+		// Check for replay
+		const completed = this.log.findCompleted(command.seq, "wait_all_completed");
+		if (completed) {
+			const results = (completed as WaitAllCompletedEvent).results;
+			return command.signals.map((s) => results[s]);
+		}
+
+		// Live: record start event, set up multi-signal collection
+		this.log.append({
+			type: "wait_all_started",
+			signals: command.signals,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		this._state = "waiting";
+		this._waitingForAll = [...command.signals];
+
+		return new Promise((resolve) => {
+			this.pendingWaitAll = {
+				collected: new Map(),
+				needed: new Set(command.signals),
+				signals: command.signals,
+				resolve: (results) => {
+					// Map back to declaration-order tuple
+					resolve(command.signals.map((s) => results[s]));
+				},
+				seq: command.seq,
+			};
 			this.notifyChange();
 		});
 	}

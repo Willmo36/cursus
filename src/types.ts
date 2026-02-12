@@ -28,6 +28,12 @@ export type ParallelCommand = {
 	seq: number;
 };
 
+export type WaitAllCommand = {
+	type: "waitAll";
+	signals: string[];
+	seq: number;
+};
+
 export type ChildCommand = {
 	type: "child";
 	name: string;
@@ -38,6 +44,7 @@ export type ChildCommand = {
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
+	| WaitAllCommand
 	| SleepCommand
 	| ParallelCommand
 	| ChildCommand;
@@ -115,6 +122,20 @@ export type ChildFailedEvent = {
 	timestamp: number;
 };
 
+export type WaitAllStartedEvent = {
+	type: "wait_all_started";
+	signals: string[];
+	seq: number;
+	timestamp: number;
+};
+
+export type WaitAllCompletedEvent = {
+	type: "wait_all_completed";
+	seq: number;
+	results: Record<string, unknown>;
+	timestamp: number;
+};
+
 export type WorkflowCompletedEvent = {
 	type: "workflow_completed";
 	result: unknown;
@@ -133,6 +154,8 @@ export type WorkflowEvent =
 	| ActivityCompletedEvent
 	| ActivityFailedEvent
 	| SignalReceivedEvent
+	| WaitAllStartedEvent
+	| WaitAllCompletedEvent
 	| TimerStartedEvent
 	| TimerFiredEvent
 	| ChildStartedEvent
@@ -143,28 +166,41 @@ export type WorkflowEvent =
 
 // --- Workflow types ---
 
-export type Workflow<T> = Generator<Command, T, unknown>;
+export type Workflow<
+	T,
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+> = Generator<Command, T, unknown>;
 
-export type WorkflowFunction<T> = (ctx: WorkflowContext) => Workflow<T>;
+export type WorkflowFunction<
+	T,
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+> = (ctx: WorkflowContext<SignalMap>) => Workflow<T, SignalMap>;
 
 export type WorkflowState = "running" | "waiting" | "completed" | "failed";
 
 // --- Context (provided to workflow generators) ---
 
-export type WorkflowContext = {
+export type WorkflowContext<
+	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+> = {
 	activity: <T>(
 		name: string,
 		fn: () => Promise<T>,
 	) => Generator<Command, T, unknown>;
-	waitFor: <T = unknown>(signal: string) => Generator<Command, T, unknown>;
+	waitFor: <K extends keyof SignalMap & string>(
+		signal: K,
+	) => Generator<Command, SignalMap[K], unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	parallel: <T>(
 		activities: Array<{ name: string; fn: () => Promise<T> }>,
 	) => Generator<Command, T[], unknown>;
-	child: <T>(
+	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
-		workflow: WorkflowFunction<T>,
+		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
+	waitAll: <K extends (keyof SignalMap & string)[]>(
+		...signals: K
+	) => Generator<Command, { [I in keyof K]: SignalMap[K[I]] }, unknown>;
 };
 
 // --- Storage ---

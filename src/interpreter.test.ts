@@ -357,7 +357,128 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase F: child workflows", () => {
+	describe("Phase F: waitAll", () => {
+		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.waitAll("email", "password");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// Send in reverse order
+			interpreter.signal("password", "secret");
+
+			// Should still be waiting for email
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("email", "a@b.com");
+
+			const result = await runPromise;
+			// Tuple in declaration order regardless of signal arrival order
+			expect(result).toEqual(["a@b.com", "secret"]);
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("records wait_all_started and wait_all_completed events", async () => {
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.waitAll("a", "b");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("a", "val-a");
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("b", "val-b");
+			await runPromise;
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "wait_all_started",
+					signals: ["a", "b"],
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "wait_all_completed",
+					seq: 1,
+					results: { a: "val-a", b: "val-b" },
+				}),
+			);
+		});
+
+		it("replays waitAll from event log", async () => {
+			const workflow: WorkflowFunction<[string, number]> = function* (ctx) {
+				return yield* ctx.waitAll("name", "age");
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "wait_all_started",
+					signals: ["name", "age"],
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "wait_all_completed",
+					seq: 1,
+					results: { name: "Max", age: 30 },
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: ["Max", 30],
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toEqual(["Max", 30]);
+		});
+
+		it("exposes waitingForAll with remaining signal names", async () => {
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.waitAll("email", "password");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAll).toEqual(["email", "password"]);
+			});
+
+			interpreter.signal("email", "a@b.com");
+
+			await vi.waitFor(() => {
+				expect(interpreter.waitingForAll).toEqual(["password"]);
+			});
+		});
+	});
+
+	describe("Phase G: child workflows", () => {
 		it("runs a child workflow and returns its result to the parent", async () => {
 			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
 				return yield* ctx.activity("childTask", async () => "child-result");

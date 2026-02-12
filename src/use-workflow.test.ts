@@ -145,6 +145,40 @@ describe("useWorkflow", () => {
 		});
 	});
 
+	it("collects multiple signals with waitAll", async () => {
+		const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			return yield* ctx.waitAll("email", "password");
+		};
+
+		const { result } = renderHook(() =>
+			useWorkflow("test-waitall", workflow, {
+				storage: new MemoryStorage(),
+			}),
+		);
+
+		await waitFor(() => {
+			expect(result.current.state).toBe("waiting");
+		});
+
+		act(() => {
+			result.current.signal("email", "a@b.com");
+		});
+
+		// Should still be waiting for password
+		await waitFor(() => {
+			expect(result.current.state).toBe("waiting");
+		});
+
+		act(() => {
+			result.current.signal("password", "secret");
+		});
+
+		await waitFor(() => {
+			expect(result.current.state).toBe("completed");
+			expect(result.current.result).toEqual(["a@b.com", "secret"]);
+		});
+	});
+
 	it("persists events incrementally so intermediate state survives remount", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const email = yield* ctx.waitFor<string>("email");

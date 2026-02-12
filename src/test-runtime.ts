@@ -31,6 +31,7 @@ export async function createTestRuntime<T>(
 			sleep: ctx.sleep,
 			parallel: ctx.parallel,
 			child: ctx.child,
+			waitAll: ctx.waitAll,
 		};
 		return yield* (workflowFn as WorkflowFunction<unknown>)(wrappedCtx);
 	};
@@ -40,11 +41,29 @@ export async function createTestRuntime<T>(
 
 	// Auto-send signals when the interpreter enters waiting state
 	interpreter.onStateChange(() => {
-		if (interpreter.state === "waiting" && signalQueue.length > 0) {
-			const nextSignal = signalQueue.shift();
-			if (!nextSignal) return;
-			if (interpreter.waitingFor === nextSignal.name) {
-				interpreter.signal(nextSignal.name, nextSignal.payload);
+		if (interpreter.state !== "waiting" || signalQueue.length === 0) return;
+
+		// Single waitFor: match by name
+		if (interpreter.waitingFor) {
+			const idx = signalQueue.findIndex(
+				(s) => s.name === interpreter.waitingFor,
+			);
+			if (idx !== -1) {
+				const [signal] = signalQueue.splice(idx, 1);
+				interpreter.signal(signal.name, signal.payload);
+			}
+			return;
+		}
+
+		// waitAll: send any matching signals from the queue
+		const waitingAll = interpreter.waitingForAll;
+		if (waitingAll) {
+			for (const needed of waitingAll) {
+				const idx = signalQueue.findIndex((s) => s.name === needed);
+				if (idx !== -1) {
+					const [signal] = signalQueue.splice(idx, 1);
+					interpreter.signal(signal.name, signal.payload);
+				}
 			}
 		}
 	});

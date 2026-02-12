@@ -74,6 +74,21 @@ describe("createTestRuntime", () => {
 		await expect(createTestRuntime(workflow, {})).rejects.toThrow("boom");
 	});
 
+	it("runs a workflow with waitAll and pre-queued signals", async () => {
+		const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			return yield* ctx.waitAll("email", "password");
+		};
+
+		const result = await createTestRuntime(workflow, {
+			signals: [
+				{ name: "email", payload: "test@example.com" },
+				{ name: "password", payload: "secret123" },
+			],
+		});
+
+		expect(result).toEqual(["test@example.com", "secret123"]);
+	});
+
 	it("supports multiple sequential signals", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const email = yield* ctx.waitFor<string>("email");
