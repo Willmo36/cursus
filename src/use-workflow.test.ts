@@ -144,4 +144,47 @@ describe("useWorkflow", () => {
 			expect(result.current.waitingFor).toBe("email");
 		});
 	});
+
+	it("persists events incrementally so intermediate state survives remount", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			const email = yield* ctx.waitFor<string>("email");
+			const password = yield* ctx.waitFor<string>("password");
+			return `${email}:${password}`;
+		};
+
+		const storage = new MemoryStorage();
+
+		// First mount: send the first signal
+		const { result: result1, unmount } = renderHook(() =>
+			useWorkflow("test-7", workflow, { storage }),
+		);
+
+		await waitFor(() => {
+			expect(result1.current.waitingFor).toBe("email");
+		});
+
+		act(() => {
+			result1.current.signal("email", "max@test.com");
+		});
+
+		await waitFor(() => {
+			expect(result1.current.waitingFor).toBe("password");
+		});
+
+		unmount();
+
+		// Events should be persisted after the signal
+		const events = await storage.load("test-7");
+		expect(events.length).toBeGreaterThan(0);
+
+		// Second mount: should replay to the password step
+		const { result: result2 } = renderHook(() =>
+			useWorkflow("test-7", workflow, { storage }),
+		);
+
+		await waitFor(() => {
+			expect(result2.current.state).toBe("waiting");
+			expect(result2.current.waitingFor).toBe("password");
+		});
+	});
 });

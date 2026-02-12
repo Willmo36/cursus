@@ -41,6 +41,7 @@ export function useWorkflow<T>(
 		async function start() {
 			const events = await storageRef.current.load(workflowId);
 			const log = new EventLog(events);
+			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
 				workflowFn as WorkflowFunction<unknown>,
@@ -48,12 +49,22 @@ export function useWorkflow<T>(
 			);
 			interpreterRef.current = interpreter;
 
+			async function persistEvents() {
+				const allEvents = log.events();
+				const newEvents = allEvents.slice(persistedCount);
+				if (newEvents.length > 0) {
+					await storageRef.current.append(workflowId, newEvents);
+					persistedCount = allEvents.length;
+				}
+			}
+
 			function syncState() {
 				if (cancelled) return;
 				setState(interpreter.state);
 				setResult(interpreter.result as T | undefined);
 				setError(interpreter.error);
 				setWaitingFor(interpreter.waitingFor);
+				persistEvents();
 			}
 
 			interpreter.onStateChange(syncState);
@@ -64,12 +75,6 @@ export function useWorkflow<T>(
 
 			// Final state sync after run completes
 			syncState();
-
-			// Persist events to storage
-			const newEvents = log.events().slice(events.length);
-			if (newEvents.length > 0) {
-				await storageRef.current.append(workflowId, newEvents);
-			}
 		}
 
 		start();
