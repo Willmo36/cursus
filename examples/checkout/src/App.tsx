@@ -32,6 +32,7 @@ export function App() {
 				onClear={async () => {
 					await storage.clear("profile");
 					await storage.clear("checkout");
+					window.location.reload();
 				}}
 			/>
 		</>

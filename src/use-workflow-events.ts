@@ -1,7 +1,7 @@
 // ABOUTME: React hook that returns realtime event logs for all registered workflows.
 // ABOUTME: Reads events from the interpreter's in-memory log via the registry.
 
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import { useWorkflowRegistry } from "./registry-provider";
 import type { WorkflowEvent } from "./types";
 
@@ -10,32 +10,45 @@ export type WorkflowEventLog = {
 	events: WorkflowEvent[];
 };
 
+function readLogs(registry: {
+	getWorkflowIds(): string[];
+	getEvents(id: string): WorkflowEvent[];
+}): WorkflowEventLog[] {
+	return registry
+		.getWorkflowIds()
+		.map((id) => ({ id, events: registry.getEvents(id) }));
+}
+
 export function useWorkflowEvents(): WorkflowEventLog[] {
 	const registry = useWorkflowRegistry();
-	const [ids, setIds] = useState(() => registry.getWorkflowIds());
-	const [logs, setLogs] = useState<WorkflowEventLog[]>(() =>
-		ids.map((id) => ({ id, events: registry.getEvents(id) })),
-	);
+	const [, forceRender] = useReducer((x: number) => x + 1, 0);
 
 	useEffect(() => {
-		return registry.onWorkflowsChange(() => {
-			setIds(registry.getWorkflowIds());
-		});
+		const unsubs: Array<() => void> = [];
+
+		function subscribe() {
+			// Clean up previous per-workflow subscriptions
+			for (const fn of unsubs) fn();
+			unsubs.length = 0;
+
+			// Subscribe to each workflow's state changes
+			for (const id of registry.getWorkflowIds()) {
+				unsubs.push(registry.onStateChange(id, forceRender));
+			}
+
+			forceRender();
+		}
+
+		subscribe();
+
+		// Re-subscribe when workflows are added/removed
+		const unsubWorkflows = registry.onWorkflowsChange(subscribe);
+
+		return () => {
+			unsubWorkflows();
+			for (const fn of unsubs) fn();
+		};
 	}, [registry]);
 
-	useEffect(() => {
-		function refresh() {
-			const currentIds = registry.getWorkflowIds();
-			setLogs(currentIds.map((id) => ({ id, events: registry.getEvents(id) })));
-		}
-		refresh();
-		const unsubs = ids.map((id) => registry.onStateChange(id, refresh));
-		return () => {
-			for (const fn of unsubs) {
-				fn();
-			}
-		};
-	}, [registry, ids]);
-
-	return logs;
+	return readLogs(registry);
 }

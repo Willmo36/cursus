@@ -9,6 +9,7 @@ import { WorkflowRegistryProvider } from "./registry-provider";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
 import { useGlobalWorkflow } from "./use-global-workflow";
+import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
 function createWrapper(
@@ -106,6 +107,86 @@ describe("useWorkflowEvents", () => {
 				expect.objectContaining({ type: "signal_received", signal: "submit" }),
 			);
 			expect(formLog?.events).toContainEqual(
+				expect.objectContaining({ type: "workflow_completed" }),
+			);
+		});
+	});
+
+	it("shows all events for a local workflow that completes", async () => {
+		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("compute", async () => "result");
+		};
+
+		const storage = new MemoryStorage();
+		const wrapper = createWrapper({}, storage);
+
+		const { result } = renderHook(
+			() => ({
+				events: useWorkflowEvents(),
+				local: useWorkflow("local", localWorkflow, { storage }),
+			}),
+			{ wrapper },
+		);
+
+		// First: verify the local workflow ID appears in events
+		await waitFor(() => {
+			const ids = result.current.events.map((l) => l.id);
+			expect(ids).toContain("local");
+		});
+
+		// Then: verify the workflow completes
+		await waitFor(() => {
+			expect(result.current.local.state).toBe("completed");
+		});
+
+		// Finally: verify events are visible
+		await waitFor(() => {
+			const localLog = result.current.events.find((l) => l.id === "local");
+			expect(localLog?.events).toContainEqual(
+				expect.objectContaining({ type: "workflow_completed" }),
+			);
+		});
+	});
+
+	it("shows all events for a local workflow that completes with signals", async () => {
+		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const data = yield* ctx.waitFor<string>("submit");
+			return yield* ctx.activity("process", async () => `processed: ${data}`);
+		};
+
+		const storage = new MemoryStorage();
+		const wrapper = createWrapper({}, storage);
+
+		const { result } = renderHook(
+			() => ({
+				events: useWorkflowEvents(),
+				local: useWorkflow("local", localWorkflow, { storage }),
+			}),
+			{ wrapper },
+		);
+
+		await waitFor(() => {
+			expect(result.current.local.state).toBe("waiting");
+		});
+
+		act(() => {
+			result.current.local.signal("submit", "test-data");
+		});
+
+		await waitFor(() => {
+			expect(result.current.local.state).toBe("completed");
+		});
+
+		await waitFor(() => {
+			const localLog = result.current.events.find((l) => l.id === "local");
+			expect(localLog).toBeDefined();
+			expect(localLog?.events).toContainEqual(
+				expect.objectContaining({
+					type: "signal_received",
+					signal: "submit",
+				}),
+			);
+			expect(localLog?.events).toContainEqual(
 				expect.objectContaining({ type: "workflow_completed" }),
 			);
 		});
