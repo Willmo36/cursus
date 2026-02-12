@@ -40,7 +40,7 @@ export class Interpreter {
 				seq: number;
 		  }
 		| undefined;
-	private onChange?: () => void;
+	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
 
 	constructor(
@@ -143,12 +143,18 @@ export class Interpreter {
 		};
 	}
 
-	onStateChange(callback: () => void): void {
-		this.onChange = callback;
+	onStateChange(callback: () => void): () => void {
+		this.changeListeners.push(callback);
+		return () => {
+			const idx = this.changeListeners.indexOf(callback);
+			if (idx !== -1) this.changeListeners.splice(idx, 1);
+		};
 	}
 
 	private notifyChange(): void {
-		this.onChange?.();
+		for (const listener of this.changeListeners) {
+			listener();
+		}
 	}
 
 	get events(): WorkflowEvent[] {

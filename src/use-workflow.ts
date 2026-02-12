@@ -67,6 +67,7 @@ export function useWorkflow<
 				registry ?? undefined,
 			);
 			interpreterRef.current = interpreter;
+			registry?.observe(workflowId, interpreter);
 
 			async function persistEvents() {
 				const allEvents = log.events();
@@ -100,6 +101,7 @@ export function useWorkflow<
 
 		return () => {
 			cancelled = true;
+			registry?.unobserve(workflowId);
 		};
 	}, [workflowId, workflowFn, runId]);
 

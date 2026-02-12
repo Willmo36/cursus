@@ -1,7 +1,9 @@
 // ABOUTME: Tests for the WorkflowRegistry that manages shared workflow instances.
 // ABOUTME: Covers start, waitFor, signal, persistence, and failure handling.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { EventLog } from "./event-log";
+import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
@@ -209,6 +211,175 @@ describe("WorkflowRegistry", () => {
 		await registry.start("greet");
 
 		expect(states).toContain("completed");
+	});
+
+	describe("observe/unobserve", () => {
+		it("observe() makes a local interpreter's events visible via getEvents()", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			registry.observe("local", interpreter);
+
+			const events = registry.getEvents("local");
+			expect(events[0]).toMatchObject({ type: "workflow_started" });
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_completed",
+					result: "hello",
+				}),
+			);
+		});
+
+		it("observe() makes the ID visible via getWorkflowIds()", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ global: workflow }, storage);
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+
+			registry.observe("local", interpreter);
+
+			const ids = registry.getWorkflowIds();
+			expect(ids).toContain("global");
+			expect(ids).toContain("local");
+		});
+
+		it("observe() does not override an existing global workflow", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+
+			const log = new EventLog();
+			const fakeInterpreter = new Interpreter(workflow, log);
+
+			registry.observe("greet", fakeInterpreter);
+
+			// Should still return the global workflow's events, not the fake one
+			const events = registry.getEvents("greet");
+			expect(events[0]).toMatchObject({ type: "workflow_started" });
+		});
+
+		it("unobserve() removes the entry", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+
+			registry.observe("local", interpreter);
+			expect(registry.getWorkflowIds()).toContain("local");
+
+			registry.unobserve("local");
+			expect(registry.getWorkflowIds()).not.toContain("local");
+		});
+
+		it("observe() wires interpreter state changes to entry listeners", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			registry.observe("local", interpreter);
+
+			const calls: string[] = [];
+			registry.onStateChange("local", () => calls.push("changed"));
+
+			interpreter.signal("submit", "data");
+			await runPromise;
+
+			expect(calls.length).toBeGreaterThan(0);
+		});
+	});
+
+	describe("onWorkflowsChange", () => {
+		it("fires when observe is called", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const calls: string[] = [];
+			registry.onWorkflowsChange(() => calls.push("changed"));
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			registry.observe("local", interpreter);
+
+			expect(calls).toEqual(["changed"]);
+		});
+
+		it("fires when unobserve is called", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			registry.observe("local", interpreter);
+
+			const calls: string[] = [];
+			registry.onWorkflowsChange(() => calls.push("changed"));
+
+			registry.unobserve("local");
+
+			expect(calls).toEqual(["changed"]);
+		});
+
+		it("returns an unsubscribe function", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const calls: string[] = [];
+			const unsub = registry.onWorkflowsChange(() => calls.push("changed"));
+
+			unsub();
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			registry.observe("local", interpreter);
+
+			expect(calls).toEqual([]);
+		});
 	});
 
 	it("getWorkflowIds() returns all registered workflow IDs", () => {

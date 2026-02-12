@@ -568,6 +568,56 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("onStateChange", () => {
+		it("supports multiple listeners", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const calls1: string[] = [];
+			const calls2: string[] = [];
+
+			interpreter.onStateChange(() => calls1.push("a"));
+			interpreter.onStateChange(() => calls2.push("b"));
+
+			await interpreter.run();
+
+			expect(calls1.length).toBeGreaterThan(0);
+			expect(calls2.length).toBeGreaterThan(0);
+		});
+
+		it("returns an unsubscribe function", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const calls: string[] = [];
+
+			const unsub = interpreter.onStateChange(() => calls.push("called"));
+
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// Should have been called at least once (entering waiting state)
+			const countBeforeUnsub = calls.length;
+			expect(countBeforeUnsub).toBeGreaterThan(0);
+
+			unsub();
+
+			interpreter.signal("submit", "data");
+			await runPromise;
+
+			// Should not have received more calls after unsubscribe
+			expect(calls.length).toBe(countBeforeUnsub);
+		});
+	});
+
 	describe("events getter", () => {
 		it("returns the event log entries", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {

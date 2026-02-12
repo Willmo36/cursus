@@ -28,6 +28,7 @@ type WorkflowEntry = {
 export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private entries: Map<string, WorkflowEntry>;
 	private storage: WorkflowStorage;
+	private workflowChangeListeners: Array<() => void> = [];
 
 	constructor(
 		workflows: Record<string, AnyWorkflowFunction>,
@@ -157,6 +158,44 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 
 	getState(id: string): WorkflowState | undefined {
 		return this.entries.get(id)?.interpreter?.state;
+	}
+
+	observe(id: string, interpreter: Interpreter): void {
+		if (this.entries.has(id)) return;
+		const entry: WorkflowEntry = {
+			fn: (() => {}) as unknown as AnyWorkflowFunction,
+			interpreter,
+			completed: false,
+			failed: false,
+			waiters: [],
+			listeners: [],
+		};
+		this.entries.set(id, entry);
+		interpreter.onStateChange(() => {
+			for (const listener of entry.listeners) {
+				listener();
+			}
+		});
+		this.notifyWorkflowsChange();
+	}
+
+	unobserve(id: string): void {
+		this.entries.delete(id);
+		this.notifyWorkflowsChange();
+	}
+
+	onWorkflowsChange(callback: () => void): () => void {
+		this.workflowChangeListeners.push(callback);
+		return () => {
+			const idx = this.workflowChangeListeners.indexOf(callback);
+			if (idx !== -1) this.workflowChangeListeners.splice(idx, 1);
+		};
+	}
+
+	private notifyWorkflowsChange(): void {
+		for (const listener of this.workflowChangeListeners) {
+			listener();
+		}
 	}
 
 	onStateChange(id: string, callback: () => void): () => void {

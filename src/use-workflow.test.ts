@@ -2,6 +2,7 @@
 // ABOUTME: Covers initial state, completion, signals, reset, replay, and waiting state.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkflowRegistryProvider } from "./registry-provider";
@@ -9,6 +10,7 @@ import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
 import { useGlobalWorkflow } from "./use-global-workflow";
 import { useWorkflow } from "./use-workflow";
+import { useWorkflowEvents } from "./use-workflow-events";
 
 describe("useWorkflow", () => {
 	it("starts with running state and completes", async () => {
@@ -286,6 +288,48 @@ describe("useWorkflow", () => {
 		await waitFor(() => {
 			expect(result.current.checkout.state).toBe("completed");
 			expect(result.current.checkout.result).toBe("Max:1234");
+		});
+	});
+
+	it("local workflow events appear in useWorkflowEvents when inside a provider", async () => {
+		const globalWorkflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("greet", async () => "hello");
+		};
+
+		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("compute", async () => "result");
+		};
+
+		const storage = new MemoryStorage();
+		const workflows = { global: globalWorkflow };
+
+		const wrapper = ({ children }: { children: ReactNode }) =>
+			createElement(WorkflowRegistryProvider, { workflows, storage }, children);
+
+		const { result } = renderHook(
+			() => ({
+				local: useWorkflow("local", localWorkflow, { storage }),
+				global: useGlobalWorkflow("global"),
+				events: useWorkflowEvents(),
+			}),
+			{ wrapper },
+		);
+
+		await waitFor(() => {
+			expect(result.current.local.state).toBe("completed");
+			expect(result.current.global.state).toBe("completed");
+		});
+
+		await waitFor(() => {
+			const ids = result.current.events.map((e) => e.id);
+			expect(ids).toContain("global");
+			expect(ids).toContain("local");
+
+			const localLog = result.current.events.find((e) => e.id === "local");
+			expect(localLog?.events[0]).toMatchObject({ type: "workflow_started" });
+			expect(localLog?.events).toContainEqual(
+				expect.objectContaining({ type: "workflow_completed" }),
+			);
 		});
 	});
 
