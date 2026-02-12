@@ -2,8 +2,8 @@
 // ABOUTME: Covers state, signal, auto-start, reactive updates, and error outside provider.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { createElement } from "react";
 import type { ReactNode } from "react";
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { WorkflowRegistryProvider } from "./registry-provider";
 import { MemoryStorage } from "./storage";
@@ -15,11 +15,7 @@ function createWrapper(
 	storage: MemoryStorage,
 ) {
 	return ({ children }: { children: ReactNode }) =>
-		createElement(
-			WorkflowRegistryProvider,
-			{ workflows, storage },
-			children,
-		);
+		createElement(WorkflowRegistryProvider, { workflows, storage }, children);
 }
 
 describe("useGlobalWorkflow", () => {

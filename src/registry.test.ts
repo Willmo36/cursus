@@ -2,9 +2,9 @@
 // ABOUTME: Covers start, waitFor, signal, persistence, and failure handling.
 
 import { describe, expect, it } from "vitest";
+import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
-import { WorkflowRegistry } from "./registry";
 
 describe("WorkflowRegistry", () => {
 	it("start() runs a registered workflow to completion", async () => {

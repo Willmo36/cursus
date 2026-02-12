@@ -238,11 +238,7 @@ describe("useWorkflow", () => {
 		const workflows = { login: loginWorkflow };
 
 		const wrapper = ({ children }: { children: React.ReactNode }) =>
-			createElement(
-				WorkflowRegistryProvider,
-				{ workflows, storage },
-				children,
-			);
+			createElement(WorkflowRegistryProvider, { workflows, storage }, children);
 
 		const { result } = renderHook(
 			() => useWorkflow("local", localWorkflow, { storage }),

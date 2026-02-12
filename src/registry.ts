@@ -104,10 +104,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		}
 	}
 
-	async waitFor<T>(
-		id: string,
-		options?: { start?: boolean },
-	): Promise<T> {
+	async waitFor<T>(id: string, options?: { start?: boolean }): Promise<T> {
 		const entry = this.getEntry(id);
 		const shouldStart = options?.start ?? true;
 

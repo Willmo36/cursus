@@ -51,6 +51,8 @@ export class Interpreter {
 		this.registry = registry;
 		this.seq = 0;
 
+		// The context methods work with `unknown` internally; generic narrowing
+		// happens at the WorkflowFunction<T, SignalMap> level for end users.
 		this.context = {
 			activity: <T>(name: string, fn: () => Promise<T>) => {
 				const seq = ++this.seq;
@@ -133,7 +135,7 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-		};
+		} as WorkflowContext;
 	}
 
 	onStateChange(callback: () => void): void {
