@@ -17,16 +17,19 @@ export type {
 	ParallelCommand,
 	SleepCommand,
 	WaitAllCommand,
+	WaitAllItem,
 	WaitForCommand,
 	WaitForWorkflowCommand,
 	Workflow,
 	WorkflowContext,
 	WorkflowEvent,
 	WorkflowFunction,
+	WorkflowRef,
 	WorkflowRegistryInterface,
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
+export { workflow } from "./types";
 export { useGlobalWorkflow } from "./use-global-workflow";
 export { useWorkflow } from "./use-workflow";
 export type { WorkflowEventLog } from "./use-workflow-events";

@@ -13,6 +13,7 @@ type UseGlobalWorkflowResult<
 	result: T | undefined;
 	error: string | undefined;
 	waitingFor: (keyof SignalMap & string) | undefined;
+	waitingForAll: string[] | undefined;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
 		payload: SignalMap[K],
@@ -29,6 +30,9 @@ export function useGlobalWorkflow<
 	const [result, setResult] = useState<T | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
+	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
+		undefined,
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -41,6 +45,7 @@ export function useGlobalWorkflow<
 			setResult(interpreter.result as T | undefined);
 			setError(interpreter.error);
 			setWaitingFor(interpreter.waitingFor);
+			setWaitingForAll(interpreter.waitingForAll);
 		}
 
 		const unsubscribe = registry.onStateChange(workflowId, syncState);
@@ -71,6 +76,7 @@ export function useGlobalWorkflow<
 		result,
 		error,
 		waitingFor: waitingFor as (keyof SignalMap & string) | undefined,
+		waitingForAll,
 		signal: signal as UseGlobalWorkflowResult<T, SignalMap>["signal"],
 		reset,
 	};

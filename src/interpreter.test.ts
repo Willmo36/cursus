@@ -4,7 +4,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { WorkflowFunction, WorkflowRegistryInterface } from "./types";
+import {
+	type WorkflowFunction,
+	type WorkflowRegistryInterface,
+	workflow,
+} from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -412,7 +416,10 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "wait_all_started",
-					signals: ["a", "b"],
+					items: [
+						{ kind: "signal", name: "a" },
+						{ kind: "signal", name: "b" },
+					],
 					seq: 1,
 				}),
 			);
@@ -434,7 +441,10 @@ describe("Interpreter", () => {
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "wait_all_started",
-					signals: ["name", "age"],
+					items: [
+						{ kind: "signal", name: "name" },
+						{ kind: "signal", name: "age" },
+					],
 					seq: 1,
 					timestamp: 2,
 				},
@@ -475,6 +485,182 @@ describe("Interpreter", () => {
 			await vi.waitFor(() => {
 				expect(interpreter.waitingForAll).toEqual(["password"]);
 			});
+		});
+
+		it("collects signal and workflow result concurrently in mixed waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<unknown> = function* (ctx) {
+				return yield* ctx.waitAll("payment", workflow("profile"));
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAll).toEqual(["payment"]);
+			});
+
+			interpreter.signal("payment", { card: "1234" });
+
+			const result = await runPromise;
+			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
+			expect(interpreter.state).toBe("completed");
+			expect(mockRegistry.waitFor).toHaveBeenCalledWith("profile", {
+				start: true,
+			});
+		});
+
+		it("records events for mixed waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue("profile-data"),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<unknown> = function* (ctx) {
+				return yield* ctx.waitAll("payment", workflow("profile"));
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("payment", "pay-data");
+			await runPromise;
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "wait_all_started",
+					items: [
+						{ kind: "signal", name: "payment" },
+						{ kind: "workflow", workflowId: "profile" },
+					],
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_started",
+					workflowId: "profile",
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_completed",
+					workflowId: "profile",
+					result: "profile-data",
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "wait_all_completed",
+					seq: 1,
+					results: { payment: "pay-data", "workflow:profile": "profile-data" },
+				}),
+			);
+		});
+
+		it("throws without registry when mixed waitAll has workflow items", async () => {
+			const wf: WorkflowFunction<unknown> = function* (ctx) {
+				return yield* ctx.waitAll("payment", workflow("profile"));
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toContain("WorkflowRegistry");
+		});
+
+		it("replays mixed waitAll from event log", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<unknown> = function* (ctx) {
+				return yield* ctx.waitAll("payment", workflow("profile"));
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "wait_all_started",
+					items: [
+						{ kind: "signal", name: "payment" },
+						{ kind: "workflow", workflowId: "profile" },
+					],
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "wait_all_completed",
+					seq: 1,
+					results: {
+						payment: { card: "1234" },
+						"workflow:profile": { name: "Max" },
+					},
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: [{ card: "1234" }, { name: "Max" }],
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
+			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
+		});
+
+		it("handles signal arriving after workflow completes in mixed waitAll", async () => {
+			let resolveWorkflow: ((value: unknown) => void) | undefined;
+			const workflowPromise = new Promise((resolve) => {
+				resolveWorkflow = resolve;
+			});
+
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockReturnValue(workflowPromise),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<unknown> = function* (ctx) {
+				return yield* ctx.waitAll("payment", workflow("profile"));
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// Workflow completes first
+			resolveWorkflow?.({ name: "Max" });
+			await new Promise((r) => setTimeout(r, 0));
+
+			// Still waiting for signal
+			expect(interpreter.state).toBe("waiting");
+
+			// Now signal arrives
+			interpreter.signal("payment", { card: "5678" });
+
+			const result = await runPromise;
+			expect(result).toEqual([{ card: "5678" }, { name: "Max" }]);
 		});
 	});
 

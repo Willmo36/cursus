@@ -104,7 +104,7 @@ function ProfileForm() {
 }
 
 function CheckoutForm() {
-	const { state, result, waitingFor, signal } = useWorkflow(
+	const { state, result, waitingForAll, signal } = useWorkflow(
 		"checkout",
 		checkoutWorkflow,
 	);
@@ -131,7 +131,7 @@ function CheckoutForm() {
 		return <StatusMessage text="Waiting for profile..." />;
 	}
 
-	if (state === "waiting" && waitingFor === "payment") {
+	if (state === "waiting" && waitingForAll?.includes("payment")) {
 		return (
 			<div>
 				<h2>Payment</h2>

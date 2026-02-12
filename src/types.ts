@@ -1,6 +1,22 @@
 // ABOUTME: Core type definitions for the workflow engine.
 // ABOUTME: Defines commands, events, context, and storage interfaces.
 
+// --- Heterogeneous waitAll helpers ---
+
+export type WorkflowRef<T = unknown> = {
+	__brand: "WorkflowRef";
+	__phantom?: T;
+	workflow: string;
+};
+
+export function workflow<T>(id: string): WorkflowRef<T> {
+	return { __brand: "WorkflowRef", workflow: id } as WorkflowRef<T>;
+}
+
+export type WaitAllItem =
+	| { kind: "signal"; name: string }
+	| { kind: "workflow"; workflowId: string };
+
 // --- Commands (yielded by workflow generators) ---
 
 export type ActivityCommand = {
@@ -30,7 +46,7 @@ export type ParallelCommand = {
 
 export type WaitAllCommand = {
 	type: "waitAll";
-	signals: string[];
+	items: WaitAllItem[];
 	seq: number;
 };
 
@@ -132,7 +148,7 @@ export type ChildFailedEvent = {
 
 export type WaitAllStartedEvent = {
 	type: "wait_all_started";
-	signals: string[];
+	items: WaitAllItem[];
 	seq: number;
 	timestamp: number;
 };
@@ -233,9 +249,19 @@ export type WorkflowContext<
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitAll: <K extends (keyof SignalMap & string)[]>(
-		...signals: K
-	) => Generator<Command, { [I in keyof K]: SignalMap[K[I]] }, unknown>;
+	waitAll: <K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[]>(
+		...args: K
+	) => Generator<
+		Command,
+		{
+			[I in keyof K]: K[I] extends WorkflowRef<infer R>
+				? R
+				: K[I] extends keyof SignalMap & string
+					? SignalMap[K[I]]
+					: never;
+		},
+		unknown
+	>;
 	waitForWorkflow: <T>(
 		workflowId: string,
 		options?: { start?: boolean },
@@ -259,7 +285,9 @@ export type InternalWorkflowContext = {
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitAll: (...signals: string[]) => Generator<Command, unknown, unknown>;
+	waitAll: (
+		...args: (string | WorkflowRef)[]
+	) => Generator<Command, unknown, unknown>;
 	waitForWorkflow: <T>(
 		workflowId: string,
 		options?: { start?: boolean },

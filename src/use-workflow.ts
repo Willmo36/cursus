@@ -27,6 +27,7 @@ type UseWorkflowResult<
 	result: T | undefined;
 	error: string | undefined;
 	waitingFor: (keyof SignalMap & string) | undefined;
+	waitingForAll: string[] | undefined;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
 		payload: SignalMap[K],
@@ -48,6 +49,9 @@ export function useWorkflow<
 	const [result, setResult] = useState<T | undefined>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
+	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
+		undefined,
+	);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
 	const interpreterRef = useRef<Interpreter | null>(null);
 	const storageRef = useRef(storage);
@@ -84,6 +88,7 @@ export function useWorkflow<
 				setResult(interpreter.result as T | undefined);
 				setError(interpreter.error);
 				setWaitingFor(interpreter.waitingFor);
+				setWaitingForAll(interpreter.waitingForAll);
 				persistEvents();
 			}
 
@@ -116,6 +121,7 @@ export function useWorkflow<
 		setResult(undefined);
 		setError(undefined);
 		setWaitingFor(undefined);
+		setWaitingForAll(undefined);
 		restart();
 	}, [workflowId]);
 
@@ -124,6 +130,7 @@ export function useWorkflow<
 		result,
 		error,
 		waitingFor: waitingFor as (keyof SignalMap & string) | undefined,
+		waitingForAll,
 		signal: signal as UseWorkflowResult<T, SignalMap>["signal"],
 		reset,
 	};

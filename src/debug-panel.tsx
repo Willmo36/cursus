@@ -188,7 +188,9 @@ function formatDetails(event: WorkflowEvent): string {
 		case "timer_fired":
 			return "";
 		case "wait_all_started":
-			return event.signals.join(", ");
+			return event.items
+				.map((i) => (i.kind === "signal" ? i.name : `workflow:${i.workflowId}`))
+				.join(", ");
 		case "wait_all_completed":
 			return truncate(JSON.stringify(event.results));
 		default:

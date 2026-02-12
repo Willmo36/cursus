@@ -8,9 +8,11 @@ import type {
 	InternalWorkflowContext,
 	SignalReceivedEvent,
 	WaitAllCompletedEvent,
+	WaitAllItem,
 	WorkflowContext,
 	WorkflowEvent,
 	WorkflowFunction,
+	WorkflowRef,
 	WorkflowRegistryInterface,
 	WorkflowState,
 } from "./types";
@@ -33,11 +35,10 @@ export class Interpreter {
 	private _waitingForAll: string[] | undefined;
 	private pendingWaitAll:
 		| {
-				collected: Map<string, unknown>;
 				needed: Set<string>;
-				signals: string[];
-				resolve: (results: Record<string, unknown>) => void;
 				seq: number;
+				onSignal: (name: string, payload: unknown) => void;
+				onComplete: () => void;
 		  }
 		| undefined;
 	private changeListeners: Array<() => void> = [];
@@ -113,12 +114,17 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-			waitAll: (...signals: string[]) => {
+			waitAll: (...args: (string | WorkflowRef)[]) => {
 				const seq = ++this.seq;
+				const items: WaitAllItem[] = args.map((arg) =>
+					typeof arg === "string"
+						? { kind: "signal" as const, name: arg }
+						: { kind: "workflow" as const, workflowId: arg.workflow },
+				);
 				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
 						type: "waitAll" as const,
-						signals,
+						items,
 						seq,
 					};
 					return result;
@@ -204,7 +210,6 @@ export class Interpreter {
 		// waitAll path
 		if (this.pendingWaitAll?.needed.has(name)) {
 			const pending = this.pendingWaitAll;
-			pending.collected.set(name, payload);
 			pending.needed.delete(name);
 
 			this.log.append({
@@ -215,24 +220,11 @@ export class Interpreter {
 				timestamp: Date.now(),
 			});
 
+			pending.onSignal(name, payload);
 			this._waitingForAll = [...pending.needed];
 
 			if (pending.needed.size === 0) {
-				const results: Record<string, unknown> = {};
-				for (const [k, v] of pending.collected) {
-					results[k] = v;
-				}
-				this.log.append({
-					type: "wait_all_completed",
-					seq: pending.seq,
-					results,
-					timestamp: Date.now(),
-				});
-				this._state = "running";
-				this._waitingForAll = undefined;
-				this.pendingWaitAll = undefined;
-				this.notifyChange();
-				pending.resolve(results);
+				pending.onComplete();
 			} else {
 				this.notifyChange();
 			}
@@ -388,35 +380,104 @@ export class Interpreter {
 	private async executeWaitAll(
 		command: Extract<Command, { type: "waitAll" }>,
 	): Promise<unknown> {
+		const itemKeys = command.items.map(waitAllItemKey);
+
 		// Check for replay
 		const completed = this.log.findCompleted(command.seq, "wait_all_completed");
 		if (completed) {
 			const results = (completed as WaitAllCompletedEvent).results;
-			return command.signals.map((s) => results[s]);
+			return itemKeys.map((k) => results[k]);
 		}
 
-		// Live: record start event, set up multi-signal collection
+		// Live: record start event
 		this.log.append({
 			type: "wait_all_started",
-			signals: command.signals,
+			items: command.items,
 			seq: command.seq,
 			timestamp: Date.now(),
 		});
 
+		const signalItems = command.items.filter(
+			(i): i is Extract<WaitAllItem, { kind: "signal" }> => i.kind === "signal",
+		);
+		const workflowItems = command.items.filter(
+			(i): i is Extract<WaitAllItem, { kind: "workflow" }> =>
+				i.kind === "workflow",
+		);
+
+		// Require registry when workflow items are present
+		const registry = this.registry;
+		if (workflowItems.length > 0 && !registry) {
+			throw new Error(
+				"waitAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowRegistryProvider.",
+			);
+		}
+
+		const collected = new Map<string, unknown>();
+		let remaining = command.items.length;
+
 		this._state = "waiting";
-		this._waitingForAll = [...command.signals];
+		this._waitingForAll = signalItems.map((i) => i.name);
 
 		return new Promise((resolve) => {
-			this.pendingWaitAll = {
-				collected: new Map(),
-				needed: new Set(command.signals),
-				signals: command.signals,
-				resolve: (results) => {
-					// Map back to declaration-order tuple
-					resolve(command.signals.map((s) => results[s]));
-				},
-				seq: command.seq,
+			const tryComplete = () => {
+				if (remaining > 0) return;
+
+				const results: Record<string, unknown> = {};
+				for (const [k, v] of collected) {
+					results[k] = v;
+				}
+				this.log.append({
+					type: "wait_all_completed",
+					seq: command.seq,
+					results,
+					timestamp: Date.now(),
+				});
+				this._state = "running";
+				this._waitingForAll = undefined;
+				this.pendingWaitAll = undefined;
+				this.notifyChange();
+				resolve(itemKeys.map((k) => results[k]));
 			};
+
+			// Set up signal collection
+			this.pendingWaitAll = {
+				needed: new Set(signalItems.map((i) => i.name)),
+				seq: command.seq,
+				onSignal: (name, payload) => {
+					collected.set(name, payload);
+					remaining--;
+				},
+				onComplete: tryComplete,
+			};
+
+			// Fire workflow waits concurrently
+			for (const item of workflowItems) {
+				const key = waitAllItemKey(item);
+
+				this.log.append({
+					type: "workflow_dependency_started",
+					workflowId: item.workflowId,
+					seq: command.seq,
+					timestamp: Date.now(),
+				});
+
+				registry?.waitFor(item.workflowId, { start: true }).then((result) => {
+					collected.set(key, result);
+					remaining--;
+
+					this.log.append({
+						type: "workflow_dependency_completed",
+						workflowId: item.workflowId,
+						seq: command.seq,
+						result,
+						timestamp: Date.now(),
+					});
+
+					tryComplete();
+				});
+			}
+
 			this.notifyChange();
 		});
 	}
@@ -564,4 +625,8 @@ export class Interpreter {
 			);
 		}
 	}
+}
+
+function waitAllItemKey(item: WaitAllItem): string {
+	return item.kind === "signal" ? item.name : `workflow:${item.workflowId}`;
 }

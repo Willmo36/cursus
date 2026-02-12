@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import type { WorkflowFunction } from "./types";
+import { type WorkflowFunction, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -136,5 +136,18 @@ describe("createTestRuntime", () => {
 		});
 
 		expect(result).toBe("mock-user:mock-hello:yes");
+	});
+
+	it("runs mixed waitAll with signals and workflowResults", async () => {
+		const wf: WorkflowFunction<unknown> = function* (ctx) {
+			return yield* ctx.waitAll("payment", workflow("profile"));
+		};
+
+		const result = await createTestRuntime(wf, {
+			signals: [{ name: "payment", payload: { card: "1234" } }],
+			workflowResults: { profile: { name: "Max" } },
+		});
+
+		expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
 	});
 });
