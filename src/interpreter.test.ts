@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { WorkflowFunction } from "./types";
+import type { WorkflowFunction, WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -565,6 +565,138 @@ describe("Interpreter", () => {
 			expect(result).toBe("child-result");
 			// Child workflow generator should not even be called during replay
 			expect(childFn).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("Phase H: waitForWorkflow", () => {
+		it("delegates to registry and returns the result", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue("login-result"),
+				start: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const user = yield* ctx.waitForWorkflow<string>("login");
+				return `got: ${user}`;
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+			);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: login-result");
+			expect(mockRegistry.waitFor).toHaveBeenCalledWith("login", {
+				start: true,
+			});
+		});
+
+		it("passes start: false option to registry", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue("result"),
+				start: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.waitForWorkflow<string>("login", { start: false });
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+			);
+			await interpreter.run();
+
+			expect(mockRegistry.waitFor).toHaveBeenCalledWith("login", {
+				start: false,
+			});
+		});
+
+		it("throws without a registry", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.waitForWorkflow<string>("login");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toContain("WorkflowRegistry");
+		});
+
+		it("records dependency_started and dependency_completed events", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue("user-data"),
+				start: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.waitForWorkflow<string>("login");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log, mockRegistry);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_completed",
+					workflowId: "login",
+					seq: 1,
+					result: "user-data",
+				}),
+			);
+		});
+
+		it("replays from event log without calling registry", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const user = yield* ctx.waitForWorkflow<string>("login");
+				return `got: ${user}`;
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_dependency_completed",
+					workflowId: "login",
+					seq: 1,
+					result: "cached-user",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: "got: cached-user",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: cached-user");
+			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 	});
 });
