@@ -24,6 +24,7 @@ export class Interpreter {
 	private pendingSignal: {
 		resolve: (payload: unknown) => void;
 	} | undefined;
+	private onChange?: () => void;
 
 	constructor(workflowFn: WorkflowFunction<unknown>, log: EventLog) {
 		this.workflowFn = workflowFn;
@@ -82,6 +83,14 @@ export class Interpreter {
 		};
 	}
 
+	onStateChange(callback: () => void): void {
+		this.onChange = callback;
+	}
+
+	private notifyChange(): void {
+		this.onChange?.();
+	}
+
 	get state(): WorkflowState {
 		return this._state;
 	}
@@ -111,6 +120,7 @@ export class Interpreter {
 		});
 		this._state = "running";
 		this._waitingFor = undefined;
+		this.notifyChange();
 		this.pendingSignal?.resolve(payload);
 		this.pendingSignal = undefined;
 	}
@@ -146,6 +156,7 @@ export class Interpreter {
 
 			this._result = next.value;
 			this._state = "completed";
+			this.notifyChange();
 			if (!this.isReplayingEvent("workflow_completed")) {
 				this.log.append({
 					type: "workflow_completed",
@@ -159,6 +170,7 @@ export class Interpreter {
 			const message = err instanceof Error ? err.message : String(err);
 			this._state = "failed";
 			this._error = message;
+			this.notifyChange();
 			if (!this.isReplayingEvent("workflow_failed")) {
 				this.log.append({
 					type: "workflow_failed",
@@ -242,6 +254,7 @@ export class Interpreter {
 		// Live: pause until signal() is called
 		this._state = "waiting";
 		this._waitingFor = command.signal;
+		this.notifyChange();
 
 		return new Promise((resolve) => {
 			this.pendingSignal = { resolve };
