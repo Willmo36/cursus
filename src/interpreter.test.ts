@@ -4,11 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import {
-	type WorkflowFunction,
-	type WorkflowRegistryInterface,
-	workflow,
-} from "./types";
+import type { WorkflowFunction, WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -493,8 +489,12 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const wf: WorkflowFunction<unknown> = function* (ctx) {
-				return yield* ctx.waitAll("payment", workflow("profile"));
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -521,8 +521,12 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const wf: WorkflowFunction<unknown> = function* (ctx) {
-				return yield* ctx.waitAll("payment", workflow("profile"));
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog();
@@ -572,8 +576,12 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without registry when mixed waitAll has workflow items", async () => {
-			const wf: WorkflowFunction<unknown> = function* (ctx) {
-				return yield* ctx.waitAll("payment", workflow("profile"));
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -589,8 +597,12 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const wf: WorkflowFunction<unknown> = function* (ctx) {
-				return yield* ctx.waitAll("payment", workflow("profile"));
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog([
@@ -638,8 +650,12 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const wf: WorkflowFunction<unknown> = function* (ctx) {
-				return yield* ctx.waitAll("payment", workflow("profile"));
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);

@@ -1,6 +1,6 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
 // ABOUTME: The checkout workflow uses waitForWorkflow to wait for the profile workflow.
-import { workflow, type WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "react-workflow";
 
 // --- Profile workflow (registered globally) ---
 
@@ -35,6 +35,10 @@ type CheckoutSignals = {
 	payment: PaymentInfo;
 };
 
+type CheckoutDeps = {
+	profile: UserProfile;
+};
+
 type OrderConfirmation = {
 	orderId: string;
 	name: string;
@@ -44,11 +48,12 @@ type OrderConfirmation = {
 
 export const checkoutWorkflow: WorkflowFunction<
 	OrderConfirmation,
-	CheckoutSignals
+	CheckoutSignals,
+	CheckoutDeps
 > = function* (ctx) {
 	const [payment, profile] = yield* ctx.waitAll(
 		"payment",
-		workflow<UserProfile>("profile"),
+		ctx.workflow("profile"),
 	);
 
 	const order = yield* ctx.activity("place-order", async () => {

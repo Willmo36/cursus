@@ -9,10 +9,6 @@ export type WorkflowRef<T = unknown> = {
 	workflow: string;
 };
 
-export function workflow<T>(id: string): WorkflowRef<T> {
-	return { __brand: "WorkflowRef", workflow: id } as WorkflowRef<T>;
-}
-
 export type WaitAllItem =
 	| { kind: "signal"; name: string }
 	| { kind: "workflow"; workflowId: string };

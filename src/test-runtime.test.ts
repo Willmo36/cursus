@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { type WorkflowFunction, workflow } from "./types";
+import type { WorkflowFunction } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -147,8 +147,12 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs mixed waitAll with signals and workflowResults", async () => {
-		const wf: WorkflowFunction<unknown> = function* (ctx) {
-			return yield* ctx.waitAll("payment", workflow("profile"));
+		const wf: WorkflowFunction<
+			unknown,
+			Record<string, unknown>,
+			{ profile: unknown }
+		> = function* (ctx) {
+			return yield* ctx.waitAll("payment", ctx.workflow("profile"));
 		};
 
 		const result = await createTestRuntime(wf, {
