@@ -4,6 +4,7 @@
 import { EventLog } from "./event-log";
 import type {
 	ActivityScheduledEvent,
+	AnyWorkflowFunction,
 	Command,
 	InternalWorkflowContext,
 	SignalReceivedEvent,
@@ -20,7 +21,7 @@ import type {
 export class Interpreter {
 	readonly context: InternalWorkflowContext;
 
-	private workflowFn: WorkflowFunction<unknown>;
+	private workflowFn: AnyWorkflowFunction;
 	private log: EventLog;
 	private seq = 0;
 	private _state: WorkflowState = "running";
@@ -45,7 +46,7 @@ export class Interpreter {
 	private registry?: WorkflowRegistryInterface;
 
 	constructor(
-		workflowFn: WorkflowFunction<unknown>,
+		workflowFn: AnyWorkflowFunction,
 		log: EventLog,
 		registry?: WorkflowRegistryInterface,
 	) {
@@ -55,7 +56,7 @@ export class Interpreter {
 		this.seq = 0;
 
 		// The context methods work with `unknown` internally; generic narrowing
-		// happens at the WorkflowFunction<T, SignalMap> level for end users.
+		// happens at the WorkflowFunction<T, SignalMap, WorkflowMap> level for end users.
 		this.context = {
 			activity: <T>(name: string, fn: () => Promise<T>) => {
 				const seq = ++this.seq;
@@ -108,7 +109,7 @@ export class Interpreter {
 					const result = yield {
 						type: "child" as const,
 						name,
-						workflow: workflow as WorkflowFunction<unknown>,
+						workflow: workflow as AnyWorkflowFunction,
 						seq,
 					};
 					return result as T;
@@ -130,21 +131,24 @@ export class Interpreter {
 					return result;
 				})();
 			},
-			waitForWorkflow: <T>(
+			waitForWorkflow: (
 				workflowId: string,
 				options?: { start?: boolean },
 			) => {
 				const seq = ++this.seq;
 				const start = options?.start ?? true;
-				return (function* (): Generator<Command, T, unknown> {
+				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
 						type: "waitForWorkflow" as const,
 						workflowId,
 						start,
 						seq,
 					};
-					return result as T;
+					return result;
 				})();
+			},
+			workflow: (id: string): WorkflowRef => {
+				return { __brand: "WorkflowRef", workflow: id } as WorkflowRef;
 			},
 		};
 	}

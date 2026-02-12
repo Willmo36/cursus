@@ -834,13 +834,17 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const user = yield* ctx.waitForWorkflow<string>("login");
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				const user = yield* ctx.waitForWorkflow("login");
 				return `got: ${user}`;
 			};
 
 			const interpreter = new Interpreter(
-				workflow,
+				wf,
 				new EventLog(),
 				mockRegistry,
 			);
@@ -858,12 +862,16 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				return yield* ctx.waitForWorkflow<string>("login", { start: false });
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("login", { start: false });
 			};
 
 			const interpreter = new Interpreter(
-				workflow,
+				wf,
 				new EventLog(),
 				mockRegistry,
 			);
@@ -875,11 +883,15 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without a registry", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				return yield* ctx.waitForWorkflow<string>("login");
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("login");
 			};
 
-			const interpreter = new Interpreter(workflow, new EventLog());
+			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
 			expect(interpreter.state).toBe("failed");
@@ -892,12 +904,16 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				return yield* ctx.waitForWorkflow<string>("login");
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("login");
 			};
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log, mockRegistry);
+			const interpreter = new Interpreter(wf, log, mockRegistry);
 			await interpreter.run();
 
 			const events = log.events();
@@ -924,8 +940,12 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 			};
 
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const user = yield* ctx.waitForWorkflow<string>("login");
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				const user = yield* ctx.waitForWorkflow("login");
 				return `got: ${user}`;
 			};
 
@@ -951,7 +971,7 @@ describe("Interpreter", () => {
 				},
 			]);
 
-			const interpreter = new Interpreter(workflow, log, mockRegistry);
+			const interpreter = new Interpreter(wf, log, mockRegistry);
 			const result = await interpreter.run();
 
 			expect(result).toBe("got: cached-user");

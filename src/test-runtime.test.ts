@@ -107,12 +107,16 @@ describe("createTestRuntime", () => {
 	});
 
 	it("mocks waitForWorkflow with workflowResults", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const user = yield* ctx.waitForWorkflow<string>("login");
+		const wf: WorkflowFunction<
+			string,
+			Record<string, unknown>,
+			{ login: string }
+		> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow("login");
 			return `got: ${user}`;
 		};
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			workflowResults: {
 				login: "test-user",
 			},
@@ -122,14 +126,18 @@ describe("createTestRuntime", () => {
 	});
 
 	it("workflowResults works alongside activities and signals", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const user = yield* ctx.waitForWorkflow<string>("login");
+		const wf: WorkflowFunction<
+			string,
+			Record<string, unknown>,
+			{ login: string }
+		> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow("login");
 			const greeting = yield* ctx.activity("greet", async () => "real");
-			const confirm = yield* ctx.waitFor<string>("confirm");
+			const confirm = yield* ctx.waitFor("confirm");
 			return `${user}:${greeting}:${confirm}`;
 		};
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			workflowResults: { login: "mock-user" },
 			activities: { greet: () => "mock-hello" },
 			signals: [{ name: "confirm", payload: "yes" }],

@@ -13,7 +13,12 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { RegistryContext } from "./registry-provider";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction, WorkflowState, WorkflowStorage } from "./types";
+import type {
+	AnyWorkflowFunction,
+	WorkflowFunction,
+	WorkflowState,
+	WorkflowStorage,
+} from "./types";
 
 type UseWorkflowOptions = {
 	storage?: WorkflowStorage;
@@ -38,9 +43,10 @@ type UseWorkflowResult<
 export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap> {
 	const registry = useContext(RegistryContext);
@@ -66,7 +72,7 @@ export function useWorkflow<
 			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
-				workflowFn as WorkflowFunction<unknown>,
+				workflowFn as AnyWorkflowFunction,
 				log,
 				registry ?? undefined,
 			);

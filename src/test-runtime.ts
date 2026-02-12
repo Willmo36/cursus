@@ -4,6 +4,7 @@
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import type {
+	AnyWorkflowFunction,
 	WorkflowContext,
 	WorkflowFunction,
 	WorkflowRegistryInterface,
@@ -24,8 +25,9 @@ type TestRuntimeOptions<
 export async function createTestRuntime<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 >(
-	workflowFn: WorkflowFunction<T, SignalMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
 	options: TestRuntimeOptions<SignalMap>,
 ): Promise<T> {
 	const { activities = {}, signals = [], workflowResults } = options;
@@ -48,8 +50,8 @@ export async function createTestRuntime<
 	}
 
 	// Wrap the workflow to intercept activity calls with mocks
-	const wrappedWorkflow: WorkflowFunction<unknown> = function* (ctx) {
-		const wrappedCtx: WorkflowContext = {
+	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
+		const wrappedCtx: WorkflowContext<Record<string, unknown>, Record<string, unknown>> = {
 			activity: <U>(name: string, fn: () => Promise<U>) => {
 				const mockFn = activities[name];
 				if (mockFn) {
@@ -63,8 +65,9 @@ export async function createTestRuntime<
 			child: ctx.child,
 			waitAll: ctx.waitAll,
 			waitForWorkflow: ctx.waitForWorkflow,
+			workflow: ctx.workflow,
 		};
-		return yield* (workflowFn as WorkflowFunction<unknown>)(wrappedCtx);
+		return yield* (workflowFn as AnyWorkflowFunction)(wrappedCtx);
 	};
 
 	const log = new EventLog();

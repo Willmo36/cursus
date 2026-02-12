@@ -235,9 +235,13 @@ describe("useWorkflow", () => {
 			return profile;
 		};
 
-		const checkoutWorkflow: WorkflowFunction<string> = function* (ctx) {
-			const payment = yield* ctx.waitFor<string>("payment");
-			const profile = yield* ctx.waitForWorkflow<{ name: string }>("profile");
+		const checkoutWorkflow: WorkflowFunction<
+			string,
+			Record<string, unknown>,
+			{ profile: { name: string } }
+		> = function* (ctx) {
+			const payment = yield* ctx.waitFor("payment");
+			const profile = yield* ctx.waitForWorkflow("profile");
 			const order = yield* ctx.activity("place-order", async () => {
 				return `${profile.name}:${payment}`;
 			});
@@ -338,8 +342,12 @@ describe("useWorkflow", () => {
 			return yield* ctx.activity("login", async () => "user-123");
 		};
 
-		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
-			const user = yield* ctx.waitForWorkflow<string>("login");
+		const localWorkflow: WorkflowFunction<
+			string,
+			Record<string, unknown>,
+			{ login: string }
+		> = function* (ctx) {
+			const user = yield* ctx.waitForWorkflow("login");
 			return `local got: ${user}`;
 		};
 
