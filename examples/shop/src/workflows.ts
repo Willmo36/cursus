@@ -8,7 +8,7 @@ import {
 	login,
 	removeFromCart,
 } from "./api";
-import type { CartItem, Order, Product, User } from "./types";
+import type { CartItem, Order, Product } from "./types";
 
 // --- Catalog workflow ---
 
