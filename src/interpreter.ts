@@ -64,7 +64,7 @@ export class Interpreter {
 			query: (name: string, handler: () => unknown) => {
 				this._queries.set(name, handler);
 			},
-			activity: <T>(name: string, fn: () => Promise<T>) => {
+			activity: <T>(name: string, fn: (signal: AbortSignal) => Promise<T>) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
 					const result = yield { type: "activity" as const, name, fn, seq };
@@ -89,7 +89,10 @@ export class Interpreter {
 				})();
 			},
 			parallel: <T>(
-				activities: Array<{ name: string; fn: () => Promise<T> }>,
+				activities: Array<{
+					name: string;
+					fn: (signal: AbortSignal) => Promise<T>;
+				}>,
 			) => {
 				const seq = ++this.seq;
 				// Pre-allocate seq numbers for each activity within the parallel block
@@ -372,7 +375,7 @@ export class Interpreter {
 		});
 
 		try {
-			const result = await command.fn();
+			const result = await command.fn(new AbortController().signal);
 			this.log.append({
 				type: "activity_completed",
 				seq: command.seq,

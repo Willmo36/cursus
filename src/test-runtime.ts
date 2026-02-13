@@ -58,7 +58,7 @@ export async function createTestRuntime<
 			Record<string, unknown>
 		> = {
 			query: ctx.query,
-			activity: <U>(name: string, fn: () => Promise<U>) => {
+			activity: <U>(name: string, fn: (signal: AbortSignal) => Promise<U>) => {
 				const mockFn = activities[name];
 				if (mockFn) {
 					return ctx.activity(name, async () => mockFn() as U);

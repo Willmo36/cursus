@@ -13,12 +13,21 @@ export type WaitAllItem =
 	| { kind: "signal"; name: string }
 	| { kind: "workflow"; workflowId: string };
 
+// --- Cancellation ---
+
+export class CancelledError extends Error {
+	constructor() {
+		super("Workflow cancelled");
+		this.name = "CancelledError";
+	}
+}
+
 // --- Commands (yielded by workflow generators) ---
 
 export type ActivityCommand = {
 	type: "activity";
 	name: string;
-	fn: () => Promise<unknown>;
+	fn: (signal: AbortSignal) => Promise<unknown>;
 	seq: number;
 };
 
@@ -36,7 +45,11 @@ export type SleepCommand = {
 
 export type ParallelCommand = {
 	type: "parallel";
-	activities: Array<{ name: string; fn: () => Promise<unknown>; seq: number }>;
+	activities: Array<{
+		name: string;
+		fn: (signal: AbortSignal) => Promise<unknown>;
+		seq: number;
+	}>;
 	seq: number;
 };
 
@@ -186,6 +199,11 @@ export type WorkflowFailedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowCancelledEvent = {
+	type: "workflow_cancelled";
+	timestamp: number;
+};
+
 export type WorkflowEvent =
 	| WorkflowStartedEvent
 	| ActivityScheduledEvent
@@ -202,7 +220,8 @@ export type WorkflowEvent =
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyCompletedEvent
 	| WorkflowCompletedEvent
-	| WorkflowFailedEvent;
+	| WorkflowFailedEvent
+	| WorkflowCancelledEvent;
 
 // --- Workflow types ---
 
@@ -221,7 +240,12 @@ export type WorkflowFunction<
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
 export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any>;
 
-export type WorkflowState = "running" | "waiting" | "completed" | "failed";
+export type WorkflowState =
+	| "running"
+	| "waiting"
+	| "completed"
+	| "failed"
+	| "cancelled";
 
 // --- Registry interface (avoids circular imports) ---
 
@@ -243,14 +267,14 @@ export type WorkflowContext<
 	) => void;
 	activity: <T>(
 		name: string,
-		fn: () => Promise<T>,
+		fn: (signal: AbortSignal) => Promise<T>,
 	) => Generator<Command, T, unknown>;
 	waitFor: <K extends keyof SignalMap & string>(
 		signal: K,
 	) => Generator<Command, SignalMap[K], unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	parallel: <T>(
-		activities: Array<{ name: string; fn: () => Promise<T> }>,
+		activities: Array<{ name: string; fn: (signal: AbortSignal) => Promise<T> }>,
 	) => Generator<Command, T[], unknown>;
 	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
@@ -285,12 +309,15 @@ export type InternalWorkflowContext = {
 	query: (name: string, handler: () => unknown) => void;
 	activity: <T>(
 		name: string,
-		fn: () => Promise<T>,
+		fn: (signal: AbortSignal) => Promise<T>,
 	) => Generator<Command, T, unknown>;
 	waitFor: (signal: string) => Generator<Command, unknown, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	parallel: <T>(
-		activities: Array<{ name: string; fn: () => Promise<T> }>,
+		activities: Array<{
+			name: string;
+			fn: (signal: AbortSignal) => Promise<T>;
+		}>,
 	) => Generator<Command, T[], unknown>;
 	child: <T, CS extends Record<string, unknown>>(
 		name: string,

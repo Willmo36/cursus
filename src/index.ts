@@ -8,6 +8,7 @@ export { WorkflowLayerProvider } from "./layer-provider";
 export { WorkflowRegistry } from "./registry";
 export { LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
+export { CancelledError } from "./types";
 export type {
 	ActivityCommand,
 	AnyWorkflowFunction,
@@ -20,6 +21,7 @@ export type {
 	WaitForCommand,
 	WaitForWorkflowCommand,
 	Workflow,
+	WorkflowCancelledEvent,
 	WorkflowContext,
 	WorkflowEvent,
 	WorkflowFunction,

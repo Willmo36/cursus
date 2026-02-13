@@ -969,10 +969,13 @@ describe("Interpreter", () => {
 
 			const workflow: WorkflowFunction<string> = function* (ctx) {
 				try {
-					yield* ctx.activity("fail", failFn);
+					yield* ctx.activity("fail", failFn as () => Promise<string>);
 					return "unreachable";
 				} catch {
-					const result = yield* ctx.activity("recover", recoverFn);
+					const result = yield* ctx.activity(
+						"recover",
+						recoverFn as () => Promise<string>,
+					);
 					return result;
 				}
 			};
