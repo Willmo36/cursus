@@ -38,7 +38,12 @@ type CartSignals = {
 
 export function createCartWorkflow(
 	apiFetch: ApiFetch,
-): WorkflowFunction<CartItem[], CartSignals> {
+): WorkflowFunction<
+	CartItem[],
+	CartSignals,
+	Record<string, never>,
+	CartItem[]
+> {
 	return function* (ctx) {
 		let items: CartItem[] = [];
 
@@ -53,12 +58,14 @@ export function createCartWorkflow(
 				items = yield* ctx.activity("add-to-cart", () =>
 					addToCart(apiFetch, action.productId),
 				);
+				ctx.update(items);
 			}
 
 			if (action.type === "remove") {
 				items = yield* ctx.activity("remove-from-cart", () =>
 					removeFromCart(apiFetch, action.productId),
 				);
+				ctx.update(items);
 			}
 		}
 	};

@@ -26,8 +26,9 @@ export async function createTestRuntime<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
+	State = undefined,
 >(
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, State>,
 	options: TestRuntimeOptions<SignalMap>,
 ): Promise<T> {
 	const { activities = {}, signals = [], workflowResults } = options;
@@ -53,8 +54,10 @@ export async function createTestRuntime<
 	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
 		const wrappedCtx: WorkflowContext<
 			Record<string, unknown>,
-			Record<string, unknown>
+			Record<string, unknown>,
+			unknown
 		> = {
+			update: ctx.update,
 			activity: <U>(name: string, fn: () => Promise<U>) => {
 				const mockFn = activities[name];
 				if (mockFn) {

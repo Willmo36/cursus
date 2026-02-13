@@ -398,6 +398,116 @@ describe("useWorkflow", () => {
 		});
 	});
 
+	describe("snapshot", () => {
+		it("snapshot updates reactively in inline mode", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ submit: string },
+				Record<string, never>,
+				number
+			> = function* (ctx) {
+				ctx.update(1);
+				const data = yield* ctx.waitFor("submit");
+				ctx.update(2);
+				return `got: ${data}`;
+			};
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-1", workflow, { storage: new MemoryStorage() }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.snapshot).toBe(1);
+				expect(result.current.state).toBe("waiting");
+			});
+
+			act(() => {
+				result.current.signal("submit", "data");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.snapshot).toBe(2);
+			});
+		});
+
+		it("snapshot starts as undefined for workflows without State", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-2", workflow, { storage: new MemoryStorage() }),
+			);
+
+			expect(result.current.snapshot).toBeUndefined();
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.snapshot).toBeUndefined();
+			});
+		});
+
+		it("reset clears snapshot", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				number
+			> = function* (ctx) {
+				ctx.update(42);
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const { result } = renderHook(() =>
+				useWorkflow("snap-3", workflow, { storage }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.snapshot).toBe(42);
+			});
+
+			await act(async () => {
+				result.current.reset();
+			});
+
+			// After reset, snapshot should be cleared before new run populates it
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.snapshot).toBe(42);
+			});
+		});
+
+		it("layer mode exposes snapshot", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				number
+			> = function* (ctx) {
+				ctx.update(7);
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const layer = createLayer({ snap: workflow }, storage);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(WorkflowLayerProvider, { layer }, children);
+
+			const { result } = renderHook(() => useWorkflow<string, number>("snap"), {
+				wrapper,
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.snapshot).toBe(7);
+			});
+		});
+	});
+
 	describe("cross-workflow dependencies", () => {
 		it("inline workflow can use waitForWorkflow with layer workflows", async () => {
 			const loginWorkflow: WorkflowFunction<string> = function* (ctx) {

@@ -1,12 +1,14 @@
 // ABOUTME: Cart sidebar showing current items with quantity and remove buttons.
-// ABOUTME: Reads cart state from workflow events and signals checkout when ready.
-import { useMemo } from "react";
-import { useWorkflow, useWorkflowEvents } from "react-workflow";
+// ABOUTME: Reads cart state from workflow snapshot and signals checkout when ready.
+import { useWorkflow } from "react-workflow";
 import type { CartItem } from "./types";
 
 export function Cart({ onCheckout }: { onCheckout: () => void }) {
-	const { state, signal, error } = useWorkflow("cart");
-	const items = useCartItems();
+	const { state, signal, error, snapshot } = useWorkflow<
+		CartItem[],
+		CartItem[]
+	>("cart");
+	const items = snapshot ?? [];
 
 	if (state === "failed") {
 		return (
@@ -85,22 +87,4 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 			)}
 		</div>
 	);
-}
-
-function useCartItems(): CartItem[] {
-	const logs = useWorkflowEvents();
-
-	return useMemo(() => {
-		const cartLog = logs.find((l) => l.id === "cart");
-		if (!cartLog) return [];
-
-		// Find the most recent activity_completed event — its result is the full cart
-		for (let i = cartLog.events.length - 1; i >= 0; i--) {
-			const event = cartLog.events[i];
-			if (event.type === "activity_completed") {
-				return event.result as CartItem[];
-			}
-		}
-		return [];
-	}, [logs]);
 }

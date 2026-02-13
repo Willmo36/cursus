@@ -44,6 +44,7 @@ export class Interpreter {
 				onComplete: () => void;
 		  }
 		| undefined;
+	private _snapshot: unknown;
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
 
@@ -60,6 +61,10 @@ export class Interpreter {
 		// The context methods work with `unknown` internally; generic narrowing
 		// happens at the WorkflowFunction<T, SignalMap, WorkflowMap> level for end users.
 		this.context = {
+			update: (state: unknown) => {
+				this._snapshot = state;
+				this.notifyChange();
+			},
 			activity: <T>(name: string, fn: () => Promise<T>) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
@@ -188,6 +193,10 @@ export class Interpreter {
 
 	get waitingForAll(): string[] | undefined {
 		return this._waitingForAll;
+	}
+
+	get snapshot(): unknown {
+		return this._snapshot;
 	}
 
 	signal(name: string, payload?: unknown): void {

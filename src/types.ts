@@ -212,13 +212,14 @@ export type WorkflowFunction<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-> = (ctx: WorkflowContext<SignalMap, WorkflowMap>) => Workflow<T>;
+	State = undefined,
+> = (ctx: WorkflowContext<SignalMap, WorkflowMap, State>) => Workflow<T>;
 
 // Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
 // Uses `any` for SignalMap/WorkflowMap to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
-export type AnyWorkflowFunction = WorkflowFunction<any, any, any>;
+export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any>;
 
 export type WorkflowState = "running" | "waiting" | "completed" | "failed";
 
@@ -234,7 +235,9 @@ export type WorkflowRegistryInterface = {
 export type WorkflowContext<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
+	State = undefined,
 > = {
+	update: (state: State) => void;
 	activity: <T>(
 		name: string,
 		fn: () => Promise<T>,
@@ -276,6 +279,7 @@ export type WorkflowContext<
 // but without generic constraints that TypeScript can't satisfy at the erased level.
 // WorkflowFunction narrows this to the user-facing WorkflowContext<SignalMap, WorkflowMap>.
 export type InternalWorkflowContext = {
+	update: (state: unknown) => void;
 	activity: <T>(
 		name: string,
 		fn: () => Promise<T>,
