@@ -27,6 +27,7 @@ type UseWorkflowOptions = {
 type UseWorkflowResult<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+	QueryMap extends Record<string, unknown> = Record<string, never>,
 > = {
 	state: WorkflowState;
 	result: T | undefined;
@@ -37,14 +38,17 @@ type UseWorkflowResult<
 		name: K,
 		payload: SignalMap[K],
 	) => void;
-	query: (name: string) => unknown;
+	query: <K extends keyof QueryMap & string>(
+		name: K,
+	) => QueryMap[K] | undefined;
 	reset: () => void;
 };
 
 // Overload 1: consume a workflow from the layer by ID
-export function useWorkflow<T = unknown>(
-	workflowId: string,
-): UseWorkflowResult<T>;
+export function useWorkflow<
+	T = unknown,
+	QueryMap extends Record<string, unknown> = Record<string, never>,
+>(workflowId: string): UseWorkflowResult<T, Record<string, unknown>, QueryMap>;
 
 // Overload 2: run an inline workflow with optional layer deps
 export function useWorkflow<
@@ -56,14 +60,18 @@ export function useWorkflow<
 	workflowId: string,
 	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap>,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap>;
+): UseWorkflowResult<T, SignalMap, QueryMap>;
 
 // Implementation
 export function useWorkflow(
 	workflowId: string,
 	workflowFn?: AnyWorkflowFunction,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<unknown> {
+): UseWorkflowResult<
+	unknown,
+	Record<string, unknown>,
+	Record<string, unknown>
+> {
 	const registry = useContext(RegistryContext);
 	const isLayerMode = workflowFn === undefined;
 

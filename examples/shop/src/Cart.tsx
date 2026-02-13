@@ -4,8 +4,11 @@ import { useWorkflow } from "react-workflow";
 import type { CartItem } from "./types";
 
 export function Cart({ onCheckout }: { onCheckout: () => void }) {
-	const { state, signal, error, query } = useWorkflow("cart");
-	const items = (query("items") as CartItem[] | undefined) ?? [];
+	const { state, signal, error, query } = useWorkflow<
+		CartItem[],
+		{ items: CartItem[] }
+	>("cart");
+	const items = query("items") ?? [];
 
 	if (state === "failed") {
 		return (
