@@ -94,6 +94,7 @@ export type ActivityFailedEvent = {
 	type: "activity_failed";
 	seq: number;
 	error: string;
+	stack?: string;
 	timestamp: number;
 };
 
@@ -139,6 +140,7 @@ export type ChildFailedEvent = {
 	workflowId: string;
 	seq: number;
 	error: string;
+	stack?: string;
 	timestamp: number;
 };
 
@@ -180,6 +182,7 @@ export type WorkflowCompletedEvent = {
 export type WorkflowFailedEvent = {
 	type: "workflow_failed";
 	error: string;
+	stack?: string;
 	timestamp: number;
 };
 

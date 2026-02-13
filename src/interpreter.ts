@@ -302,12 +302,14 @@ export class Interpreter {
 			return next.value;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
 			this._state = "failed";
 			this._error = message;
 			if (!this.isReplayingEvent("workflow_failed")) {
 				this.log.append({
 					type: "workflow_failed",
 					error: message,
+					stack,
 					timestamp: Date.now(),
 				});
 			}
@@ -372,10 +374,12 @@ export class Interpreter {
 			return result;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
 			this.log.append({
 				type: "activity_failed",
 				seq: command.seq,
 				error: message,
+				stack,
 				timestamp: Date.now(),
 			});
 			throw err;
@@ -559,11 +563,19 @@ export class Interpreter {
 		const result = await childInterpreter.run();
 
 		if (childInterpreter.state === "failed") {
+			const childFailedEvent = childLog
+				.events()
+				.find((e) => e.type === "workflow_failed");
+			const stack =
+				childFailedEvent?.type === "workflow_failed"
+					? childFailedEvent.stack
+					: undefined;
 			this.log.append({
 				type: "child_failed",
 				workflowId: command.name,
 				seq: command.seq,
 				error: childInterpreter.error ?? "Unknown error",
+				stack,
 				timestamp: Date.now(),
 			});
 			throw new Error(childInterpreter.error ?? "Child workflow failed");

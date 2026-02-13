@@ -87,6 +87,53 @@ describe("Interpreter", () => {
 				expect.objectContaining({ type: "workflow_failed", error: "boom" }),
 			);
 		});
+
+		it("preserves stack trace on activity_failed and workflow_failed events", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fail", async () => {
+					throw new Error("boom");
+				});
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			const events = log.events();
+			const activityFailed = events.find((e) => e.type === "activity_failed");
+			expect(activityFailed).toBeDefined();
+			expect(
+				activityFailed?.type === "activity_failed" && activityFailed.stack,
+			).toMatch(/Error: boom/);
+			expect(
+				activityFailed?.type === "activity_failed" && activityFailed.stack,
+			).toContain("\n");
+
+			const workflowFailed = events.find((e) => e.type === "workflow_failed");
+			expect(workflowFailed).toBeDefined();
+			expect(
+				workflowFailed?.type === "workflow_failed" && workflowFailed.stack,
+			).toMatch(/Error: boom/);
+		});
+
+		it("handles non-Error throws without stack", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fail", async () => {
+					throw "string error";
+				});
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			const events = log.events();
+			const activityFailed = events.find((e) => e.type === "activity_failed");
+			expect(activityFailed).toBeDefined();
+			expect(
+				activityFailed?.type === "activity_failed" && activityFailed.stack,
+			).toBeUndefined();
+		});
 	});
 
 	describe("Phase B: replay", () => {
@@ -779,6 +826,31 @@ describe("Interpreter", () => {
 			expect(result).toBe("child-result");
 			// Child workflow generator should not even be called during replay
 			expect(childFn).not.toHaveBeenCalled();
+		});
+
+		it("preserves stack trace on child_failed event", async () => {
+			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("explode", async () => {
+					throw new Error("child boom");
+				});
+			};
+
+			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("kid", childWorkflow);
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(parentWorkflow, log);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+
+			const events = log.events();
+			const childFailed = events.find((e) => e.type === "child_failed");
+			expect(childFailed).toBeDefined();
+			expect(childFailed?.type === "child_failed" && childFailed.stack).toMatch(
+				/Error: child boom/,
+			);
 		});
 	});
 
