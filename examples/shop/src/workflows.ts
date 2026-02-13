@@ -18,8 +18,8 @@ export function createCatalogWorkflow(
 	apiFetch: ApiFetch,
 ): WorkflowFunction<Product[], CatalogSignals> {
 	return function* (ctx) {
-		const products = yield* ctx.activity("fetch-products", () =>
-			fetchProducts(apiFetch),
+		const products = yield* ctx.activity("fetch-products", (signal) =>
+			fetchProducts(apiFetch, signal),
 		);
 		return products;
 	};
@@ -56,14 +56,14 @@ export function createCartWorkflow(
 			}
 
 			if (action.type === "add") {
-				items = yield* ctx.activity("add-to-cart", () =>
-					addToCart(apiFetch, action.productId),
+				items = yield* ctx.activity("add-to-cart", (signal) =>
+					addToCart(apiFetch, action.productId, signal),
 				);
 			}
 
 			if (action.type === "remove") {
-				items = yield* ctx.activity("remove-from-cart", () =>
-					removeFromCart(apiFetch, action.productId),
+				items = yield* ctx.activity("remove-from-cart", (signal) =>
+					removeFromCart(apiFetch, action.productId, signal),
 				);
 			}
 		}
@@ -89,8 +89,8 @@ export function createCheckoutWorkflow(
 			ctx.workflow("cart"),
 		);
 
-		const user = yield* ctx.activity("authenticate", () =>
-			login(apiFetch, credentials.email, credentials.password),
+		const user = yield* ctx.activity("authenticate", (signal) =>
+			login(apiFetch, credentials.email, credentials.password, signal),
 		);
 
 		const order = yield* ctx.activity("place-order", async () => {

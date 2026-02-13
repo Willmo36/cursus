@@ -25,19 +25,24 @@ async function parseOrThrow<T>(response: Response): Promise<T> {
 	return data as T;
 }
 
-export async function fetchProducts(apiFetch: ApiFetch): Promise<Product[]> {
-	const res = await apiFetch("/api/products");
+export async function fetchProducts(
+	apiFetch: ApiFetch,
+	signal?: AbortSignal,
+): Promise<Product[]> {
+	const res = await apiFetch("/api/products", { signal });
 	return parseOrThrow<Product[]>(res);
 }
 
 export async function addToCart(
 	apiFetch: ApiFetch,
 	productId: string,
+	signal?: AbortSignal,
 ): Promise<CartItem[]> {
 	const res = await apiFetch("/api/cart/add", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ productId }),
+		signal,
 	});
 	return parseOrThrow<CartItem[]>(res);
 }
@@ -45,11 +50,13 @@ export async function addToCart(
 export async function removeFromCart(
 	apiFetch: ApiFetch,
 	productId: string,
+	signal?: AbortSignal,
 ): Promise<CartItem[]> {
 	const res = await apiFetch("/api/cart/remove", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ productId }),
+		signal,
 	});
 	return parseOrThrow<CartItem[]>(res);
 }
@@ -58,11 +65,13 @@ export async function login(
 	apiFetch: ApiFetch,
 	email: string,
 	password: string,
+	signal?: AbortSignal,
 ): Promise<User> {
 	const res = await apiFetch("/api/login", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ email, password }),
+		signal,
 	});
 	return parseOrThrow<User>(res);
 }
