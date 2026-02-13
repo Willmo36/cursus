@@ -4,7 +4,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type { WorkflowFunction, WorkflowRegistryInterface } from "./types";
+import {
+	CancelledError,
+	type WorkflowFunction,
+	type WorkflowRegistryInterface,
+} from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -1307,6 +1311,181 @@ describe("Interpreter", () => {
 
 			expect(result).toBe("got: cached-user");
 			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("cancellation", () => {
+		it("cancel() aborts in-flight activity and sets cancelled state", async () => {
+			let activityStarted = false;
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity(
+					"slow",
+					() =>
+						new Promise((resolve) => {
+							activityStarted = true;
+							setTimeout(() => resolve("done"), 5000);
+						}),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(activityStarted).toBe(true);
+			});
+
+			interpreter.cancel();
+
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+		});
+
+		it("cancel() breaks out of waitFor and sets cancelled state", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.cancel();
+
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+		});
+
+		it("cancel() breaks out of sleep and sets cancelled state", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				yield* ctx.sleep(60000);
+				return "done";
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			// Let the sleep start
+			await vi.advanceTimersByTimeAsync(100);
+
+			interpreter.cancel();
+
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+
+			vi.useRealTimers();
+		});
+
+		it("cancel() is a no-op on completed workflows", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("completed");
+
+			interpreter.cancel();
+
+			expect(interpreter.state).toBe("completed");
+			expect(interpreter.result).toBe("hello");
+		});
+
+		it("cancel() is a no-op on failed workflows", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fail", async () => {
+					throw new Error("boom");
+				});
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+
+			interpreter.cancel();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("boom");
+		});
+
+		it("cancelled workflow logs workflow_cancelled event", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.cancel();
+
+			await runPromise;
+
+			expect(log.events()).toContainEqual(
+				expect.objectContaining({ type: "workflow_cancelled" }),
+			);
+		});
+
+		it("compacted fast path handles workflow_cancelled", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_cancelled", timestamp: 4 },
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("cancelled");
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+
+		it("activity receives AbortSignal that fires on cancel", async () => {
+			let receivedSignal: AbortSignal | undefined;
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity(
+					"slow",
+					(signal) =>
+						new Promise((resolve) => {
+							receivedSignal = signal;
+							setTimeout(() => resolve("done"), 5000);
+						}),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(receivedSignal).toBeDefined();
+			});
+
+			expect(receivedSignal!.aborted).toBe(false);
+
+			interpreter.cancel();
+
+			await runPromise;
+
+			expect(receivedSignal!.aborted).toBe(true);
 		});
 	});
 });

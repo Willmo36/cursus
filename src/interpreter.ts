@@ -2,22 +2,24 @@
 // ABOUTME: Executes commands, records events, and supports replay from event log.
 
 import { EventLog } from "./event-log";
-import type {
-	ActivityScheduledEvent,
-	AnyWorkflowFunction,
-	Command,
-	InternalWorkflowContext,
-	SignalReceivedEvent,
-	WaitAllCompletedEvent,
-	WaitAllItem,
-	WorkflowCompletedEvent,
-	WorkflowContext,
-	WorkflowEvent,
-	WorkflowFailedEvent,
-	WorkflowFunction,
-	WorkflowRef,
-	WorkflowRegistryInterface,
-	WorkflowState,
+import {
+	CancelledError,
+	type ActivityScheduledEvent,
+	type AnyWorkflowFunction,
+	type Command,
+	type InternalWorkflowContext,
+	type SignalReceivedEvent,
+	type WaitAllCompletedEvent,
+	type WaitAllItem,
+	type WorkflowCancelledEvent,
+	type WorkflowCompletedEvent,
+	type WorkflowContext,
+	type WorkflowEvent,
+	type WorkflowFailedEvent,
+	type WorkflowFunction,
+	type WorkflowRef,
+	type WorkflowRegistryInterface,
+	type WorkflowState,
 } from "./types";
 
 export class Interpreter {
@@ -47,6 +49,9 @@ export class Interpreter {
 	private _queries = new Map<string, () => unknown>();
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
+	private _abortController: AbortController | null = null;
+	private _pendingReject: ((err: CancelledError) => void) | null = null;
+	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(
 		workflowFn: AnyWorkflowFunction,
@@ -245,6 +250,39 @@ export class Interpreter {
 		}
 	}
 
+	cancel(): void {
+		if (
+			this._state === "completed" ||
+			this._state === "failed" ||
+			this._state === "cancelled"
+		) {
+			return;
+		}
+
+		this._state = "cancelled";
+		this.log.append({ type: "workflow_cancelled", timestamp: Date.now() });
+
+		// Abort in-flight activity
+		this._abortController?.abort();
+		this._abortController = null;
+
+		// Reject pending waitFor/sleep
+		this._pendingReject?.(new CancelledError());
+		this._pendingReject = null;
+
+		// Clear sleep timer
+		if (this._sleepTimer !== null) {
+			clearTimeout(this._sleepTimer);
+			this._sleepTimer = null;
+		}
+
+		this._waitingFor = undefined;
+		this._waitingForAll = undefined;
+		this.pendingSignal = undefined;
+		this.pendingWaitAll = undefined;
+		this.notifyChange();
+	}
+
 	private findWaitingSeq(): number {
 		// The seq of the current waitFor command is the current seq counter
 		return this.seq;
@@ -274,6 +312,14 @@ export class Interpreter {
 			if (failed) {
 				this._state = "failed";
 				this._error = failed.error;
+				this.notifyChange();
+				return undefined;
+			}
+			const cancelled = events.find(
+				(e): e is WorkflowCancelledEvent => e.type === "workflow_cancelled",
+			);
+			if (cancelled) {
+				this._state = "cancelled";
 				this.notifyChange();
 				return undefined;
 			}
@@ -312,6 +358,10 @@ export class Interpreter {
 
 			return next.value;
 		} catch (err) {
+			if (err instanceof CancelledError) {
+				// cancel() already set state and logged the event
+				return undefined;
+			}
 			const message = err instanceof Error ? err.message : String(err);
 			const stack = err instanceof Error ? err.stack : undefined;
 			this._state = "failed";
@@ -374,8 +424,17 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 
+		const controller = new AbortController();
+		this._abortController = controller;
+
 		try {
-			const result = await command.fn(new AbortController().signal);
+			// Race the activity against a cancellation rejection
+			const result = await new Promise<unknown>((resolve, reject) => {
+				this._pendingReject = reject;
+				command.fn(controller.signal).then(resolve, reject);
+			});
+			this._abortController = null;
+			this._pendingReject = null;
 			this.log.append({
 				type: "activity_completed",
 				seq: command.seq,
@@ -384,6 +443,11 @@ export class Interpreter {
 			});
 			return result;
 		} catch (err) {
+			this._abortController = null;
+			this._pendingReject = null;
+			if (err instanceof CancelledError) {
+				throw err;
+			}
 			const message = err instanceof Error ? err.message : String(err);
 			const stack = err instanceof Error ? err.stack : undefined;
 			this.log.append({
@@ -410,8 +474,9 @@ export class Interpreter {
 		this._state = "waiting";
 		this._waitingFor = command.signal;
 
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			this.pendingSignal = { resolve };
+			this._pendingReject = reject;
 			// Notify after pendingSignal is set so signal() can resolve the promise
 			this.notifyChange();
 		});
@@ -539,8 +604,11 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 
-		await new Promise<void>((resolve) => {
-			setTimeout(() => {
+		await new Promise<void>((resolve, reject) => {
+			this._pendingReject = reject;
+			this._sleepTimer = setTimeout(() => {
+				this._sleepTimer = null;
+				this._pendingReject = null;
 				this.log.append({
 					type: "timer_fired",
 					seq: command.seq,
