@@ -41,6 +41,7 @@ type UseWorkflowResult<
 	query: <K extends keyof QueryMap & string>(
 		name: K,
 	) => QueryMap[K] | undefined;
+	cancel: () => void;
 	reset: () => void;
 };
 
@@ -186,6 +187,7 @@ export function useWorkflow(
 		start();
 
 		return () => {
+			interpreterRef.current?.cancel();
 			cancelled = true;
 			registry?.unobserve(workflowId);
 		};
@@ -212,7 +214,12 @@ export function useWorkflow(
 		[isLayerMode, registry, workflowId],
 	);
 
+	const cancel = useCallback(() => {
+		interpreterRef.current?.cancel();
+	}, []);
+
 	const reset = useCallback(() => {
+		interpreterRef.current?.cancel();
 		storageRef.current.clear(workflowId);
 		interpreterRef.current = null;
 		setState("running");
@@ -231,6 +238,7 @@ export function useWorkflow(
 		waitingForAll,
 		signal,
 		query,
+		cancel,
 		reset,
 	};
 }

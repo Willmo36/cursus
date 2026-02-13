@@ -513,6 +513,96 @@ describe("useWorkflow", () => {
 		});
 	});
 
+	describe("cancellation", () => {
+		it("inline workflow is cancelled on unmount", async () => {
+			let activityResolved = false;
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				yield* ctx.activity("after", async () => {
+					activityResolved = true;
+					return "done";
+				});
+				return `got: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const { result, unmount } = renderHook(() =>
+				useWorkflow("cancel-1", workflow, { storage }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			unmount();
+
+			// Sending a signal after unmount should not resume the workflow
+			// because the interpreter was cancelled
+			await new Promise((r) => setTimeout(r, 50));
+			expect(activityResolved).toBe(false);
+		});
+
+		it("cancel() function is exposed and works", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const { result } = renderHook(() =>
+				useWorkflow("cancel-2", workflow, { storage: new MemoryStorage() }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			act(() => {
+				result.current.cancel();
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("cancelled");
+			});
+		});
+
+		it("reset() cancels before restarting", async () => {
+			let runCount = 0;
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				runCount++;
+				const data = yield* ctx.waitFor<string>("submit");
+				return `run${runCount}: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const { result } = renderHook(() =>
+				useWorkflow("cancel-3", workflow, { storage }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			// Reset while waiting — should cancel and restart
+			await act(async () => {
+				result.current.reset();
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			// Should be on run 2 now
+			act(() => {
+				result.current.signal("submit", "data");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe("run2: data");
+			});
+		});
+	});
+
 	describe("cross-workflow dependencies", () => {
 		it("inline workflow can use waitForWorkflow with layer workflows", async () => {
 			const loginWorkflow: WorkflowFunction<string> = function* (ctx) {
