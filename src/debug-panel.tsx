@@ -17,6 +17,7 @@ export type TimelineSpan = {
 	seq: number;
 	startPos: number;
 	endPos: number;
+	durationMs: number;
 	color: string;
 	details: string;
 };
@@ -34,8 +35,15 @@ export type TimelineRow = {
 	markers: TimelineMarker[];
 };
 
+export type TimelineTick = {
+	pos: number;
+	label: string;
+};
+
 export type TimelineData = {
 	rows: TimelineRow[];
+	durationMs: number;
+	ticks: TimelineTick[];
 };
 
 const SPAN_PAIRS: Record<string, string> = {
@@ -74,8 +82,35 @@ function markerLabel(event: WorkflowEvent): string {
 	return event.type;
 }
 
+function computeTicks(durationMs: number): TimelineTick[] {
+	if (durationMs === 0) return [{ pos: 0, label: "0ms" }];
+
+	// Choose a tick interval that gives roughly 4-8 ticks
+	const useSeconds = durationMs >= 500;
+	let interval: number;
+	if (useSeconds) {
+		const steps = [0.5, 1, 2, 5, 10, 30, 60];
+		const target = durationMs / 5;
+		interval =
+			(steps.find((s) => s * 1000 >= target) ?? steps[steps.length - 1]) * 1000;
+	} else {
+		const steps = [1, 2, 5, 10, 20, 50, 100];
+		const target = durationMs / 5;
+		interval = steps.find((s) => s >= target) ?? steps[steps.length - 1];
+	}
+
+	const ticks: TimelineTick[] = [];
+	for (let t = 0; t < durationMs; t += interval) {
+		const pos = t / durationMs;
+		const label = useSeconds ? `${t / 1000}s` : `${t}ms`;
+		ticks.push({ pos, label });
+	}
+
+	return ticks;
+}
+
 export function buildTimelineData(logs: WorkflowEventLog[]): TimelineData {
-	if (logs.length === 0) return { rows: [] };
+	if (logs.length === 0) return { rows: [], durationMs: 0, ticks: [] };
 
 	// Find global min/max timestamps
 	let globalMin = Number.POSITIVE_INFINITY;
@@ -114,6 +149,7 @@ export function buildTimelineData(logs: WorkflowEventLog[]): TimelineData {
 						seq: event.seq,
 						startPos: toPos(startEvent.timestamp),
 						endPos: toPos(event.timestamp),
+						durationMs: event.timestamp - startEvent.timestamp,
 						color: eventColor(startEvent.type),
 						details: formatDetails(event),
 					});
@@ -132,7 +168,7 @@ export function buildTimelineData(logs: WorkflowEventLog[]): TimelineData {
 		return { workflowId: log.id, spans, markers };
 	});
 
-	return { rows };
+	return { rows, durationMs: range, ticks: computeTicks(range) };
 }
 
 type WorkflowDebugPanelProps = {
@@ -293,6 +329,36 @@ function TimelineView({ logs }: { logs: WorkflowEventLog[] }) {
 
 	return (
 		<div data-testid="timeline-view">
+			<div
+				data-testid="timeline-axis"
+				style={{
+					display: "flex",
+					alignItems: "flex-end",
+					height: 20,
+					marginBottom: 2,
+					paddingLeft: 100,
+				}}
+			>
+				<div style={{ flex: 1, position: "relative", height: "100%" }}>
+					{data.ticks.map((tick) => (
+						<div
+							key={tick.label}
+							data-testid="timeline-tick"
+							style={{
+								position: "absolute",
+								left: `${tick.pos * 100}%`,
+								bottom: 0,
+								transform: "translateX(-50%)",
+								fontSize: 9,
+								color: "#666",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{tick.label}
+						</div>
+					))}
+				</div>
+			</div>
 			{data.rows.map((row) => (
 				<div
 					key={row.workflowId}
@@ -330,7 +396,7 @@ function TimelineView({ logs }: { logs: WorkflowEventLog[] }) {
 							<div
 								key={`${span.seq}-${span.startType}`}
 								data-testid="timeline-span"
-								title={`${span.name} (${span.startType} → ${span.endType})`}
+								title={`${span.name} (${formatDuration(span.durationMs)})`}
 								style={{
 									position: "absolute",
 									left: `${span.startPos * 100}%`,
@@ -341,8 +407,23 @@ function TimelineView({ logs }: { logs: WorkflowEventLog[] }) {
 									opacity: 0.6,
 									borderRadius: 2,
 									minWidth: 2,
+									overflow: "hidden",
+									display: "flex",
+									alignItems: "center",
+									paddingLeft: 4,
 								}}
-							/>
+							>
+								<span
+									style={{
+										fontSize: 9,
+										color: "#1e1e1e",
+										fontWeight: "bold",
+										whiteSpace: "nowrap",
+									}}
+								>
+									{span.name} {formatDuration(span.durationMs)}
+								</span>
+							</div>
 						))}
 						{row.markers.map((marker, i) => (
 							<div
@@ -363,6 +444,48 @@ function TimelineView({ logs }: { logs: WorkflowEventLog[] }) {
 							/>
 						))}
 					</div>
+				</div>
+			))}
+			<TimelineLegend />
+		</div>
+	);
+}
+
+const LEGEND_ITEMS = [
+	{ label: "Scheduled", color: "#dcdcaa" },
+	{ label: "Completed", color: "#4ec9b0" },
+	{ label: "Failed", color: "#f44747" },
+	{ label: "Signal", color: "#c586c0" },
+] as const;
+
+function TimelineLegend() {
+	return (
+		<div
+			data-testid="timeline-legend"
+			style={{
+				display: "flex",
+				gap: 12,
+				paddingLeft: 100,
+				marginTop: 6,
+				fontSize: 9,
+				color: "#888",
+			}}
+		>
+			{LEGEND_ITEMS.map((item) => (
+				<div
+					key={item.label}
+					style={{ display: "flex", alignItems: "center", gap: 4 }}
+				>
+					<div
+						style={{
+							width: 8,
+							height: 8,
+							borderRadius: 2,
+							background: item.color,
+							opacity: 0.8,
+						}}
+					/>
+					{item.label}
 				</div>
 			))}
 		</div>
@@ -467,6 +590,11 @@ function formatDetails(event: WorkflowEvent): string {
 		default:
 			return "";
 	}
+}
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${Math.round(ms)}ms`;
+	return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function truncate(str: string, max = 60): string {

@@ -342,6 +342,76 @@ describe("buildTimelineData", () => {
 		expect(row.spans[0].endType).toBe("timer_fired");
 	});
 
+	it("includes durationMs in result", () => {
+		const logs: WorkflowEventLog[] = [
+			makeLog("wf1", [
+				{ type: "workflow_started", timestamp: base },
+				{ type: "workflow_completed", result: "done", timestamp: base + 2500 },
+			]),
+		];
+
+		const result = buildTimelineData(logs);
+		expect(result.durationMs).toBe(2500);
+	});
+
+	it("includes time axis ticks", () => {
+		const logs: WorkflowEventLog[] = [
+			makeLog("wf1", [
+				{ type: "workflow_started", timestamp: base },
+				{ type: "workflow_completed", result: "done", timestamp: base + 3200 },
+			]),
+		];
+
+		const result = buildTimelineData(logs);
+		// 3200ms range → ticks at 0s, 1s, 2s, 3s
+		expect(result.ticks).toBeDefined();
+		expect(result.ticks.length).toBe(4);
+		expect(result.ticks[0]).toEqual({ pos: 0, label: "0s" });
+		expect(result.ticks[1].pos).toBeCloseTo(1000 / 3200);
+		expect(result.ticks[1].label).toBe("1s");
+		expect(result.ticks[2].pos).toBeCloseTo(2000 / 3200);
+		expect(result.ticks[3].pos).toBeCloseTo(3000 / 3200);
+	});
+
+	it("includes durationMs on each span", () => {
+		const logs: WorkflowEventLog[] = [
+			makeLog("wf1", [
+				{ type: "workflow_started", timestamp: base },
+				{
+					type: "activity_scheduled",
+					name: "fetch",
+					seq: 0,
+					timestamp: base + 100,
+				},
+				{
+					type: "activity_completed",
+					seq: 0,
+					result: "ok",
+					timestamp: base + 500,
+				},
+				{ type: "workflow_completed", result: "done", timestamp: base + 600 },
+			]),
+		];
+
+		const result = buildTimelineData(logs);
+		const span = result.rows[0].spans[0];
+		expect(span.durationMs).toBe(400);
+	});
+
+	it("uses millisecond ticks for short durations", () => {
+		const logs: WorkflowEventLog[] = [
+			makeLog("wf1", [
+				{ type: "workflow_started", timestamp: base },
+				{ type: "workflow_completed", result: "done", timestamp: base + 80 },
+			]),
+		];
+
+		const result = buildTimelineData(logs);
+		// 80ms → ticks at 0ms, 20ms, 40ms, 60ms, 80ms (interval=20)
+		expect(result.ticks[0].label).toBe("0ms");
+		expect(result.ticks.length).toBeGreaterThanOrEqual(3);
+	});
+
 	it("returns empty rows for empty logs", () => {
 		const result = buildTimelineData([]);
 		expect(result.rows).toHaveLength(0);
@@ -436,6 +506,101 @@ describe("TimelineView rendering", () => {
 		await waitFor(() => {
 			const rows = screen.getAllByTestId("timeline-row");
 			expect(rows).toHaveLength(2);
+		});
+	});
+
+	it("renders time axis with tick labels", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("fetch", async () => "data");
+		};
+
+		const storage = new MemoryStorage();
+		const Wrapper = createWrapper({ myflow: workflow }, storage);
+
+		function TestApp() {
+			useWorkflow("myflow");
+			return createElement(WorkflowDebugPanel);
+		}
+
+		render(createElement(Wrapper, null, createElement(TestApp)));
+
+		await waitFor(() => {
+			expect(screen.getByText(/events\)/)).toBeInTheDocument();
+		});
+
+		const user = userEvent.setup();
+		await user.click(screen.getByText(/Debug Panel/));
+		await user.click(screen.getByRole("tab", { name: "Timeline" }));
+
+		await waitFor(() => {
+			const axis = screen.getByTestId("timeline-axis");
+			expect(axis).toBeInTheDocument();
+			// Should have at least one tick label
+			const ticks = axis.querySelectorAll('[data-testid="timeline-tick"]');
+			expect(ticks.length).toBeGreaterThanOrEqual(1);
+		});
+	});
+
+	it("shows span name as inline label", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("fetch", async () => "data");
+		};
+
+		const storage = new MemoryStorage();
+		const Wrapper = createWrapper({ myflow: workflow }, storage);
+
+		function TestApp() {
+			useWorkflow("myflow");
+			return createElement(WorkflowDebugPanel);
+		}
+
+		render(createElement(Wrapper, null, createElement(TestApp)));
+
+		await waitFor(() => {
+			expect(screen.getByText(/events\)/)).toBeInTheDocument();
+		});
+
+		const user = userEvent.setup();
+		await user.click(screen.getByText(/Debug Panel/));
+		await user.click(screen.getByRole("tab", { name: "Timeline" }));
+
+		await waitFor(() => {
+			const span = screen.getByTestId("timeline-span");
+			// The span should contain the activity name as inline text
+			expect(span.textContent).toContain("fetch");
+		});
+	});
+
+	it("renders a color legend", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("fetch", async () => "data");
+		};
+
+		const storage = new MemoryStorage();
+		const Wrapper = createWrapper({ myflow: workflow }, storage);
+
+		function TestApp() {
+			useWorkflow("myflow");
+			return createElement(WorkflowDebugPanel);
+		}
+
+		render(createElement(Wrapper, null, createElement(TestApp)));
+
+		await waitFor(() => {
+			expect(screen.getByText(/events\)/)).toBeInTheDocument();
+		});
+
+		const user = userEvent.setup();
+		await user.click(screen.getByText(/Debug Panel/));
+		await user.click(screen.getByRole("tab", { name: "Timeline" }));
+
+		await waitFor(() => {
+			const legend = screen.getByTestId("timeline-legend");
+			expect(legend).toBeInTheDocument();
+			expect(legend.textContent).toContain("Scheduled");
+			expect(legend.textContent).toContain("Completed");
+			expect(legend.textContent).toContain("Failed");
+			expect(legend.textContent).toContain("Signal");
 		});
 	});
 
