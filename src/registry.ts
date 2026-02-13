@@ -18,6 +18,7 @@ type WorkflowEntry = {
 	completed: boolean;
 	failed: boolean;
 	error?: string;
+	observed: boolean;
 	waiters: Array<{
 		resolve: (value: unknown) => void;
 		reject: (error: Error) => void;
@@ -41,6 +42,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 				fn,
 				completed: false,
 				failed: false,
+				observed: false,
 				waiters: [],
 				listeners: [],
 			});
@@ -161,12 +163,23 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	}
 
 	observe(id: string, interpreter: Interpreter): void {
-		if (this.entries.has(id)) return;
+		const existing = this.entries.get(id);
+		if (existing && !existing.observed) return;
+		if (existing) {
+			existing.interpreter = interpreter;
+			interpreter.onStateChange(() => {
+				for (const listener of existing.listeners) {
+					listener();
+				}
+			});
+			return;
+		}
 		const entry: WorkflowEntry = {
 			fn: (() => {}) as unknown as AnyWorkflowFunction,
 			interpreter,
 			completed: false,
 			failed: false,
+			observed: true,
 			waiters: [],
 			listeners: [],
 		};

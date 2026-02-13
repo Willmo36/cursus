@@ -3,7 +3,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { createElement } from "react";
+import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
@@ -431,6 +431,94 @@ describe("useWorkflow", () => {
 			await waitFor(() => {
 				expect(result.current.checkout.state).toBe("completed");
 				expect(result.current.checkout.result).toBe("Max:1234");
+			});
+		});
+
+		it("debug panel shows all events for waitAll with signal + workflow dep", async () => {
+			const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
+				ctx,
+			) {
+				const profile = yield* ctx.waitFor<{ name: string }>("profile");
+				return profile;
+			};
+
+			const checkoutWf: WorkflowFunction<
+				string,
+				{ payment: string },
+				{ profile: { name: string } }
+			> = function* (ctx) {
+				const [payment, profile] = yield* ctx.waitAll(
+					"payment",
+					ctx.workflow("profile"),
+				);
+				const order = yield* ctx.activity("place-order", async () => {
+					return `${profile.name}:${payment}`;
+				});
+				return order;
+			};
+
+			const storage = new MemoryStorage();
+			const layer = createLayer({ profile: profileWorkflow }, storage);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(
+					StrictMode,
+					null,
+					createElement(WorkflowLayerProvider, { layer }, children),
+				);
+
+			const { result } = renderHook(
+				() => ({
+					checkout: useWorkflow("checkout", checkoutWf, { storage }),
+					profile: useWorkflow("profile"),
+					events: useWorkflowEvents(),
+				}),
+				{ wrapper },
+			);
+
+			// Wait for profile to be waiting for signal
+			await waitFor(() => {
+				expect(result.current.profile.waitingFor).toBe("profile");
+			});
+
+			// Wait for checkout to be waiting (waitAll)
+			await waitFor(() => {
+				expect(result.current.checkout.state).toBe("waiting");
+			});
+
+			// Send profile signal — profile completes, checkout still waiting for payment
+			act(() => {
+				result.current.profile.signal("profile", { name: "Max" });
+			});
+
+			await waitFor(() => {
+				expect(result.current.profile.state).toBe("completed");
+			});
+
+			// Send payment signal — checkout should complete
+			act(() => {
+				result.current.checkout.signal("payment", "1234");
+			});
+
+			await waitFor(() => {
+				expect(result.current.checkout.state).toBe("completed");
+				expect(result.current.checkout.result).toBe("Max:1234");
+			});
+
+			// Now check that the debug panel shows ALL checkout events
+			await waitFor(() => {
+				const checkoutLog = result.current.events.find(
+					(e) => e.id === "checkout",
+				);
+				expect(checkoutLog).toBeDefined();
+				const types = checkoutLog?.events.map((e) => e.type);
+				expect(types).toContain("workflow_started");
+				expect(types).toContain("wait_all_started");
+				expect(types).toContain("signal_received");
+				expect(types).toContain("wait_all_completed");
+				expect(types).toContain("activity_scheduled");
+				expect(types).toContain("activity_completed");
+				expect(types).toContain("workflow_completed");
 			});
 		});
 

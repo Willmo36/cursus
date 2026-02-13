@@ -293,6 +293,42 @@ describe("WorkflowRegistry", () => {
 			expect(registry.getWorkflowIds()).not.toContain("local");
 		});
 
+		it("re-observe() replaces interpreter for previously observed entries", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			const log1 = new EventLog();
+			const interpreter1 = new Interpreter(workflow, log1);
+			interpreter1.run();
+
+			registry.observe("local", interpreter1);
+
+			const log2 = new EventLog();
+			const interpreter2 = new Interpreter(workflow, log2);
+			interpreter2.run();
+
+			registry.observe("local", interpreter2);
+
+			// Should now point to interpreter2
+			expect(registry.getInterpreter("local")).toBe(interpreter2);
+
+			// State changes from interpreter2 should fire listeners
+			const calls: string[] = [];
+			registry.onStateChange("local", () => calls.push("changed"));
+
+			await vi.waitFor(() => {
+				expect(interpreter2.state).toBe("waiting");
+			});
+
+			interpreter2.signal("submit", "data");
+			expect(calls.length).toBeGreaterThan(0);
+		});
+
 		it("observe() wires interpreter state changes to entry listeners", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
 				const data = yield* ctx.waitFor<string>("submit");
