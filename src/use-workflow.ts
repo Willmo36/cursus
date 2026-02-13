@@ -27,12 +27,10 @@ type UseWorkflowOptions = {
 type UseWorkflowResult<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-	State = undefined,
 > = {
 	state: WorkflowState;
 	result: T | undefined;
 	error: string | undefined;
-	snapshot: State | undefined;
 	waitingFor: (keyof SignalMap & string) | undefined;
 	waitingForAll: string[] | undefined;
 	signal: <K extends keyof SignalMap & string>(
@@ -43,28 +41,27 @@ type UseWorkflowResult<
 };
 
 // Overload 1: consume a workflow from the layer by ID
-export function useWorkflow<T = unknown, State = undefined>(
+export function useWorkflow<T = unknown>(
 	workflowId: string,
-): UseWorkflowResult<T, Record<string, unknown>, State>;
+): UseWorkflowResult<T>;
 
 // Overload 2: run an inline workflow with optional layer deps
 export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	State = undefined,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, State>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap, State>;
+): UseWorkflowResult<T, SignalMap>;
 
 // Implementation
 export function useWorkflow(
 	workflowId: string,
 	workflowFn?: AnyWorkflowFunction,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<unknown, Record<string, unknown>, unknown> {
+): UseWorkflowResult<unknown> {
 	const registry = useContext(RegistryContext);
 	const isLayerMode = workflowFn === undefined;
 
@@ -74,7 +71,6 @@ export function useWorkflow(
 	const [result, setResult] = useState<unknown>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
-	const [snapshot, setSnapshot] = useState<unknown>(undefined);
 	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
 		undefined,
 	);
@@ -101,7 +97,6 @@ export function useWorkflow(
 				setState(interpreter.state);
 				setResult(interpreter.result);
 				setError(interpreter.error);
-				setSnapshot(interpreter.snapshot);
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
 			}
@@ -148,7 +143,6 @@ export function useWorkflow(
 				setState(interpreter.state);
 				setResult(interpreter.result);
 				setError(interpreter.error);
-				setSnapshot(interpreter.snapshot);
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
 				persistEvents();
@@ -204,7 +198,6 @@ export function useWorkflow(
 		setState("running");
 		setResult(undefined);
 		setError(undefined);
-		setSnapshot(undefined);
 		setWaitingFor(undefined);
 		setWaitingForAll(undefined);
 		restart();
@@ -214,7 +207,6 @@ export function useWorkflow(
 		state,
 		result,
 		error,
-		snapshot,
 		waitingFor,
 		waitingForAll,
 		signal,

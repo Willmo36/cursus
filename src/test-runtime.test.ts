@@ -149,28 +149,6 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("mock-user:mock-hello:yes");
 	});
 
-	it("workflows calling ctx.update() run without error", async () => {
-		const workflow: WorkflowFunction<
-			string,
-			Record<string, unknown>,
-			Record<string, never>,
-			number
-		> = function* (ctx) {
-			ctx.update(42);
-			const greeting = yield* ctx.activity("greet", async () => "real");
-			ctx.update(99);
-			return greeting;
-		};
-
-		const result = await createTestRuntime(workflow, {
-			activities: {
-				greet: () => "mocked hello",
-			},
-		});
-
-		expect(result).toBe("mocked hello");
-	});
-
 	it("runs mixed waitAll with signals and workflowResults", async () => {
 		const wf: WorkflowFunction<
 			unknown,
