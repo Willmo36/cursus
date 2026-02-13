@@ -904,6 +904,117 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("error recovery", () => {
+		it("workflow catches activity error and returns fallback value", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				try {
+					yield* ctx.activity("fail", async () => {
+						throw new Error("boom");
+					});
+					return "unreachable";
+				} catch {
+					return "fallback";
+				}
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const result = await interpreter.run();
+
+			expect(result).toBe("fallback");
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("workflow catches error, does a second activity, returns its result", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				try {
+					yield* ctx.activity("fail", async () => {
+						throw new Error("boom");
+					});
+					return "unreachable";
+				} catch {
+					const result = yield* ctx.activity(
+						"recover",
+						async () => "recovered",
+					);
+					return result;
+				}
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const result = await interpreter.run();
+
+			expect(result).toBe("recovered");
+			expect(interpreter.state).toBe("completed");
+
+			const events = interpreter.events;
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "activity_failed",
+					seq: 1,
+					error: "boom",
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "activity_completed",
+					seq: 2,
+					result: "recovered",
+				}),
+			);
+		});
+
+		it("replay works correctly after caught activity error", async () => {
+			const failFn = vi.fn().mockRejectedValue(new Error("boom"));
+			const recoverFn = vi.fn().mockResolvedValue("recovered");
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				try {
+					yield* ctx.activity("fail", failFn);
+					return "unreachable";
+				} catch {
+					const result = yield* ctx.activity("recover", recoverFn);
+					return result;
+				}
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{ type: "activity_scheduled", name: "fail", seq: 1, timestamp: 2 },
+				{
+					type: "activity_failed",
+					seq: 1,
+					error: "boom",
+					timestamp: 3,
+				},
+				{
+					type: "activity_scheduled",
+					name: "recover",
+					seq: 2,
+					timestamp: 4,
+				},
+				{
+					type: "activity_completed",
+					seq: 2,
+					result: "recovered",
+					timestamp: 5,
+				},
+				{
+					type: "workflow_completed",
+					result: "recovered",
+					timestamp: 6,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe("recovered");
+			expect(interpreter.state).toBe("completed");
+			expect(failFn).not.toHaveBeenCalled();
+			expect(recoverFn).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("compacted fast path", () => {
 		it("returns result immediately from compacted workflow_completed event", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");

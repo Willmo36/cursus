@@ -170,6 +170,31 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("mocked hello");
 	});
 
+	it("handles workflow that catches activity error", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			try {
+				yield* ctx.activity("fail", async () => {
+					throw new Error("boom");
+				});
+				return "unreachable";
+			} catch {
+				const result = yield* ctx.activity(
+					"recover",
+					async () => "recovered",
+				);
+				return result;
+			}
+		};
+
+		const result = await createTestRuntime(workflow, {
+			activities: {
+				recover: () => "mock-recovered",
+			},
+		});
+
+		expect(result).toBe("mock-recovered");
+	});
+
 	it("runs mixed waitAll with signals and workflowResults", async () => {
 		const wf: WorkflowFunction<
 			unknown,
