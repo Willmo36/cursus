@@ -1,20 +1,18 @@
 // ABOUTME: Entry point for the checkout example app.
-// ABOUTME: Wraps the app in WorkflowRegistryProvider with the profile workflow registered globally.
+// ABOUTME: Wraps the app in WorkflowLayerProvider with the profile workflow registered.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { WorkflowRegistryProvider } from "react-workflow";
+import { createLayer, WorkflowLayerProvider } from "react-workflow";
 import { App } from "./App";
 import { storage } from "./storage";
 import { profileWorkflow } from "./workflows";
 
-const workflows = {
-	profile: profileWorkflow,
-};
+const layer = createLayer({ profile: profileWorkflow }, storage);
 
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
-		<WorkflowRegistryProvider workflows={workflows} storage={storage}>
+		<WorkflowLayerProvider layer={layer}>
 			<App />
-		</WorkflowRegistryProvider>
+		</WorkflowLayerProvider>
 	</StrictMode>,
 );

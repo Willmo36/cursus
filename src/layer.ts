@@ -10,9 +10,7 @@ export type WorkflowLayer<
 	storage: WorkflowStorage;
 };
 
-export function createLayer<
-	Provides extends Record<string, unknown>,
->(
+export function createLayer<Provides extends Record<string, unknown>>(
 	workflows: { [K in keyof Provides]: AnyWorkflowFunction },
 	storage: WorkflowStorage,
 ): WorkflowLayer<Provides> {

@@ -1,7 +1,7 @@
 // ABOUTME: Checkout UI with a global profile workflow and a local checkout workflow.
 // ABOUTME: Demonstrates waitForWorkflow: checkout blocks until profile is complete.
 import { useState } from "react";
-import { WorkflowDebugPanel, useGlobalWorkflow, useWorkflow } from "react-workflow";
+import { WorkflowDebugPanel, useWorkflow } from "react-workflow";
 import { storage } from "./storage";
 import type { UserProfile } from "./workflows";
 import { checkoutWorkflow } from "./workflows";
@@ -41,7 +41,7 @@ export function App() {
 
 function ProfileForm() {
 	const { state, result, waitingFor, signal, reset } =
-		useGlobalWorkflow<UserProfile>("profile");
+		useWorkflow<UserProfile>("profile");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 

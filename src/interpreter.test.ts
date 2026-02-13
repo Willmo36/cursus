@@ -859,11 +859,7 @@ describe("Interpreter", () => {
 				return `got: ${user}`;
 			};
 
-			const interpreter = new Interpreter(
-				wf,
-				new EventLog(),
-				mockRegistry,
-			);
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
 			const result = await interpreter.run();
 
 			expect(result).toBe("got: login-result");
@@ -886,11 +882,7 @@ describe("Interpreter", () => {
 				return yield* ctx.waitForWorkflow("login", { start: false });
 			};
 
-			const interpreter = new Interpreter(
-				wf,
-				new EventLog(),
-				mockRegistry,
-			);
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
 			await interpreter.run();
 
 			expect(mockRegistry.waitFor).toHaveBeenCalledWith("login", {

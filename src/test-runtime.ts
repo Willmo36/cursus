@@ -51,7 +51,10 @@ export async function createTestRuntime<
 
 	// Wrap the workflow to intercept activity calls with mocks
 	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
-		const wrappedCtx: WorkflowContext<Record<string, unknown>, Record<string, unknown>> = {
+		const wrappedCtx: WorkflowContext<
+			Record<string, unknown>,
+			Record<string, unknown>
+		> = {
 			activity: <U>(name: string, fn: () => Promise<U>) => {
 				const mockFn = activities[name];
 				if (mockFn) {

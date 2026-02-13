@@ -20,12 +20,13 @@ function readLogs(registry: {
 }
 
 export function useWorkflowEvents(): WorkflowEventLog[] {
-	const registry = useContext(RegistryContext);
-	if (!registry) {
+	const maybeRegistry = useContext(RegistryContext);
+	if (!maybeRegistry) {
 		throw new Error(
 			"useWorkflowEvents must be used within a WorkflowLayerProvider",
 		);
 	}
+	const registry = maybeRegistry;
 	const [, forceRender] = useReducer((x: number) => x + 1, 0);
 
 	useEffect(() => {

@@ -247,9 +247,7 @@ export type WorkflowContext<
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitAll: <
-		K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[],
-	>(
+	waitAll: <K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[]>(
 		...args: K
 	) => Generator<
 		Command,

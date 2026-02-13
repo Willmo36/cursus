@@ -468,9 +468,7 @@ describe("useWorkflow", () => {
 				expect(ids).toContain("global");
 				expect(ids).toContain("local");
 
-				const localLog = result.current.events.find(
-					(e) => e.id === "local",
-				);
+				const localLog = result.current.events.find((e) => e.id === "local");
 				expect(localLog?.events[0]).toMatchObject({
 					type: "workflow_started",
 				});

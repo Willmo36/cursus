@@ -131,10 +131,7 @@ export class Interpreter {
 					return result;
 				})();
 			},
-			waitForWorkflow: (
-				workflowId: string,
-				options?: { start?: boolean },
-			) => {
+			waitForWorkflow: (workflowId: string, options?: { start?: boolean }) => {
 				const seq = ++this.seq;
 				const start = options?.start ?? true;
 				return (function* (): Generator<Command, unknown, unknown> {

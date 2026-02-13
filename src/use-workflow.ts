@@ -92,7 +92,7 @@ export function useWorkflow(
 
 			function syncState() {
 				if (cancelled) return;
-				const interpreter = registry!.getInterpreter(workflowId);
+				const interpreter = registry?.getInterpreter(workflowId);
 				if (!interpreter) return;
 				setState(interpreter.state);
 				setResult(interpreter.result);
@@ -122,7 +122,7 @@ export function useWorkflow(
 			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
-				workflowFn!,
+				workflowFn as AnyWorkflowFunction,
 				log,
 				registry ?? undefined,
 			);
@@ -166,13 +166,16 @@ export function useWorkflow(
 		};
 	}, [workflowId, workflowFn, runId]);
 
-	const signal = useCallback((name: string, payload?: unknown) => {
-		if (isLayerMode && registry) {
-			registry.signal(workflowId, name, payload);
-		} else {
-			interpreterRef.current?.signal(name, payload);
-		}
-	}, [isLayerMode, registry, workflowId]);
+	const signal = useCallback(
+		(name: string, payload?: unknown) => {
+			if (isLayerMode && registry) {
+				registry.signal(workflowId, name, payload);
+			} else {
+				interpreterRef.current?.signal(name, payload);
+			}
+		},
+		[isLayerMode, registry, workflowId],
+	);
 
 	const reset = useCallback(() => {
 		storageRef.current.clear(workflowId);

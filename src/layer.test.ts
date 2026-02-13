@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createLayer } from "./layer";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction, WorkflowStorage } from "./types";
+import type { WorkflowFunction } from "./types";
 
 describe("createLayer", () => {
 	it("returns a layer with workflows and storage", () => {
