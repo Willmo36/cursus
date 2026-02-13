@@ -10,73 +10,50 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 
 	if (state === "failed") {
 		return (
-			<div style={{ padding: 16, background: "#ffebee", borderRadius: 8 }}>
-				<h2 style={{ marginTop: 0 }}>Cart</h2>
-				<p style={{ color: "#d32f2f" }}>Cart error: {error}</p>
+			<div className="p-4 bg-red-50 rounded-lg">
+				<h2 className="mt-0 text-lg font-bold">Cart</h2>
+				<p className="text-red-700">Cart error: {error}</p>
 			</div>
 		);
 	}
 
 	if (state === "completed") {
 		return (
-			<div
-				style={{
-					border: "1px solid #ddd",
-					borderRadius: 8,
-					padding: 16,
-					alignSelf: "start",
-				}}
-			>
-				<h2 style={{ marginTop: 0 }}>Cart</h2>
-				<p style={{ color: "#666" }}>Checkout in progress...</p>
+			<div className="border border-gray-300 rounded-lg p-4 self-start">
+				<h2 className="mt-0 text-lg font-bold">Cart</h2>
+				<p className="text-gray-500">Checkout in progress...</p>
 			</div>
 		);
 	}
 
 	return (
-		<div
-			style={{
-				border: "1px solid #ddd",
-				borderRadius: 8,
-				padding: 16,
-				alignSelf: "start",
-			}}
-		>
-			<h2 style={{ marginTop: 0 }}>Cart</h2>
+		<div className="border border-gray-300 rounded-lg p-4 self-start">
+			<h2 className="mt-0 text-lg font-bold">Cart</h2>
 
 			{items.length === 0 && (
-				<p style={{ color: "#999" }}>Your cart is empty</p>
+				<p className="text-gray-400">Your cart is empty</p>
 			)}
 
 			{items.map((item) => (
 				<div
 					key={item.productId}
-					style={{
-						display: "flex",
-						justifyContent: "space-between",
-						alignItems: "center",
-						padding: "8px 0",
-						borderBottom: "1px solid #eee",
-					}}
+					className="flex justify-between items-center py-2 border-b border-gray-200"
 				>
 					<div>
-						<div style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</div>
-						<div style={{ fontSize: 12, color: "#666" }}>
+						<div className="text-sm font-medium">{item.name}</div>
+						<div className="text-xs text-gray-500">
 							${item.price.toFixed(2)} x {item.quantity}
 						</div>
 					</div>
 					<button
 						type="button"
 						onClick={() =>
-							signal("action", { type: "remove", productId: item.productId })
+							signal("action", {
+								type: "remove",
+								productId: item.productId,
+							})
 						}
-						style={{
-							background: "none",
-							border: "none",
-							color: "#d32f2f",
-							cursor: "pointer",
-							fontSize: 13,
-						}}
+						className="bg-transparent border-none text-red-700 cursor-pointer text-sm"
 					>
 						Remove
 					</button>
@@ -85,14 +62,7 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 
 			{items.length > 0 && (
 				<>
-					<div
-						style={{
-							display: "flex",
-							justifyContent: "space-between",
-							marginTop: 12,
-							fontWeight: "bold",
-						}}
-					>
+					<div className="flex justify-between mt-3 font-bold">
 						<span>Total</span>
 						<span>
 							$
@@ -107,18 +77,7 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 							signal("action", { type: "checkout" });
 							onCheckout();
 						}}
-						style={{
-							width: "100%",
-							marginTop: 12,
-							padding: "10px 0",
-							background: "#388E3C",
-							color: "white",
-							border: "none",
-							borderRadius: 4,
-							cursor: "pointer",
-							fontSize: 14,
-							fontWeight: 500,
-						}}
+						className="w-full mt-3 py-2.5 bg-green-700 text-white rounded cursor-pointer text-sm font-medium"
 					>
 						Checkout
 					</button>

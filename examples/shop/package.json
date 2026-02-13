@@ -7,9 +7,11 @@
 		"build": "vite build"
 	},
 	"dependencies": {
+		"@tailwindcss/vite": "^4.1.18",
 		"react": "^19.2.4",
 		"react-dom": "^19.2.4",
-		"react-workflow": "file:../../"
+		"react-workflow": "file:../../",
+		"tailwindcss": "^4.1.18"
 	},
 	"devDependencies": {
 		"@types/react": "^19.2.14",

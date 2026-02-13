@@ -1,5 +1,6 @@
 // ABOUTME: Vite configuration with embedded API middleware for the shop example.
 // ABOUTME: Serves product, cart, and login endpoints directly from the dev server.
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
@@ -165,5 +166,5 @@ function shopApi(): Plugin {
 }
 
 export default defineConfig({
-	plugins: [react(), shopApi()],
+	plugins: [react(), tailwindcss(), shopApi()],
 });

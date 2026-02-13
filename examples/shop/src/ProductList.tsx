@@ -9,7 +9,10 @@ import { createCatalogWorkflow } from "./workflows";
 
 export function ProductList() {
 	const { apiFetch } = useErrorToggle();
-	const catalogWorkflow = useMemo(() => createCatalogWorkflow(apiFetch), [apiFetch]);
+	const catalogWorkflow = useMemo(
+		() => createCatalogWorkflow(apiFetch),
+		[apiFetch],
+	);
 	const { state, result, error, reset } = useWorkflow(
 		"catalog",
 		catalogWorkflow,
@@ -19,26 +22,19 @@ export function ProductList() {
 	const cartWorkflow = useWorkflow("cart");
 
 	if (state === "running") {
-		return <p style={{ color: "#666", fontStyle: "italic" }}>Loading products...</p>;
+		return <p className="text-gray-500 italic">Loading products...</p>;
 	}
 
 	if (state === "failed") {
 		return (
-			<div style={{ padding: 16, background: "#ffebee", borderRadius: 8 }}>
-				<p style={{ color: "#d32f2f", margin: "0 0 12px" }}>
+			<div className="p-4 bg-red-50 rounded-lg">
+				<p className="text-red-700 mb-3">
 					Failed to load products: {error}
 				</p>
 				<button
 					type="button"
 					onClick={reset}
-					style={{
-						padding: "8px 16px",
-						background: "#d32f2f",
-						color: "white",
-						border: "none",
-						borderRadius: 4,
-						cursor: "pointer",
-					}}
+					className="px-4 py-2 bg-red-700 text-white rounded cursor-pointer"
 				>
 					Retry
 				</button>
@@ -50,14 +46,17 @@ export function ProductList() {
 
 	return (
 		<div>
-			<h2 style={{ marginTop: 0 }}>Products</h2>
-			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+			<h2 className="mt-0 text-xl font-bold">Products</h2>
+			<div className="grid grid-cols-2 gap-4">
 				{result.map((product) => (
 					<ProductCard
 						key={product.id}
 						product={product}
 						onAdd={() =>
-							cartWorkflow.signal("action", { type: "add", productId: product.id })
+							cartWorkflow.signal("action", {
+								type: "add",
+								productId: product.id,
+							})
 						}
 					/>
 				))}
@@ -71,38 +70,22 @@ function ProductCard({
 	onAdd,
 }: { product: Product; onAdd: () => void }) {
 	return (
-		<div
-			style={{
-				border: "1px solid #ddd",
-				borderRadius: 8,
-				padding: 12,
-				display: "flex",
-				flexDirection: "column",
-			}}
-		>
+		<div className="border border-gray-300 rounded-lg p-3 flex flex-col">
 			<img
 				src={product.image}
 				alt={product.name}
-				style={{ width: "100%", borderRadius: 4, marginBottom: 8 }}
+				className="w-full rounded mb-2"
 			/>
-			<h3 style={{ margin: "0 0 4px" }}>{product.name}</h3>
-			<p style={{ color: "#666", fontSize: 13, margin: "0 0 8px", flex: 1 }}>
+			<h3 className="m-0 mb-1 text-base font-semibold">{product.name}</h3>
+			<p className="text-gray-500 text-sm m-0 mb-2 flex-1">
 				{product.description}
 			</p>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-				<span style={{ fontWeight: "bold" }}>${product.price.toFixed(2)}</span>
+			<div className="flex justify-between items-center">
+				<span className="font-bold">${product.price.toFixed(2)}</span>
 				<button
 					type="button"
 					onClick={onAdd}
-					style={{
-						padding: "6px 12px",
-						background: "#1976D2",
-						color: "white",
-						border: "none",
-						borderRadius: 4,
-						cursor: "pointer",
-						fontSize: 13,
-					}}
+					className="px-3 py-1.5 bg-blue-700 text-white rounded text-sm cursor-pointer"
 				>
 					Add to cart
 				</button>

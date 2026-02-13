@@ -12,20 +12,13 @@ export function App() {
 	const [showCheckout, setShowCheckout] = useState(false);
 
 	return (
-		<div style={{ fontFamily: "system-ui", maxWidth: 960, margin: "0 auto", padding: 20 }}>
-			<header
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: 24,
-					paddingBottom: 16,
-					borderBottom: "2px solid #eee",
-				}}
-			>
-				<h1 style={{ margin: 0 }}>Shop</h1>
-				<label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-					<span style={{ fontSize: 14, color: forceError ? "#d32f2f" : "#666" }}>
+		<div className="max-w-4xl mx-auto p-5 font-sans">
+			<header className="flex justify-between items-center mb-6 pb-4 border-b-2 border-gray-200">
+				<h1 className="m-0 text-2xl font-bold">Shop</h1>
+				<label className="flex items-center gap-2 cursor-pointer">
+					<span
+						className={`text-sm ${forceError ? "text-red-700" : "text-gray-500"}`}
+					>
 						Force errors
 					</span>
 					<input
@@ -39,13 +32,13 @@ export function App() {
 			{showCheckout ? (
 				<Checkout onBack={() => setShowCheckout(false)} />
 			) : (
-				<div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
+				<div className="grid grid-cols-[1fr_300px] gap-6">
 					<ProductList />
 					<Cart onCheckout={() => setShowCheckout(true)} />
 				</div>
 			)}
 
-			<div style={{ marginTop: 32 }}>
+			<div className="mt-8">
 				<WorkflowDebugPanel />
 			</div>
 		</div>

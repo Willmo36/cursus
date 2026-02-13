@@ -12,36 +12,27 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
 	if (state === "completed" && result) {
 		return (
-			<div style={{ maxWidth: 500, margin: "0 auto" }}>
-				<h2>Order Confirmed</h2>
-				<div
-					style={{
-						background: "#e8f5e9",
-						padding: 16,
-						borderRadius: 8,
-						marginBottom: 16,
-					}}
-				>
+			<div className="max-w-lg mx-auto">
+				<h2 className="text-xl font-bold">Order Confirmed</h2>
+				<div className="bg-green-50 p-4 rounded-lg mb-4">
 					<p>
 						<strong>Order ID:</strong> {result.orderId}
 					</p>
 					<p>
-						<strong>Customer:</strong> {result.user.name} ({result.user.email})
+						<strong>Customer:</strong> {result.user.name} (
+						{result.user.email})
 					</p>
-					<h3>Items</h3>
+					<h3 className="font-semibold">Items</h3>
 					{result.items.map((item) => (
-						<div key={item.productId} style={{ fontSize: 14, marginBottom: 4 }}>
-							{item.name} x {item.quantity} — ${(item.price * item.quantity).toFixed(2)}
+						<div
+							key={item.productId}
+							className="text-sm mb-1"
+						>
+							{item.name} x {item.quantity} — $
+							{(item.price * item.quantity).toFixed(2)}
 						</div>
 					))}
-					<div
-						style={{
-							marginTop: 12,
-							paddingTop: 8,
-							borderTop: "1px solid #c8e6c9",
-							fontWeight: "bold",
-						}}
-					>
+					<div className="mt-3 pt-2 border-t border-green-200 font-bold">
 						Total: ${result.total.toFixed(2)}
 					</div>
 				</div>
@@ -51,12 +42,16 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
 	if (state === "failed") {
 		return (
-			<div style={{ maxWidth: 500, margin: "0 auto" }}>
-				<h2>Checkout Failed</h2>
-				<div style={{ padding: 16, background: "#ffebee", borderRadius: 8 }}>
-					<p style={{ color: "#d32f2f" }}>{error}</p>
+			<div className="max-w-lg mx-auto">
+				<h2 className="text-xl font-bold">Checkout Failed</h2>
+				<div className="p-4 bg-red-50 rounded-lg">
+					<p className="text-red-700">{error}</p>
 				</div>
-				<button type="button" onClick={onBack} style={{ marginTop: 16 }}>
+				<button
+					type="button"
+					onClick={onBack}
+					className="mt-4 cursor-pointer"
+				>
 					Back to shop
 				</button>
 			</div>
@@ -65,25 +60,20 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
 	if (needsLogin) {
 		return (
-			<div style={{ maxWidth: 400, margin: "0 auto" }}>
+			<div className="max-w-sm mx-auto">
 				<button
 					type="button"
 					onClick={onBack}
-					style={{
-						background: "none",
-						border: "none",
-						cursor: "pointer",
-						color: "#1976D2",
-						padding: 0,
-						marginBottom: 16,
-					}}
+					className="bg-transparent border-none cursor-pointer text-blue-700 p-0 mb-4"
 				>
 					&larr; Back to shop
 				</button>
 				<LoginForm
-					onLogin={(email, password) => signal("login", { email, password })}
+					onLogin={(email, password) =>
+						signal("login", { email, password })
+					}
 				/>
-				<p style={{ fontSize: 12, color: "#999", marginTop: 12 }}>
+				<p className="text-xs text-gray-400 mt-3">
 					Use: user@shop.com / password123
 				</p>
 			</div>
@@ -91,8 +81,8 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 	}
 
 	return (
-		<div style={{ maxWidth: 500, margin: "0 auto" }}>
-			<p style={{ color: "#666", fontStyle: "italic" }}>Processing order...</p>
+		<div className="max-w-lg mx-auto">
+			<p className="text-gray-500 italic">Processing order...</p>
 		</div>
 	);
 }
@@ -110,39 +100,30 @@ function LoginForm({
 				onLogin(email, password);
 			}}
 		>
-			<h2>Login to complete checkout</h2>
-			<div style={{ marginBottom: 8 }}>
+			<h2 className="text-xl font-bold">Login to complete checkout</h2>
+			<div className="mb-2">
 				<input
 					type="email"
 					value={email}
 					onChange={(e) => setEmail(e.target.value)}
 					placeholder="Email"
 					required
-					style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
+					className="w-full p-2 border border-gray-300 rounded box-border"
 				/>
 			</div>
-			<div style={{ marginBottom: 12 }}>
+			<div className="mb-3">
 				<input
 					type="password"
 					value={password}
 					onChange={(e) => setPassword(e.target.value)}
 					placeholder="Password"
 					required
-					style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
+					className="w-full p-2 border border-gray-300 rounded box-border"
 				/>
 			</div>
 			<button
 				type="submit"
-				style={{
-					width: "100%",
-					padding: "10px 0",
-					background: "#1976D2",
-					color: "white",
-					border: "none",
-					borderRadius: 4,
-					cursor: "pointer",
-					fontSize: 14,
-				}}
+				className="w-full py-2.5 bg-blue-700 text-white rounded cursor-pointer text-sm"
 			>
 				Login & Place Order
 			</button>

@@ -1,5 +1,6 @@
 // ABOUTME: Entry point for the shop example app.
 // ABOUTME: Sets up error toggle context, creates workflow layer, and mounts the app.
+import "./index.css";
 import { StrictMode, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { WorkflowLayerProvider, createLayer } from "react-workflow";
