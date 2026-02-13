@@ -75,7 +75,10 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs a workflow with waitAll and pre-queued signals", async () => {
-		const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+		const workflow: WorkflowFunction<
+			[string, string],
+			{ email: string; password: string }
+		> = function* (ctx) {
 			return yield* ctx.waitAll("email", "password");
 		};
 

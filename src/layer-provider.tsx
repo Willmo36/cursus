@@ -1,15 +1,19 @@
 // ABOUTME: React context provider that creates a WorkflowRegistry from a layer.
 // ABOUTME: Provides typed workflow layers to the component tree via context.
 
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import {
+	createContext,
+	type PropsWithChildren,
+	useContext,
+	useMemo,
+} from "react";
 import type { WorkflowLayer } from "./layer";
 import { WorkflowRegistry } from "./registry";
 import { RegistryContext } from "./registry-provider";
 
-type WorkflowLayerProviderProps = {
+type WorkflowLayerProviderProps = PropsWithChildren<{
 	layer: WorkflowLayer;
-	children: ReactNode;
-};
+}>;
 
 const LayerRegistryContext = createContext<WorkflowRegistry | null>(null);
 

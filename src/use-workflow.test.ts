@@ -147,7 +147,10 @@ describe("useWorkflow", () => {
 		});
 
 		it("collects multiple signals with waitAll", async () => {
-			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				[string, string],
+				{ email: string; password: string }
+			> = function* (ctx) {
 				return yield* ctx.waitAll("email", "password");
 			};
 
@@ -372,10 +375,11 @@ describe("useWorkflow", () => {
 		});
 
 		it("signal then waitForWorkflow then activity completes", async () => {
-			const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
-				ctx,
-			) {
-				const profile = yield* ctx.waitFor<{ name: string }>("profile");
+			const profileWorkflow: WorkflowFunction<
+				{ name: string },
+				{ profile: { name: string } }
+			> = function* (ctx) {
+				const profile = yield* ctx.waitFor("profile");
 				return profile;
 			};
 
@@ -435,10 +439,11 @@ describe("useWorkflow", () => {
 		});
 
 		it("debug panel shows all events for waitAll with signal + workflow dep", async () => {
-			const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
-				ctx,
-			) {
-				const profile = yield* ctx.waitFor<{ name: string }>("profile");
+			const profileWorkflow: WorkflowFunction<
+				{ name: string },
+				{ profile: { name: string } }
+			> = function* (ctx) {
+				const profile = yield* ctx.waitFor("profile");
 				return profile;
 			};
 

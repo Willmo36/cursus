@@ -359,7 +359,10 @@ describe("Interpreter", () => {
 
 	describe("Phase F: waitAll", () => {
 		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
-			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				[string, string],
+				{ email: string; password: string }
+			> = function* (ctx) {
 				return yield* ctx.waitAll("email", "password");
 			};
 
@@ -387,7 +390,10 @@ describe("Interpreter", () => {
 		});
 
 		it("records wait_all_started and wait_all_completed events", async () => {
-			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				[string, string],
+				{ a: string; b: string }
+			> = function* (ctx) {
 				return yield* ctx.waitAll("a", "b");
 			};
 
@@ -429,7 +435,10 @@ describe("Interpreter", () => {
 		});
 
 		it("replays waitAll from event log", async () => {
-			const workflow: WorkflowFunction<[string, number]> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				[string, number],
+				{ name: string; age: number }
+			> = function* (ctx) {
 				return yield* ctx.waitAll("name", "age");
 			};
 
@@ -464,7 +473,10 @@ describe("Interpreter", () => {
 		});
 
 		it("exposes waitingForAll with remaining signal names", async () => {
-			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				[string, string],
+				{ email: string; password: string }
+			> = function* (ctx) {
 				return yield* ctx.waitAll("email", "password");
 			};
 
