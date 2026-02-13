@@ -38,9 +38,15 @@ type CartSignals = {
 
 export function createCartWorkflow(
 	apiFetch: ApiFetch,
-): WorkflowFunction<CartItem[], CartSignals> {
+): WorkflowFunction<
+	CartItem[],
+	CartSignals,
+	Record<string, never>,
+	{ items: CartItem[] }
+> {
 	return function* (ctx) {
 		let items: CartItem[] = [];
+		ctx.query("items", () => items);
 
 		for (;;) {
 			const action = yield* ctx.waitFor("action");

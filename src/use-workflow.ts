@@ -37,6 +37,7 @@ type UseWorkflowResult<
 		name: K,
 		payload: SignalMap[K],
 	) => void;
+	query: (name: string) => unknown;
 	reset: () => void;
 };
 
@@ -50,9 +51,10 @@ export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
+	QueryMap extends Record<string, unknown> = Record<string, never>,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap>;
 
@@ -192,6 +194,16 @@ export function useWorkflow(
 		[isLayerMode, registry, workflowId],
 	);
 
+	const query = useCallback(
+		(name: string): unknown => {
+			if (isLayerMode && registry) {
+				return registry.getInterpreter(workflowId)?.query(name);
+			}
+			return interpreterRef.current?.query(name);
+		},
+		[isLayerMode, registry, workflowId],
+	);
+
 	const reset = useCallback(() => {
 		storageRef.current.clear(workflowId);
 		interpreterRef.current = null;
@@ -210,6 +222,7 @@ export function useWorkflow(
 		waitingFor,
 		waitingForAll,
 		signal,
+		query,
 		reset,
 	};
 }

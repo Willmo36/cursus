@@ -944,6 +944,91 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("query", () => {
+		it("registers a handler and returns its value", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				{ greeting: string }
+			> = function* (ctx) {
+				ctx.query("greeting", () => "hi there");
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.query("greeting")).toBe("hi there");
+		});
+
+		it("handler captures workflow closure state", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ submit: string },
+				Record<string, never>,
+				{ count: number }
+			> = function* (ctx) {
+				let count = 0;
+				ctx.query("count", () => count);
+				count++;
+				const data = yield* ctx.waitFor("submit");
+				count++;
+				return `done: ${data}`;
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// Handler should reflect current closure state
+			expect(interpreter.query("count")).toBe(1);
+
+			interpreter.signal("submit", "data");
+			await runPromise;
+
+			expect(interpreter.query("count")).toBe(2);
+		});
+
+		it("returns undefined for unregistered queries", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.query("nonexistent")).toBeUndefined();
+		});
+
+		it("handlers work during replay", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				{ status: string }
+			> = function* (ctx) {
+				ctx.query("status", () => "registered");
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{ type: "activity_scheduled", name: "greet", seq: 1, timestamp: 2 },
+				{ type: "activity_completed", seq: 1, result: "hello", timestamp: 3 },
+				{ type: "workflow_completed", result: "hello", timestamp: 4 },
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			expect(interpreter.query("status")).toBe("registered");
+		});
+	});
+
 	describe("events getter", () => {
 		it("returns the event log entries", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {

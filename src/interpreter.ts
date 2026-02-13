@@ -44,6 +44,7 @@ export class Interpreter {
 				onComplete: () => void;
 		  }
 		| undefined;
+	private _queries = new Map<string, () => unknown>();
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
 
@@ -60,6 +61,9 @@ export class Interpreter {
 		// The context methods work with `unknown` internally; generic narrowing
 		// happens at the WorkflowFunction<T, SignalMap, WorkflowMap> level for end users.
 		this.context = {
+			query: (name: string, handler: () => unknown) => {
+				this._queries.set(name, handler);
+			},
 			activity: <T>(name: string, fn: () => Promise<T>) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
@@ -188,6 +192,10 @@ export class Interpreter {
 
 	get waitingForAll(): string[] | undefined {
 		return this._waitingForAll;
+	}
+
+	query(name: string): unknown {
+		return this._queries.get(name)?.();
 	}
 
 	signal(name: string, payload?: unknown): void {
