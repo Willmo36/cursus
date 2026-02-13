@@ -832,6 +832,46 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("compacted fast path", () => {
+		it("returns result immediately from compacted workflow_completed event", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_completed", result: "hello", timestamp: 4 },
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe("hello");
+			expect(interpreter.state).toBe("completed");
+			expect(interpreter.result).toBe("hello");
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+
+		it("sets failed state from compacted workflow_failed event", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_failed", error: "boom", timestamp: 4 },
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBeUndefined();
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("boom");
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+	});
+
 	describe("events getter", () => {
 		it("returns the event log entries", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {

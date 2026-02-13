@@ -10,8 +10,10 @@ import type {
 	SignalReceivedEvent,
 	WaitAllCompletedEvent,
 	WaitAllItem,
+	WorkflowCompletedEvent,
 	WorkflowContext,
 	WorkflowEvent,
+	WorkflowFailedEvent,
 	WorkflowFunction,
 	WorkflowRef,
 	WorkflowRegistryInterface,
@@ -243,6 +245,28 @@ export class Interpreter {
 
 	async run(): Promise<unknown> {
 		if (!this.isReplayingEvent("workflow_started")) {
+			// No workflow_started in the log — either a fresh run or compacted storage.
+			// Check for compacted terminal events before starting the generator.
+			const events = this.log.events();
+			const completed = events.find(
+				(e): e is WorkflowCompletedEvent => e.type === "workflow_completed",
+			);
+			if (completed) {
+				this._state = "completed";
+				this._result = completed.result;
+				this.notifyChange();
+				return this._result;
+			}
+			const failed = events.find(
+				(e): e is WorkflowFailedEvent => e.type === "workflow_failed",
+			);
+			if (failed) {
+				this._state = "failed";
+				this._error = failed.error;
+				this.notifyChange();
+				return undefined;
+			}
+
 			this.log.append({ type: "workflow_started", timestamp: Date.now() });
 		}
 

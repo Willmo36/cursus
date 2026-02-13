@@ -156,6 +156,21 @@ export function useWorkflow(
 
 			// Final state sync after run completes
 			syncState();
+
+			// Compact storage for terminal workflows
+			if (interpreter.state === "completed" || interpreter.state === "failed") {
+				const allEvents = log.events();
+				const terminalEvent = allEvents
+					.slice()
+					.reverse()
+					.find(
+						(e) =>
+							e.type === "workflow_completed" || e.type === "workflow_failed",
+					);
+				if (terminalEvent) {
+					await storageRef.current.compact(workflowId, [terminalEvent]);
+				}
+			}
 		}
 
 		start();

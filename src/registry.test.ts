@@ -142,6 +142,42 @@ describe("WorkflowRegistry", () => {
 		);
 	});
 
+	it("compacts storage after workflow completes", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("greet", async () => "hello");
+		};
+
+		const storage = new MemoryStorage();
+		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		await registry.start("greet");
+
+		const events = await storage.load("greet");
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "workflow_completed",
+			result: "hello",
+		});
+	});
+
+	it("compacts storage after workflow fails", async () => {
+		const workflow: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("fail", async () => {
+				throw new Error("boom");
+			});
+		};
+
+		const storage = new MemoryStorage();
+		const registry = new WorkflowRegistry({ fail: workflow }, storage);
+		await registry.start("fail");
+
+		const events = await storage.load("fail");
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "workflow_failed",
+			error: "boom",
+		});
+	});
+
 	it("failed workflow rejects waiters", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			return yield* ctx.activity("fail", async () => {

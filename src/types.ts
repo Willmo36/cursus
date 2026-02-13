@@ -301,5 +301,6 @@ export type InternalWorkflowContext = {
 export type WorkflowStorage = {
 	load(workflowId: string): Promise<WorkflowEvent[]>;
 	append(workflowId: string, events: WorkflowEvent[]): Promise<void>;
+	compact(workflowId: string, events: WorkflowEvent[]): Promise<void>;
 	clear(workflowId: string): Promise<void>;
 };

@@ -91,6 +91,21 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		// Persist final events
 		await persistEvents();
 
+		// Compact storage for terminal workflows — only the terminal event matters on reload
+		if (interpreter.state === "completed" || interpreter.state === "failed") {
+			const allEvents = log.events();
+			const terminalEvent = allEvents
+				.slice()
+				.reverse()
+				.find(
+					(e) =>
+						e.type === "workflow_completed" || e.type === "workflow_failed",
+				);
+			if (terminalEvent) {
+				await this.storage.compact(id, [terminalEvent]);
+			}
+		}
+
 		if (interpreter.state === "completed") {
 			entry.completed = true;
 			entry.result = interpreter.result;
