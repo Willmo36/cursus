@@ -391,6 +391,39 @@ describe("useWorkflow", () => {
 			});
 		});
 
+		it("reset() restarts a layer workflow", async () => {
+			let runCount = 0;
+			const workflow: WorkflowFunction<number> = function* (ctx) {
+				runCount++;
+				return yield* ctx.activity("count", async () => runCount);
+			};
+
+			const storage = new MemoryStorage();
+			const layer = createLayer({ counter: workflow }, storage);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(WorkflowLayerProvider, { layer }, children);
+
+			const { result } = renderHook(
+				() => useWorkflow<number>("counter"),
+				{ wrapper },
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe(1);
+			});
+
+			await act(async () => {
+				result.current.reset();
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe(2);
+			});
+		});
+
 		it("throws when used outside a provider", () => {
 			expect(() => {
 				renderHook(() => useWorkflow("anything"));

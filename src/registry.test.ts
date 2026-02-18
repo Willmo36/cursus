@@ -490,6 +490,88 @@ describe("WorkflowRegistry", () => {
 		);
 	});
 
+	describe("reset", () => {
+		it("reset() cancels, clears storage, and allows restart", async () => {
+			let runCount = 0;
+			const workflow: WorkflowFunction<number> = function* (ctx) {
+				runCount++;
+				return yield* ctx.activity("count", async () => runCount);
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ counter: workflow }, storage);
+
+			await registry.start("counter");
+			expect(registry.getState("counter")).toBe("completed");
+			expect(await registry.waitFor("counter")).toBe(1);
+
+			await registry.reset("counter");
+
+			// Entry should be reset — no interpreter, not completed
+			expect(registry.getState("counter")).toBeUndefined();
+
+			// Storage should be cleared
+			const events = await storage.load("counter");
+			expect(events).toEqual([]);
+
+			// Can start again
+			await registry.start("counter");
+			expect(registry.getState("counter")).toBe("completed");
+			expect(await registry.waitFor("counter")).toBe(2);
+		});
+
+		it("reset() cancels a waiting workflow", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ form: workflow }, storage);
+
+			const startPromise = registry.start("form");
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(registry.getState("form")).toBe("waiting");
+
+			await registry.reset("form");
+			await startPromise;
+
+			// Should be reset, not waiting
+			expect(registry.getState("form")).toBeUndefined();
+		});
+
+		it("reset() notifies state change listeners", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const data = yield* ctx.waitFor<string>("submit");
+				return `got: ${data}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ form: workflow }, storage);
+
+			const startPromise = registry.start("form");
+			await new Promise((r) => setTimeout(r, 10));
+
+			const calls: string[] = [];
+			registry.onStateChange("form", () => calls.push("changed"));
+
+			await registry.reset("form");
+			await startPromise;
+
+			expect(calls.length).toBeGreaterThan(0);
+		});
+
+		it("reset() on unregistered ID throws", async () => {
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({}, storage);
+
+			await expect(registry.reset("nonexistent")).rejects.toThrow(
+				/not registered/,
+			);
+		});
+	});
+
 	it("getEvents() returns empty array for an unstarted workflow", () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			return yield* ctx.activity("greet", async () => "hello");

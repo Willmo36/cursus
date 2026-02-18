@@ -218,7 +218,17 @@ export function useWorkflow(
 		interpreterRef.current?.cancel();
 	}, []);
 
-	const reset = useCallback(() => {
+	const reset = useCallback(async () => {
+		if (isLayerMode && registry) {
+			await registry.reset(workflowId);
+			setState("running");
+			setResult(undefined);
+			setError(undefined);
+			setWaitingFor(undefined);
+			setWaitingForAll(undefined);
+			await registry.start(workflowId);
+			return;
+		}
 		interpreterRef.current?.cancel();
 		storageRef.current.clear(workflowId);
 		interpreterRef.current = null;
@@ -228,7 +238,7 @@ export function useWorkflow(
 		setWaitingFor(undefined);
 		setWaitingForAll(undefined);
 		restart();
-	}, [workflowId]);
+	}, [isLayerMode, registry, workflowId]);
 
 	return {
 		state,

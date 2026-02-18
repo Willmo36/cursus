@@ -154,6 +154,23 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		});
 	}
 
+	async reset(id: string): Promise<void> {
+		const entry = this.getEntry(id);
+
+		entry.interpreter?.cancel();
+		entry.interpreter = undefined;
+		entry.completed = false;
+		entry.failed = false;
+		entry.result = undefined;
+		entry.error = undefined;
+
+		await this.storage.clear(id);
+
+		for (const listener of entry.listeners) {
+			listener();
+		}
+	}
+
 	signal(id: string, name: string, payload?: unknown): void {
 		const entry = this.getEntry(id);
 		entry.interpreter?.signal(name, payload);
