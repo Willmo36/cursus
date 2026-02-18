@@ -45,7 +45,7 @@ export function createCartWorkflow(
 		let items: CartItem[] = [];
 		ctx.query("items", () => items);
 
-		return yield* ctx.on<CartItem[]>({
+		const res =  yield* ctx.on<CartItem[]>({
 			add: function* (ctx, productId: string) {
 				items = yield* ctx.activity("add-to-cart", (signal) =>
 					addToCart(apiFetch, productId, signal),
@@ -60,6 +60,7 @@ export function createCartWorkflow(
 				yield* ctx.done(items);
 			},
 		});
+		return res;
 	};
 }
 

@@ -2,7 +2,7 @@
 
 ## Design Gaps
 
-- [ ] **No error propagation for failed workflow dependencies in waitAll** — Even after fixing the `.catch()`, there's a design question: what happens when one of N items in a waitAll fails? Currently there's no `workflow_dependency_failed` event type, and no way for the workflow to handle partial failures.
+- [ ] **No error propagation for failed workflow dependencies in waitAll** — `workflow_dependency_failed` exists now, but waitAll still doesn't handle the case where one of N items fails. No way for the workflow to handle partial failures.
 
 - [ ] **Circular dependency deadlock** — `registry.ts`. If workflow A depends on workflow B and B depends on A, both hang forever. No detection, no error, no timeout.
 
@@ -18,6 +18,8 @@
 
 - [ ] **Timeouts** — No built-in way to timeout a `waitFor`, `activity`, or `waitForWorkflow`. A signal that never arrives means the workflow hangs forever. Natural fit as an options bag: `yield* ctx.waitFor("submit", { timeout: 30000 })`. Should throw a `TimeoutError` the workflow can catch. Builds on the existing cancellation infrastructure.
 
-- [ ] **Retry policies** — Failed activities require the workflow to handle retry logic manually. Activity-level retry config (e.g. `{ retries: 3, backoff: "exponential" }`) is more granular than workflow-level restart. Tackle after timeouts since retries benefit from per-attempt timeouts.
+- [x] **Retry policies** — Implemented as `withRetry` HOF. Wraps activity functions with configurable retry + backoff (fixed/linear/exponential). Retries are transparent to the event log.
 
-- [ ] **Action signal abstraction** — The cart workflow's `waitFor("action")` + `if (action.type === ...)` pattern is a discriminated union dispatch loop. A `match`-style helper could clean it up, but it's a looping construct that doesn't fit cleanly into yield-one-command. Probably better as a userland helper than a core primitive — wait for more examples using the pattern before committing to a core API.
+- [x] **Action signal abstraction** — Implemented as `ctx.on(handlers)` / `ctx.done(value)` / `ctx.waitForAny(...signals)`. Cart workflow migrated.
+
+- [ ] **Error handling in `on` handler workflows** — When an `on` handler runs activities or other commands that fail, the error currently propagates as a workflow failure. Need to discuss: should `on` support per-handler error catching, or is the current behavior (handler errors = workflow errors) correct?
