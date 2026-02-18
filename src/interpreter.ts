@@ -599,11 +599,20 @@ export class Interpreter {
 	): Promise<unknown> {
 		const itemKeys = command.items.map(waitAllItemKey);
 
-		// Check for replay
+		// Check for replay: completed
 		const completed = this.log.findCompleted(command.seq, "wait_all_completed");
 		if (completed) {
 			const results = (completed as WaitAllCompletedEvent).results;
 			return itemKeys.map((k) => results[k]);
+		}
+
+		// Check for replay: dependency failed
+		const depFailed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_failed",
+		);
+		if (depFailed) {
+			throw new Error((depFailed as { error: string }).error);
 		}
 
 		// Live: record start event
@@ -695,7 +704,23 @@ export class Interpreter {
 
 						tryComplete();
 					})
-					.catch(reject);
+					.catch((err) => {
+						const message =
+							err instanceof Error ? err.message : String(err);
+						const stack =
+							err instanceof Error ? err.stack : undefined;
+						this.log.append({
+							type: "workflow_dependency_failed",
+							workflowId: item.workflowId,
+							seq: command.seq,
+							error: message,
+							stack,
+							timestamp: Date.now(),
+						});
+						this._waitingForAll = undefined;
+						this.pendingWaitAll = undefined;
+						reject(err);
+					});
 			}
 
 			this.notifyChange();
@@ -789,13 +814,22 @@ export class Interpreter {
 	private async executeWaitForWorkflow(
 		command: Extract<Command, { type: "waitForWorkflow" }>,
 	): Promise<unknown> {
-		// Check for replay
+		// Check for replay: completed
 		const completed = this.log.findCompleted(
 			command.seq,
 			"workflow_dependency_completed",
 		);
 		if (completed) {
 			return (completed as { result: unknown }).result;
+		}
+
+		// Check for replay: failed
+		const failed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_failed",
+		);
+		if (failed) {
+			throw new Error((failed as { error: string }).error);
 		}
 
 		// Live: require registry
@@ -812,19 +846,33 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 
-		const result = await this.registry.waitFor(command.workflowId, {
-			start: command.start,
-		});
+		try {
+			const result = await this.registry.waitFor(command.workflowId, {
+				start: command.start,
+			});
 
-		this.log.append({
-			type: "workflow_dependency_completed",
-			workflowId: command.workflowId,
-			seq: command.seq,
-			result,
-			timestamp: Date.now(),
-		});
+			this.log.append({
+				type: "workflow_dependency_completed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				result,
+				timestamp: Date.now(),
+			});
 
-		return result;
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
+			this.log.append({
+				type: "workflow_dependency_failed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				error: message,
+				stack,
+				timestamp: Date.now(),
+			});
+			throw err;
+		}
 	}
 
 	private async executeParallel(

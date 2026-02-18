@@ -25,6 +25,7 @@ export type {
 	Workflow,
 	WorkflowCancelledEvent,
 	WorkflowContext,
+	WorkflowDependencyFailedEvent,
 	WorkflowEvent,
 	WorkflowFunction,
 	WorkflowRef,

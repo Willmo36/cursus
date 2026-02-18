@@ -193,6 +193,15 @@ export type WorkflowDependencyCompletedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowDependencyFailedEvent = {
+	type: "workflow_dependency_failed";
+	workflowId: string;
+	seq: number;
+	error: string;
+	stack?: string;
+	timestamp: number;
+};
+
 export type WorkflowCompletedEvent = {
 	type: "workflow_completed";
 	result: unknown;
@@ -226,6 +235,7 @@ export type WorkflowEvent =
 	| ChildFailedEvent
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyCompletedEvent
+	| WorkflowDependencyFailedEvent
 	| WorkflowCompletedEvent
 	| WorkflowFailedEvent
 	| WorkflowCancelledEvent;

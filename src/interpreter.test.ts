@@ -764,6 +764,152 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("failed");
 			expect(interpreter.error).toBe("dependency failed");
 		});
+
+		it("records workflow_dependency_failed when dependency fails in waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dep boom")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "profile",
+					seq: 1,
+					error: "dep boom",
+				}),
+			);
+			const failedEvent = events.find(
+				(e) => e.type === "workflow_dependency_failed",
+			);
+			expect(
+				failedEvent?.type === "workflow_dependency_failed" &&
+					failedEvent.stack,
+			).toMatch(/Error: dep boom/);
+		});
+
+		it("cleans up waiting state on dependency failure in waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dep boom")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.waitingForAll).toBeUndefined();
+		});
+
+		it("replays dependency failure from event log in waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "wait_all_started",
+					items: [
+						{ kind: "signal", name: "payment" },
+						{ kind: "workflow", workflowId: "profile" },
+					],
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_dependency_failed",
+					workflowId: "profile",
+					seq: 1,
+					error: "dep boom",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_failed",
+					error: "dep boom",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("dep boom");
+			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
+		});
+
+		it("workflow can catch waitAll dependency failure and recover", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dep boom")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				try {
+					yield* ctx.waitAll("payment", ctx.workflow("profile"));
+					return "unreachable";
+				} catch {
+					return "recovered";
+				}
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("recovered");
+			expect(interpreter.state).toBe("completed");
+			expect(log.events()).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "profile",
+					seq: 1,
+					error: "dep boom",
+				}),
+			);
+		});
 	});
 
 	describe("Phase G: child workflows", () => {
@@ -1288,6 +1434,126 @@ describe("Interpreter", () => {
 					workflowId: "login",
 					seq: 1,
 					result: "user-data",
+				}),
+			);
+		});
+
+		it("records workflow_dependency_failed event when dependency rejects", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dependency failed")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("login");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "login",
+					seq: 1,
+					error: "dependency failed",
+				}),
+			);
+			const failedEvent = events.find(
+				(e) => e.type === "workflow_dependency_failed",
+			);
+			expect(
+				failedEvent?.type === "workflow_dependency_failed" &&
+					failedEvent.stack,
+			).toMatch(/Error: dependency failed/);
+		});
+
+		it("replays dependency failure from event log without calling registry", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("login");
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_dependency_failed",
+					workflowId: "login",
+					seq: 1,
+					error: "dependency failed",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_failed",
+					error: "dependency failed",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("dependency failed");
+			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
+		});
+
+		it("workflow can catch dependency failure and recover", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dependency failed")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				try {
+					yield* ctx.waitForWorkflow("login");
+					return "unreachable";
+				} catch {
+					return "recovered";
+				}
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("recovered");
+			expect(interpreter.state).toBe("completed");
+			expect(log.events()).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "login",
+					seq: 1,
+					error: "dependency failed",
 				}),
 			);
 		});
