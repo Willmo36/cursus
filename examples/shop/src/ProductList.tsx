@@ -52,12 +52,7 @@ export function ProductList() {
 					<ProductCard
 						key={product.id}
 						product={product}
-						onAdd={() =>
-							cartWorkflow.signal("action", {
-								type: "add",
-								productId: product.id,
-							})
-						}
+						onAdd={() => cartWorkflow.signal("add", product.id)}
 					/>
 				))}
 			</div>

@@ -27,13 +27,10 @@ export function createCatalogWorkflow(
 
 // --- Cart workflow ---
 
-type CartAction =
-	| { type: "add"; productId: string }
-	| { type: "remove"; productId: string }
-	| { type: "checkout" };
-
 type CartSignals = {
-	action: CartAction;
+	add: string;
+	remove: string;
+	checkout: undefined;
 };
 
 export function createCartWorkflow(
@@ -48,25 +45,21 @@ export function createCartWorkflow(
 		let items: CartItem[] = [];
 		ctx.query("items", () => items);
 
-		for (;;) {
-			const action = yield* ctx.waitFor("action");
-
-			if (action.type === "checkout") {
-				return items;
-			}
-
-			if (action.type === "add") {
+		return yield* ctx.on<CartItem[]>({
+			add: function* (ctx, productId: string) {
 				items = yield* ctx.activity("add-to-cart", (signal) =>
-					addToCart(apiFetch, action.productId, signal),
+					addToCart(apiFetch, productId, signal),
 				);
-			}
-
-			if (action.type === "remove") {
+			},
+			remove: function* (ctx, productId: string) {
 				items = yield* ctx.activity("remove-from-cart", (signal) =>
-					removeFromCart(apiFetch, action.productId, signal),
+					removeFromCart(apiFetch, productId, signal),
 				);
-			}
-		}
+			},
+			checkout: function* (ctx) {
+				yield* ctx.done(items);
+			},
+		});
 	};
 }
 

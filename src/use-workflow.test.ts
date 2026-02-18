@@ -71,6 +71,34 @@ describe("useWorkflow", () => {
 			});
 		});
 
+		it("exposes waitingForAny when workflow uses waitForAny", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const { signal } = yield* ctx.waitForAny("a", "b");
+					return signal;
+				};
+
+			const { result } = renderHook(() =>
+				useWorkflow("test-waitForAny", workflow, {
+					storage: new MemoryStorage(),
+				}),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+				expect(result.current.waitingForAny).toEqual(["a", "b"]);
+			});
+
+			act(() => {
+				result.current.signal("a", "payload");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.waitingForAny).toBeUndefined();
+			});
+		});
+
 		it("resets clears storage and restarts the workflow", async () => {
 			let callCount = 0;
 			const workflow: WorkflowFunction<number> = function* (ctx) {

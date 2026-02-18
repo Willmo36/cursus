@@ -49,12 +49,7 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 					</div>
 					<button
 						type="button"
-						onClick={() =>
-							signal("action", {
-								type: "remove",
-								productId: item.productId,
-							})
-						}
+						onClick={() => signal("remove", item.productId)}
 						className="bg-transparent border-none text-red-700 cursor-pointer text-sm"
 					>
 						Remove
@@ -76,7 +71,7 @@ export function Cart({ onCheckout }: { onCheckout: () => void }) {
 					<button
 						type="button"
 						onClick={() => {
-							signal("action", { type: "checkout" });
+							signal("checkout", undefined);
 							onCheckout();
 						}}
 						className="w-full mt-3 py-2.5 bg-green-700 text-white rounded cursor-pointer text-sm font-medium"

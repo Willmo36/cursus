@@ -34,6 +34,7 @@ type UseWorkflowResult<
 	error: string | undefined;
 	waitingFor: (keyof SignalMap & string) | undefined;
 	waitingForAll: string[] | undefined;
+	waitingForAny: string[] | undefined;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
 		payload: SignalMap[K],
@@ -85,6 +86,9 @@ export function useWorkflow(
 	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
 		undefined,
 	);
+	const [waitingForAny, setWaitingForAny] = useState<string[] | undefined>(
+		undefined,
+	);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
 	const interpreterRef = useRef<Interpreter | null>(null);
 	const storageRef = useRef(storage);
@@ -110,6 +114,7 @@ export function useWorkflow(
 				setError(interpreter.error);
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
+				setWaitingForAny(interpreter.waitingForAny);
 			}
 
 			const unsubscribe = registry.onStateChange(workflowId, syncState);
@@ -156,6 +161,7 @@ export function useWorkflow(
 				setError(interpreter.error);
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
+				setWaitingForAny(interpreter.waitingForAny);
 				persistEvents();
 			}
 
@@ -226,6 +232,7 @@ export function useWorkflow(
 			setError(undefined);
 			setWaitingFor(undefined);
 			setWaitingForAll(undefined);
+			setWaitingForAny(undefined);
 			await registry.start(workflowId);
 			return;
 		}
@@ -237,6 +244,7 @@ export function useWorkflow(
 		setError(undefined);
 		setWaitingFor(undefined);
 		setWaitingForAll(undefined);
+		setWaitingForAny(undefined);
 		restart();
 	}, [isLayerMode, registry, workflowId]);
 
@@ -246,6 +254,7 @@ export function useWorkflow(
 		error,
 		waitingFor,
 		waitingForAll,
+		waitingForAny,
 		signal,
 		query,
 		cancel,

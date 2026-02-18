@@ -66,6 +66,9 @@ export async function createTestRuntime<
 				return ctx.activity(name, fn);
 			},
 			waitFor: ctx.waitFor,
+			waitForAny: ctx.waitForAny,
+			on: ctx.on,
+			done: ctx.done,
 			sleep: ctx.sleep,
 			parallel: ctx.parallel,
 			child: ctx.child,
@@ -88,6 +91,17 @@ export async function createTestRuntime<
 			const idx = signalQueue.findIndex(
 				(s) => s.name === interpreter.waitingFor,
 			);
+			if (idx !== -1) {
+				const [signal] = signalQueue.splice(idx, 1);
+				interpreter.signal(signal.name, signal.payload);
+			}
+			return;
+		}
+
+		// waitForAny: send first matching signal from queue
+		const waitingAny = interpreter.waitingForAny;
+		if (waitingAny) {
+			const idx = signalQueue.findIndex((s) => waitingAny.includes(s.name));
 			if (idx !== -1) {
 				const [signal] = signalQueue.splice(idx, 1);
 				interpreter.signal(signal.name, signal.payload);

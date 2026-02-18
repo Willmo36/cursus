@@ -1511,4 +1511,428 @@ describe("Interpreter", () => {
 			expect(receivedSignal!.aborted).toBe(true);
 		});
 	});
+
+	describe("Phase I: waitForAny", () => {
+		it("pauses and resumes when any matching signal arrives", async () => {
+			const workflow: WorkflowFunction<string, { add: string; remove: string }> =
+				function* (ctx) {
+					const { signal, payload } = yield* ctx.waitForAny("add", "remove");
+					return `${signal}:${payload}`;
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("add", "item-1");
+
+			const result = await runPromise;
+			expect(result).toBe("add:item-1");
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("returns { signal, payload } with correct discriminant", async () => {
+			const workflow: WorkflowFunction<
+				{ signal: string; payload: unknown },
+				{ a: string; b: number }
+			> = function* (ctx) {
+				return yield* ctx.waitForAny("a", "b");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("b", 42);
+
+			const result = await runPromise;
+			expect(result).toEqual({ signal: "b", payload: 42 });
+		});
+
+		it("ignores signals not in the list", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string; c: string }> =
+				function* (ctx) {
+					const { signal } = yield* ctx.waitForAny("a", "b");
+					return signal;
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("c", "ignored");
+
+			// Should still be waiting
+			expect(interpreter.state).toBe("waiting");
+		});
+
+		it("exposes waitingForAny getter", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const { signal } = yield* ctx.waitForAny("a", "b");
+					return signal;
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAny).toEqual(["a", "b"]);
+			});
+		});
+
+		it("replays from event log", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const { signal, payload } = yield* ctx.waitForAny("a", "b");
+					return `${signal}:${payload}`;
+				};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "signal_received",
+					signal: "b",
+					payload: "replayed",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_completed",
+					result: "b:replayed",
+					timestamp: 3,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe("b:replayed");
+		});
+
+		it("multiple sequential calls replay correctly", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const first = yield* ctx.waitForAny("a", "b");
+					const second = yield* ctx.waitForAny("a", "b");
+					return `${first.signal}-${second.signal}`;
+				};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "signal_received",
+					signal: "a",
+					payload: "x",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "signal_received",
+					signal: "b",
+					payload: "y",
+					seq: 2,
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: "a-b",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe("a-b");
+		});
+
+		it("records signal_received event", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const { signal } = yield* ctx.waitForAny("a", "b");
+					return signal;
+				};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("a", "payload-a");
+			await runPromise;
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "signal_received",
+					signal: "a",
+					payload: "payload-a",
+					seq: 1,
+				}),
+			);
+		});
+
+		it("cancel breaks out of waiting", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					const { signal } = yield* ctx.waitForAny("a", "b");
+					return signal;
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.cancel();
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+		});
+	});
+
+	describe("Phase J: on/done event loop", () => {
+		it("dispatches to matching handler", async () => {
+			const workflow: WorkflowFunction<string, { greet: string }> =
+				function* (ctx) {
+					let message = "";
+					const result = yield* ctx.on<string>({
+						greet: function* (ctx, name: string) {
+							message = name;
+							yield* ctx.done(message);
+						},
+					});
+					return result;
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("greet", "Max");
+
+			const result = await runPromise;
+			expect(result).toBe("Max");
+		});
+
+		it("loops: handles multiple signals before done", async () => {
+			const workflow: WorkflowFunction<number, { inc: undefined; finish: undefined }> =
+				function* (ctx) {
+					let count = 0;
+					return yield* ctx.on<number>({
+						inc: function* () {
+							count++;
+						},
+						finish: function* (ctx) {
+							yield* ctx.done(count);
+						},
+					});
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("inc");
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("inc");
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("finish");
+
+			const result = await runPromise;
+			expect(result).toBe(2);
+		});
+
+		it("done() exits loop and returns value", async () => {
+			const workflow: WorkflowFunction<string, { stop: string }> =
+				function* (ctx) {
+					return yield* ctx.on<string>({
+						stop: function* (ctx, value: string) {
+							yield* ctx.done(value);
+						},
+					});
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("stop", "goodbye");
+
+			const result = await runPromise;
+			expect(result).toBe("goodbye");
+		});
+
+		it("handlers can yield commands (activity, sleep, etc.)", async () => {
+			const workflow: WorkflowFunction<string, { go: undefined }> =
+				function* (ctx) {
+					return yield* ctx.on<string>({
+						go: function* (ctx) {
+							const result = yield* ctx.activity(
+								"fetch",
+								async () => "fetched",
+							);
+							yield* ctx.done(result);
+						},
+					});
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("go");
+
+			const result = await runPromise;
+			expect(result).toBe("fetched");
+		});
+
+		it("full loop replays from event log", async () => {
+			const activityFn = vi.fn().mockResolvedValue("fetched");
+			const workflow: WorkflowFunction<string, { inc: undefined; finish: undefined }> =
+				function* (ctx) {
+					let count = 0;
+					return yield* ctx.on<string>({
+						inc: function* (ctx) {
+							yield* ctx.activity("count", activityFn);
+							count++;
+						},
+						finish: function* (ctx) {
+							yield* ctx.done(`total:${count}`);
+						},
+					});
+				};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				// First iteration: inc
+				{
+					type: "signal_received",
+					signal: "inc",
+					payload: undefined,
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "activity_scheduled",
+					name: "count",
+					seq: 2,
+					timestamp: 3,
+				},
+				{
+					type: "activity_completed",
+					seq: 2,
+					result: "fetched",
+					timestamp: 4,
+				},
+				// Second iteration: finish
+				{
+					type: "signal_received",
+					signal: "finish",
+					payload: undefined,
+					seq: 3,
+					timestamp: 5,
+				},
+				{
+					type: "workflow_completed",
+					result: "total:1",
+					timestamp: 6,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe("total:1");
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+
+		it("handler error propagates as workflow failure", async () => {
+			const workflow: WorkflowFunction<string, { go: undefined }> =
+				function* (ctx) {
+					return yield* ctx.on<string>({
+						go: function* () {
+							throw new Error("handler boom");
+						},
+					});
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("go");
+			await runPromise;
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("handler boom");
+		});
+
+		it("unmatched signal is skipped (re-waits)", async () => {
+			const workflow: WorkflowFunction<string, { a: string; b: string }> =
+				function* (ctx) {
+					return yield* ctx.on<string>({
+						a: function* (ctx, value: string) {
+							yield* ctx.done(value);
+						},
+					});
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// "b" is in the waitForAny list but has no handler — should be skipped
+			interpreter.signal("b", "ignored");
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("a", "matched");
+
+			const result = await runPromise;
+			expect(result).toBe("matched");
+		});
+	});
 });

@@ -211,4 +211,43 @@ describe("createTestRuntime", () => {
 
 		expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
 	});
+
+	it("runs a workflow with waitForAny and pre-queued signals", async () => {
+		const workflow: WorkflowFunction<string, { a: string; b: string }> =
+			function* (ctx) {
+				const { signal, payload } = yield* ctx.waitForAny("a", "b");
+				return `${signal}:${payload}`;
+			};
+
+		const result = await createTestRuntime(workflow, {
+			signals: [{ name: "b", payload: "bee" }],
+		});
+
+		expect(result).toBe("b:bee");
+	});
+
+	it("runs an on/done loop with pre-queued signals", async () => {
+		const workflow: WorkflowFunction<number, { inc: undefined; finish: undefined }> =
+			function* (ctx) {
+				let count = 0;
+				return yield* ctx.on<number>({
+					inc: function* () {
+						count++;
+					},
+					finish: function* (ctx) {
+						yield* ctx.done(count);
+					},
+				});
+			};
+
+		const result = await createTestRuntime(workflow, {
+			signals: [
+				{ name: "inc", payload: undefined },
+				{ name: "inc", payload: undefined },
+				{ name: "finish", payload: undefined },
+			],
+		});
+
+		expect(result).toBe(2);
+	});
 });

@@ -22,6 +22,10 @@ import {
 	type WorkflowState,
 } from "./types";
 
+class DoneSignal {
+	constructor(public readonly value: unknown) {}
+}
+
 export class Interpreter {
 	readonly context: InternalWorkflowContext;
 
@@ -44,6 +48,14 @@ export class Interpreter {
 				seq: number;
 				onSignal: (name: string, payload: unknown) => void;
 				onComplete: () => void;
+		  }
+		| undefined;
+	private _waitingForAny: string[] | undefined;
+	private pendingWaitForAny:
+		| {
+				signals: Set<string>;
+				seq: number;
+				resolve: (result: { signal: string; payload: unknown }) => void;
 		  }
 		| undefined;
 	private _queries = new Map<string, () => unknown>();
@@ -85,6 +97,55 @@ export class Interpreter {
 						seq,
 					};
 					return result;
+				})();
+			},
+			waitForAny: (...signals: string[]) => {
+				const seq = ++this.seq;
+				return (function* (): Generator<
+					Command,
+					{ signal: string; payload: unknown },
+					unknown
+				> {
+					const result = yield {
+						type: "waitForAny" as const,
+						signals,
+						seq,
+					};
+					return result as { signal: string; payload: unknown };
+				})();
+			},
+			on: <T>(
+				handlers: Record<
+					string,
+					(
+						ctx: InternalWorkflowContext,
+						payload: unknown,
+					) => Generator<Command, void, unknown>
+				>,
+			): Generator<Command, T, unknown> => {
+				const ctx = this.context;
+				const handlerNames = Object.keys(handlers);
+				return (function* (): Generator<Command, T, unknown> {
+					for (;;) {
+						const { signal, payload } = yield* ctx.waitForAny(
+							...handlerNames,
+						);
+						const handler = handlers[signal];
+						if (!handler) continue;
+						try {
+							yield* handler(ctx, payload);
+						} catch (err) {
+							if (err instanceof DoneSignal) {
+								return err.value as T;
+							}
+							throw err;
+						}
+					}
+				})();
+			},
+			done: (value: unknown): Generator<Command, never, unknown> => {
+				return (function* (): Generator<Command, never, unknown> {
+					throw new DoneSignal(value);
 				})();
 			},
 			sleep: (durationMs: number) => {
@@ -202,6 +263,10 @@ export class Interpreter {
 		return this._waitingForAll;
 	}
 
+	get waitingForAny(): string[] | undefined {
+		return this._waitingForAny;
+	}
+
 	query(name: string): unknown {
 		return this._queries.get(name)?.();
 	}
@@ -223,6 +288,24 @@ export class Interpreter {
 			this.notifyChange();
 			this.pendingSignal?.resolve(payload);
 			this.pendingSignal = undefined;
+			return;
+		}
+
+		// waitForAny path
+		if (this.pendingWaitForAny?.signals.has(name)) {
+			const pending = this.pendingWaitForAny;
+			this.log.append({
+				type: "signal_received",
+				signal: name,
+				payload,
+				seq: pending.seq,
+				timestamp: Date.now(),
+			});
+			this._state = "running";
+			this._waitingForAny = undefined;
+			this.pendingWaitForAny = undefined;
+			this.notifyChange();
+			pending.resolve({ signal: name, payload });
 			return;
 		}
 
@@ -278,8 +361,10 @@ export class Interpreter {
 
 		this._waitingFor = undefined;
 		this._waitingForAll = undefined;
+		this._waitingForAny = undefined;
 		this.pendingSignal = undefined;
 		this.pendingWaitAll = undefined;
+		this.pendingWaitForAny = undefined;
 		this.notifyChange();
 	}
 
@@ -387,6 +472,8 @@ export class Interpreter {
 				return this.executeWaitFor(command);
 			case "waitAll":
 				return this.executeWaitAll(command);
+			case "waitForAny":
+				return this.executeWaitForAny(command);
 			case "sleep":
 				return this.executeSleep(command);
 			case "parallel":
@@ -478,6 +565,31 @@ export class Interpreter {
 			this.pendingSignal = { resolve };
 			this._pendingReject = reject;
 			// Notify after pendingSignal is set so signal() can resolve the promise
+			this.notifyChange();
+		});
+	}
+
+	private async executeWaitForAny(
+		command: Extract<Command, { type: "waitForAny" }>,
+	): Promise<{ signal: string; payload: unknown }> {
+		// Check for replay
+		const received = this.log.findCompleted(command.seq, "signal_received");
+		if (received) {
+			const event = received as SignalReceivedEvent;
+			return { signal: event.signal, payload: event.payload };
+		}
+
+		// Live: pause until signal() is called with a matching signal
+		this._state = "waiting";
+		this._waitingForAny = command.signals;
+
+		return new Promise((resolve, reject) => {
+			this.pendingWaitForAny = {
+				signals: new Set(command.signals),
+				seq: command.seq,
+				resolve,
+			};
+			this._pendingReject = reject;
 			this.notifyChange();
 		});
 	}
