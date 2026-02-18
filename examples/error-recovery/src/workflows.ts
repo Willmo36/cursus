@@ -1,6 +1,6 @@
 // ABOUTME: Payment and order workflows demonstrating dependency error recovery.
 // ABOUTME: The payment workflow always fails; the order workflow catches the failure gracefully.
-import type { WorkflowFunction } from "react-workflow";
+import { type WorkflowFunction, withRetry } from "react-workflow";
 
 // --- Payment workflow (registered in layer, always fails) ---
 
@@ -17,13 +17,18 @@ type Receipt = {
 	amount: string;
 };
 
+const charge = withRetry<Receipt>(
+	async () => {
+		await new Promise((r) => setTimeout(r, 800));
+		throw new Error("Card declined");
+	},
+	{ maxAttempts: 3, initialDelayMs: 500 },
+);
+
 export const paymentWorkflow: WorkflowFunction<Receipt, PaymentSignals> =
 	function* (ctx) {
 		const card = yield* ctx.waitFor("card");
-		const receipt = yield* ctx.activity("charge", async () => {
-			await new Promise((r) => setTimeout(r, 800));
-			throw new Error("Card declined");
-		});
+		const receipt = yield* ctx.activity("charge", charge);
 		return receipt;
 	};
 

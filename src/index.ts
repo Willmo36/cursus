@@ -7,6 +7,8 @@ export { createLayer } from "./layer";
 export { WorkflowLayerProvider } from "./layer-provider";
 export { WorkflowRegistry } from "./registry";
 export { LocalStorage, MemoryStorage } from "./storage";
+export type { RetryPolicy } from "./retry";
+export { withRetry } from "./retry";
 export { createTestRuntime } from "./test-runtime";
 export { CancelledError } from "./types";
 export type {
