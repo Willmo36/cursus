@@ -524,7 +524,7 @@ export class Interpreter {
 		this._state = "waiting";
 		this._waitingForAll = signalItems.map((i) => i.name);
 
-		return new Promise((resolve) => {
+		return new Promise((resolve, reject) => {
 			const tryComplete = () => {
 				if (remaining > 0) return;
 
@@ -567,20 +567,23 @@ export class Interpreter {
 					timestamp: Date.now(),
 				});
 
-				registry?.waitFor(item.workflowId, { start: true }).then((result) => {
-					collected.set(key, result);
-					remaining--;
+				registry
+					?.waitFor(item.workflowId, { start: true })
+					.then((result) => {
+						collected.set(key, result);
+						remaining--;
 
-					this.log.append({
-						type: "workflow_dependency_completed",
-						workflowId: item.workflowId,
-						seq: command.seq,
-						result,
-						timestamp: Date.now(),
-					});
+						this.log.append({
+							type: "workflow_dependency_completed",
+							workflowId: item.workflowId,
+							seq: command.seq,
+							result,
+							timestamp: Date.now(),
+						});
 
-					tryComplete();
-				});
+						tryComplete();
+					})
+					.catch(reject);
 			}
 
 			this.notifyChange();

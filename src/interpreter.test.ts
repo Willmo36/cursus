@@ -741,6 +741,29 @@ describe("Interpreter", () => {
 			const result = await runPromise;
 			expect(result).toEqual([{ card: "5678" }, { name: "Max" }]);
 		});
+
+		it("fails the workflow when a dependency workflow rejects in mixed waitAll", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi
+					.fn()
+					.mockRejectedValue(new Error("dependency failed")),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ profile: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("dependency failed");
+		});
 	});
 
 	describe("Phase G: child workflows", () => {
