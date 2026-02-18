@@ -224,6 +224,96 @@ describe("withRetry", () => {
 		await expect(wrapped(new AbortController().signal)).rejects.toThrow("once");
 		expect(getCalls()).toBe(1);
 	});
+
+	it("times out a slow attempt and retries", async () => {
+		let calls = 0;
+		const fn = async (_signal: AbortSignal) => {
+			calls++;
+			if (calls === 1) {
+				// Hang forever on first attempt — timeout should abort it
+				return new Promise<string>((_, reject) => {
+					_signal.addEventListener("abort", () => reject(_signal.reason), {
+						once: true,
+					});
+				});
+			}
+			return "ok";
+		};
+		const wrapped = withRetry(fn, {
+			maxAttempts: 3,
+			timeoutMs: 100,
+			initialDelayMs: 50,
+		});
+
+		const promise = wrapped(new AbortController().signal);
+		// Advance past the timeout
+		await vi.advanceTimersByTimeAsync(100);
+		// Advance past the backoff delay
+		await vi.advanceTimersByTimeAsync(50);
+		const result = await promise;
+
+		expect(result).toBe("ok");
+		expect(calls).toBe(2);
+	});
+
+	it("propagates parent abort through timeout child signal", async () => {
+		let receivedSignal: AbortSignal | undefined;
+		const fn = async (signal: AbortSignal) => {
+			receivedSignal = signal;
+			return new Promise<string>((_, reject) => {
+				signal.addEventListener("abort", () => reject(signal.reason), {
+					once: true,
+				});
+			});
+		};
+		const wrapped = withRetry(fn, {
+			maxAttempts: 3,
+			timeoutMs: 5000,
+		});
+
+		const parent = new AbortController();
+		const promise = wrapped(parent.signal);
+
+		// fn should get a child signal, not the parent
+		expect(receivedSignal).not.toBe(parent.signal);
+
+		// Aborting the parent should propagate to the child
+		parent.abort(new Error("parent abort"));
+
+		await expect(promise).rejects.toThrow("parent abort");
+	});
+
+	it("cleans up timeout timer on fast success", async () => {
+		const fn = async (_signal: AbortSignal) => "fast";
+		const wrapped = withRetry(fn, {
+			maxAttempts: 3,
+			timeoutMs: 5000,
+		});
+
+		await wrapped(new AbortController().signal);
+
+		// If cleanup works, no timers should be pending
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("timeout with maxAttempts: 1 throws on timeout", async () => {
+		const fn = async (signal: AbortSignal) => {
+			return new Promise<string>((_, reject) => {
+				signal.addEventListener("abort", () => reject(signal.reason), {
+					once: true,
+				});
+			});
+		};
+		const wrapped = withRetry(fn, {
+			maxAttempts: 1,
+			timeoutMs: 100,
+		});
+
+		const promise = wrapped(new AbortController().signal);
+		await vi.advanceTimersByTimeAsync(100);
+
+		await expect(promise).rejects.toThrow("timeout");
+	});
 });
 
 describe("calculateDelay", () => {
