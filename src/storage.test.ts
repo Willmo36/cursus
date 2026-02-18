@@ -132,4 +132,12 @@ describe("LocalStorage", () => {
 		const raw = localStorage.getItem(`${prefix}:wf-1`);
 		expect(JSON.parse(raw as string)).toEqual([terminalEvent]);
 	});
+
+	it("returns empty array when localStorage contains corrupted data", async () => {
+		const storage = new LocalStorage(prefix);
+		localStorage.setItem(`${prefix}:wf-1`, "not valid json{{{");
+
+		const events = await storage.load("wf-1");
+		expect(events).toEqual([]);
+	});
 });

@@ -38,7 +38,11 @@ export class LocalStorage implements WorkflowStorage {
 	async load(workflowId: string): Promise<WorkflowEvent[]> {
 		const raw = localStorage.getItem(this.key(workflowId));
 		if (!raw) return [];
-		return JSON.parse(raw) as WorkflowEvent[];
+		try {
+			return JSON.parse(raw) as WorkflowEvent[];
+		} catch {
+			return [];
+		}
 	}
 
 	async append(workflowId: string, events: WorkflowEvent[]): Promise<void> {
