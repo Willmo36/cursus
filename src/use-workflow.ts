@@ -76,8 +76,8 @@ export function useWorkflow(
 	const registry = useContext(RegistryContext);
 	const isLayerMode = workflowFn === undefined;
 
-	// For inline workflows, use provided or default storage
-	const storage = options?.storage ?? new MemoryStorage();
+	// For inline workflows: explicit storage > registry storage > ephemeral fallback
+	const storage = options?.storage ?? registry?.storage ?? new MemoryStorage();
 	const [state, setState] = useState<WorkflowState>("running");
 	const [result, setResult] = useState<unknown>(undefined);
 	const [error, setError] = useState<string | undefined>(undefined);

@@ -182,6 +182,88 @@ describe("useWorkflow", () => {
 			});
 		});
 
+		it("uses storage from registry context when no explicit storage provided", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const providerStorage = new MemoryStorage();
+			const layer = createLayer({ bg: workflow }, providerStorage);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(WorkflowLayerProvider, { layer }, children);
+
+			const inlineWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("compute", async () => "inline-result");
+			};
+
+			const { result } = renderHook(
+				() => useWorkflow("inline-ctx", inlineWorkflow),
+				{ wrapper },
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe("inline-result");
+			});
+
+			// Events should be persisted to the provider's storage, not lost in ephemeral MemoryStorage
+			const events = await providerStorage.load("inline-ctx");
+			expect(events.length).toBeGreaterThan(0);
+		});
+
+		it("explicit options.storage overrides registry storage", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const providerStorage = new MemoryStorage();
+			const explicitStorage = new MemoryStorage();
+			const layer = createLayer({ bg: workflow }, providerStorage);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(WorkflowLayerProvider, { layer }, children);
+
+			const inlineWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("compute", async () => "result");
+			};
+
+			const { result } = renderHook(
+				() =>
+					useWorkflow("inline-explicit", inlineWorkflow, {
+						storage: explicitStorage,
+					}),
+				{ wrapper },
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+			});
+
+			// Events should be in explicit storage, not provider storage
+			const explicitEvents = await explicitStorage.load("inline-explicit");
+			const providerEvents = await providerStorage.load("inline-explicit");
+			expect(explicitEvents.length).toBeGreaterThan(0);
+			expect(providerEvents).toHaveLength(0);
+		});
+
+		it("falls back to MemoryStorage without a provider", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			// No wrapper, no explicit storage — should still work
+			const { result } = renderHook(() =>
+				useWorkflow("inline-fallback", workflow),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe("hello");
+			});
+		});
+
 		it("compacts storage after inline workflow completes", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
 				return yield* ctx.activity("greet", async () => "hello");

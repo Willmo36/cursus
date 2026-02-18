@@ -28,14 +28,14 @@ type WorkflowEntry = {
 
 export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private entries: Map<string, WorkflowEntry>;
-	private storage: WorkflowStorage;
+	private _storage: WorkflowStorage;
 	private workflowChangeListeners: Array<() => void> = [];
 
 	constructor(
 		workflows: Record<string, AnyWorkflowFunction>,
 		storage: WorkflowStorage,
 	) {
-		this.storage = storage;
+		this._storage = storage;
 		this.entries = new Map();
 		for (const [id, fn] of Object.entries(workflows)) {
 			this.entries.set(id, {
@@ -47,6 +47,10 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 				listeners: [],
 			});
 		}
+	}
+
+	get storage(): WorkflowStorage {
+		return this._storage;
 	}
 
 	private getEntry(id: string): WorkflowEntry {
@@ -63,7 +67,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		// Idempotent — no-op if already started
 		if (entry.interpreter) return;
 
-		const events = await this.storage.load(id);
+		const events = await this._storage.load(id);
 		const log = new EventLog(events);
 		let persistedCount = events.length;
 
@@ -74,7 +78,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 			const allEvents = log.events();
 			const newEvents = allEvents.slice(persistedCount);
 			if (newEvents.length > 0) {
-				await this.storage.append(id, newEvents);
+				await this._storage.append(id, newEvents);
 				persistedCount = allEvents.length;
 			}
 		};
@@ -102,7 +106,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 						e.type === "workflow_completed" || e.type === "workflow_failed",
 				);
 			if (terminalEvent) {
-				await this.storage.compact(id, [terminalEvent]);
+				await this._storage.compact(id, [terminalEvent]);
 			}
 		}
 
@@ -164,7 +168,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		entry.result = undefined;
 		entry.error = undefined;
 
-		await this.storage.clear(id);
+		await this._storage.clear(id);
 
 		for (const listener of entry.listeners) {
 			listener();
