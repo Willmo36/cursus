@@ -69,6 +69,7 @@ export async function createTestRuntime<
 			waitForAny: ctx.waitForAny,
 			on: ctx.on,
 			done: ctx.done,
+			race: ctx.race,
 			sleep: ctx.sleep,
 			parallel: ctx.parallel,
 			child: ctx.child,

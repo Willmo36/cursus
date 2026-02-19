@@ -18,6 +18,7 @@ export type {
 	Command,
 	OnHandlers,
 	ParallelCommand,
+	RaceCommand,
 	SleepCommand,
 	WaitAllCommand,
 	WaitAllItem,

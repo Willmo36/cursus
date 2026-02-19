@@ -2201,4 +2201,259 @@ describe("Interpreter", () => {
 			expect(result).toBe("matched");
 		});
 	});
+
+	describe("Phase K: race", () => {
+		it("resolves with the activity when it beats the sleep", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity("fast", async () => "data"),
+						ctx.sleep(5000),
+					);
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const result = await interpreter.run();
+
+			expect(result).toEqual({ winner: 0, value: "data" });
+			expect(interpreter.state).toBe("completed");
+
+			vi.useRealTimers();
+		});
+
+		it("resolves with the sleep when the activity is slow", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity(
+							"slow",
+							(signal) =>
+								new Promise((resolve, reject) => {
+									const timer = setTimeout(
+										() => resolve("late"),
+										10000,
+									);
+									signal.addEventListener(
+										"abort",
+										() => {
+											clearTimeout(timer);
+											reject(signal.reason);
+										},
+										{ once: true },
+									);
+								}),
+						),
+						ctx.sleep(100),
+					);
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.advanceTimersByTimeAsync(100);
+			const result = await runPromise;
+
+			expect(result).toEqual({ winner: 1, value: undefined });
+			expect(interpreter.state).toBe("completed");
+
+			vi.useRealTimers();
+		});
+
+		it("records race_started and race_completed events", async () => {
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity("fetch", async () => "data"),
+						ctx.sleep(5000),
+					);
+				};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "race_started",
+					seq: 3,
+					items: [{ type: "activity" }, { type: "sleep" }],
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "race_completed",
+					seq: 3,
+					winner: 0,
+					value: "data",
+				}),
+			);
+		});
+
+		it("replays from event log without executing activities", async () => {
+			const activityFn = vi.fn().mockResolvedValue("data");
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity("fetch", activityFn),
+						ctx.sleep(5000),
+					);
+				};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "race_started",
+					seq: 3,
+					items: [{ type: "activity" }, { type: "sleep" }],
+					timestamp: 2,
+				},
+				{
+					type: "race_completed",
+					seq: 3,
+					winner: 0,
+					value: "data",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: { winner: 0, value: "data" },
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(workflow, log);
+			const result = await interpreter.run();
+
+			expect(result).toEqual({ winner: 0, value: "data" });
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+
+		it("aborts the losing activity when sleep wins", async () => {
+			vi.useFakeTimers();
+
+			let receivedSignal: AbortSignal | undefined;
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity(
+							"slow",
+							(signal) =>
+								new Promise((resolve, reject) => {
+									receivedSignal = signal;
+									const timer = setTimeout(
+										() => resolve("late"),
+										10000,
+									);
+									signal.addEventListener(
+										"abort",
+										() => {
+											clearTimeout(timer);
+											reject(signal.reason);
+										},
+										{ once: true },
+									);
+								}),
+						),
+						ctx.sleep(100),
+					);
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.advanceTimersByTimeAsync(100);
+			await runPromise;
+
+			expect(receivedSignal).toBeDefined();
+			expect(receivedSignal!.aborted).toBe(true);
+
+			vi.useRealTimers();
+		});
+
+		it("races activity against waitFor signal", async () => {
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ manual: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.activity(
+						"auto",
+						() =>
+							new Promise((resolve) =>
+								setTimeout(() => resolve("auto-result"), 5000),
+							),
+					),
+					ctx.waitFor("manual"),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("manual", "manual-result");
+
+			const result = await runPromise;
+			expect(result).toEqual({ winner: 1, value: "manual-result" });
+		});
+
+		it("workflow can branch on winner index", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const result = yield* ctx.race(
+					ctx.activity("fetch", async () => "data"),
+					ctx.sleep(5000),
+				);
+				if (result.winner === 0) {
+					return `ok: ${result.value}`;
+				}
+				return "timeout";
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const result = await interpreter.run();
+
+			expect(result).toBe("ok: data");
+		});
+
+		it("cancel() cleans up all race branches", async () => {
+			vi.useFakeTimers();
+
+			let activitySignal: AbortSignal | undefined;
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.activity(
+							"slow",
+							(signal) =>
+								new Promise((resolve) => {
+									activitySignal = signal;
+									setTimeout(() => resolve("done"), 10000);
+								}),
+						),
+						ctx.sleep(5000),
+					);
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.advanceTimersByTimeAsync(100);
+
+			interpreter.cancel();
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+			expect(activitySignal?.aborted).toBe(true);
+
+			vi.useRealTimers();
+		});
+	});
 });

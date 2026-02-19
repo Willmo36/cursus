@@ -79,6 +79,12 @@ export type WaitForWorkflowCommand = {
 	seq: number;
 };
 
+export type RaceCommand = {
+	type: "race";
+	items: Command[];
+	seq: number;
+};
+
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
@@ -87,7 +93,8 @@ export type Command =
 	| SleepCommand
 	| ParallelCommand
 	| ChildCommand
-	| WaitForWorkflowCommand;
+	| WaitForWorkflowCommand
+	| RaceCommand;
 
 // --- Events (recorded in the event log) ---
 
@@ -202,6 +209,21 @@ export type WorkflowDependencyFailedEvent = {
 	timestamp: number;
 };
 
+export type RaceStartedEvent = {
+	type: "race_started";
+	seq: number;
+	items: Array<{ type: string }>;
+	timestamp: number;
+};
+
+export type RaceCompletedEvent = {
+	type: "race_completed";
+	seq: number;
+	winner: number;
+	value: unknown;
+	timestamp: number;
+};
+
 export type WorkflowCompletedEvent = {
 	type: "workflow_completed";
 	result: unknown;
@@ -236,6 +258,8 @@ export type WorkflowEvent =
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyCompletedEvent
 	| WorkflowDependencyFailedEvent
+	| RaceStartedEvent
+	| RaceCompletedEvent
 	| WorkflowCompletedEvent
 	| WorkflowFailedEvent
 	| WorkflowCancelledEvent;
@@ -336,6 +360,9 @@ export type WorkflowContext<
 		},
 		unknown
 	>;
+	race: (
+		...branches: Generator<Command, unknown, unknown>[]
+	) => Generator<Command, { winner: number; value: unknown }, unknown>;
 	waitForWorkflow: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
 		options?: { start?: boolean },
@@ -382,6 +409,9 @@ export type InternalWorkflowContext = {
 	waitAll: (
 		...args: (string | WorkflowRef)[]
 	) => Generator<Command, unknown, unknown>;
+	race: (
+		...branches: Generator<Command, unknown, unknown>[]
+	) => Generator<Command, { winner: number; value: unknown }, unknown>;
 	waitForWorkflow: (
 		workflowId: string,
 		options?: { start?: boolean },

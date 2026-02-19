@@ -6,7 +6,6 @@ export type RetryPolicy = {
 	backoff?: "fixed" | "linear" | "exponential";
 	initialDelayMs?: number;
 	maxDelayMs?: number;
-	timeoutMs?: number;
 };
 
 type ResolvedPolicy = {
@@ -60,28 +59,10 @@ export function withRetry<T>(
 		maxDelayMs: policy?.maxDelayMs ?? 30000,
 	};
 
-	const timeoutMs = policy?.timeoutMs;
-
 	return async (signal: AbortSignal): Promise<T> => {
 		let lastError: unknown;
 		for (let attempt = 0; attempt < maxAttempts; attempt++) {
 			try {
-				if (timeoutMs != null) {
-					const child = new AbortController();
-					const timer = setTimeout(
-						() => child.abort(new Error("timeout")),
-						timeoutMs,
-					);
-					const onParentAbort = () =>
-						child.abort(signal.reason ?? new Error("aborted"));
-					signal.addEventListener("abort", onParentAbort, { once: true });
-					try {
-						return await fn(child.signal);
-					} finally {
-						clearTimeout(timer);
-						signal.removeEventListener("abort", onParentAbort);
-					}
-				}
 				return await fn(signal);
 			} catch (err) {
 				lastError = err;

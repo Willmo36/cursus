@@ -8,6 +8,7 @@ import {
 	type AnyWorkflowFunction,
 	type Command,
 	type InternalWorkflowContext,
+	type RaceCompletedEvent,
 	type SignalReceivedEvent,
 	type WaitAllCompletedEvent,
 	type WaitAllItem,
@@ -64,6 +65,7 @@ export class Interpreter {
 	private _abortController: AbortController | null = null;
 	private _pendingReject: ((err: CancelledError) => void) | null = null;
 	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
+	private _raceCleanup: (() => void) | null = null;
 
 	constructor(
 		workflowFn: AnyWorkflowFunction,
@@ -204,6 +206,26 @@ export class Interpreter {
 						seq,
 					};
 					return result;
+				})();
+			},
+			race: (...branches: Generator<Command, unknown, unknown>[]) => {
+				const seq = ++this.seq;
+				const items: Command[] = branches.map((gen) => {
+					const result = gen.next();
+					if (result.done) throw new Error("Race branch yielded no command");
+					return result.value as Command;
+				});
+				return (function* (): Generator<
+					Command,
+					{ winner: number; value: unknown },
+					unknown
+				> {
+					const result = yield {
+						type: "race" as const,
+						items,
+						seq,
+					};
+					return result as { winner: number; value: unknown };
 				})();
 			},
 			waitForWorkflow: (workflowId: string, options?: { start?: boolean }) => {
@@ -359,6 +381,10 @@ export class Interpreter {
 			this._sleepTimer = null;
 		}
 
+		// Clean up race branches
+		this._raceCleanup?.();
+		this._raceCleanup = null;
+
 		this._waitingFor = undefined;
 		this._waitingForAll = undefined;
 		this._waitingForAny = undefined;
@@ -482,6 +508,8 @@ export class Interpreter {
 				return this.executeChild(command);
 			case "waitForWorkflow":
 				return this.executeWaitForWorkflow(command);
+			case "race":
+				return this.executeRace(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -873,6 +901,129 @@ export class Interpreter {
 			});
 			throw err;
 		}
+	}
+
+	private async executeRace(
+		command: Extract<Command, { type: "race" }>,
+	): Promise<{ winner: number; value: unknown }> {
+		// Replay path
+		const completed = this.log.findCompleted(command.seq, "race_completed");
+		if (completed) {
+			const event = completed as RaceCompletedEvent;
+			return { winner: event.winner, value: event.value };
+		}
+
+		// Live execution
+		this.log.append({
+			type: "race_started",
+			seq: command.seq,
+			items: command.items.map((item) => ({ type: item.type })),
+			timestamp: Date.now(),
+		});
+
+		type BranchState = {
+			controller?: AbortController;
+			timer?: ReturnType<typeof setTimeout>;
+			signalResolve?: (payload: unknown) => void;
+		};
+
+		const branchStates: BranchState[] = command.items.map(() => ({}));
+
+		const cleanupAll = () => {
+			for (const state of branchStates) {
+				state.controller?.abort();
+				if (state.timer != null) clearTimeout(state.timer);
+			}
+			this._waitingFor = undefined;
+			this.pendingSignal = undefined;
+			this._raceCleanup = null;
+		};
+
+		this._raceCleanup = cleanupAll;
+
+		const branchPromises = command.items.map((item, index) => {
+			const state = branchStates[index];
+
+			switch (item.type) {
+				case "activity": {
+					const controller = new AbortController();
+					state.controller = controller;
+					return item
+						.fn(controller.signal)
+						.then((value) => ({ index, value }));
+				}
+				case "sleep": {
+					return new Promise<{ index: number; value: unknown }>(
+						(resolve) => {
+							state.timer = setTimeout(() => {
+								resolve({ index, value: undefined });
+							}, item.durationMs);
+						},
+					);
+				}
+				case "waitFor": {
+					return new Promise<{ index: number; value: unknown }>(
+						(resolve) => {
+							state.signalResolve = (payload: unknown) => {
+								resolve({ index, value: payload });
+							};
+							this._state = "waiting";
+							this._waitingFor = item.signal;
+							this.pendingSignal = {
+								resolve: (payload: unknown) => {
+									this._state = "running";
+									this._waitingFor = undefined;
+									this.pendingSignal = undefined;
+									state.signalResolve?.(payload);
+								},
+							};
+							this.notifyChange();
+						},
+					);
+				}
+				default:
+					throw new Error(
+						`Unsupported command type in race: ${item.type}`,
+					);
+			}
+		});
+
+		// Also race against cancellation
+		const cancelPromise = new Promise<never>((_, reject) => {
+			this._pendingReject = reject;
+		});
+
+		const raceResult = await Promise.race([
+			...branchPromises,
+			cancelPromise,
+		]);
+
+		this._pendingReject = null;
+
+		// Clean up losing branches
+		for (let i = 0; i < branchStates.length; i++) {
+			if (i === raceResult.index) continue;
+			const state = branchStates[i];
+			state.controller?.abort();
+			if (state.timer != null) clearTimeout(state.timer);
+			if (state.signalResolve) {
+				this._waitingFor = undefined;
+				this.pendingSignal = undefined;
+			}
+		}
+
+		this._state = "running";
+		this._raceCleanup = null;
+
+		this.log.append({
+			type: "race_completed",
+			seq: command.seq,
+			winner: raceResult.index,
+			value: raceResult.value,
+			timestamp: Date.now(),
+		});
+
+		return { winner: raceResult.index, value: raceResult.value };
 	}
 
 	private async executeParallel(
