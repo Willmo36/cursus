@@ -16,7 +16,7 @@
 
 ## Up Next
 
-- [ ] **Timeouts** — No built-in way to timeout a `waitFor`, `activity`, or `waitForWorkflow`. A signal that never arrives means the workflow hangs forever. Natural fit as an options bag: `yield* ctx.waitFor("submit", { timeout: 30000 })`. Should throw a `TimeoutError` the workflow can catch. Builds on the existing cancellation infrastructure.
+- [x] **Timeouts** — Implemented via `ctx.race`. Race any command against `ctx.sleep(ms)` to create a timeout. `timeoutMs` removed from `RetryPolicy` — timeout is a workflow-level concern.
 
 - [x] **Retry policies** — Implemented as `withRetry` HOF. Wraps activity functions with configurable retry + backoff (fixed/linear/exponential). Retries are transparent to the event log.
 
