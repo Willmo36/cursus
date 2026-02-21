@@ -6,8 +6,17 @@ export type { WorkflowLayer } from "./layer";
 export { createLayer } from "./layer";
 export { WorkflowLayerProvider } from "./layer-provider";
 export { WorkflowRegistry } from "./registry";
-export type { RetryPolicy } from "./retry";
-export { withRetry } from "./retry";
+export type {
+	ActivityWrapper,
+	CircuitBreakerPolicy,
+	RetryPolicy,
+} from "./retry";
+export {
+	CircuitOpenError,
+	withCircuitBreaker,
+	withRetry,
+	wrapActivity,
+} from "./retry";
 export { LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {

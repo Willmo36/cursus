@@ -203,6 +203,35 @@ For pure computation (activities, sleep), the monad laws hold:
 
 Every combinator must preserve both directions of the profunctor. Concretely: if a workflow accepts signals, any wrapper (`child`, `race`, `on`) must route signals through to it. If a combinator drops the contravariant part, it breaks composition.
 
+### Endomorphism Monoid (Activity Wrappers)
+
+Activity functions have type `(AbortSignal) → Promise<T>`. Higher-order functions that transform this type to itself — `withRetry`, `withCircuitBreaker` — are endomorphisms on this carrier set. They form a monoid:
+
+- **Carrier:** `((AbortSignal) → Promise<T>) → ((AbortSignal) → Promise<T>)`
+- **Operation:** function composition via `wrapActivity(...wrappers)`, which applies wrappers left-to-right (outermost first)
+- **Identity:** the empty wrapper list — `wrapActivity()` returns the original function unchanged
+- **Associativity:** `wrapActivity(a, b, c)` = `wrapActivity(a, wrapActivity(b, c))`
+
+**What belongs at the activity level (endomorphism monoid):**
+- Retry logic (`withRetry`) — retries are invisible to the event log
+- Circuit breaking (`withCircuitBreaker`) — failure tracking is per-activity, transparent to the workflow
+- Rate limiting, fallback, caching — same principle: transparent to the workflow
+
+**What does NOT belong here (workflow-level concerns):**
+- Timeout — already handled by `ctx.race(activity, sleep)`, visible in the event log
+- Cancellation — workflow-level via `cancel()` with `AbortSignal` propagation
+- Orchestration — sequencing, branching, parallel execution are workflow concerns
+
+The key invariant: all activity wrappers are transparent to the event log. The workflow sees a single `activity_completed` or `activity_failed` event regardless of how many retries or circuit breaker state transitions happened internally.
+
+### Other Algebraic Structures
+
+- **Natural transformation:** The interpreter is `Free<Command, T> → Promise<T>`. Swapping interpreters (production vs. test) preserves the natural transformation's commutativity with `yield*`.
+- **Coalgebra:** `WorkflowState → (WorkflowState, Event[])` — the interpreter's step function is a coalgebra for the `(−) × Event[]` functor. The event log is the terminal coalgebra's trace.
+- **F-algebra:** Event log replay is an F-algebra: `fold` over the event list to reconstruct workflow state. The fold is a catamorphism.
+- **Applicative:** `ctx.parallel([...])` and `ctx.waitForAll([...])` give the command language applicative structure — independent effects executed concurrently.
+- **Alternative:** `ctx.race(...)` and `ctx.waitForAny(...)` provide the alternative functor — choose the first effect to complete, discard the rest.
+
 ## Future Work
 
 - **Saga/compensation pattern.** A first-class `ctx.compensate()` primitive for registering undo actions that execute in LIFO order on failure. Deferred because try/catch in generators handles basic cases, and none of the initial examples require it. Promote to a primitive if the pattern recurs.

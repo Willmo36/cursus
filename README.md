@@ -154,6 +154,37 @@ const result = yield* ctx.activity(
 );
 ```
 
+### Circuit Breaker
+
+Fail fast when an activity is repeatedly failing:
+
+```ts
+import { withCircuitBreaker } from "react-workflow";
+
+const result = yield* ctx.activity(
+  "fetchData",
+  withCircuitBreaker(async (signal) => fetch("/api/data", { signal }), {
+    failureThreshold: 5,   // failures before opening (default: 5)
+    resetTimeoutMs: 30000,  // ms before probing again (default: 30000)
+  }),
+);
+```
+
+Compose multiple wrappers with `wrapActivity`:
+
+```ts
+import { withRetry, withCircuitBreaker, wrapActivity } from "react-workflow";
+
+const resilient = wrapActivity(
+  withRetry({ maxAttempts: 3, backoff: "exponential" }),
+  withCircuitBreaker({ failureThreshold: 5 }),
+);
+
+const result = yield* ctx.activity("fetchData", resilient(fetchData));
+```
+
+Wrappers apply left-to-right: retry wraps circuit breaker wraps the raw function.
+
 ### Testing
 
 Test workflows without React, storage, or real async:

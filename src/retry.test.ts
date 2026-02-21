@@ -1,8 +1,14 @@
-// ABOUTME: Tests for the withRetry higher-order function.
-// ABOUTME: Covers retry behavior, backoff strategies, abort signal handling, and defaults.
+// ABOUTME: Tests for activity wrappers: withRetry, withCircuitBreaker, and wrapActivity.
+// ABOUTME: Covers retry behavior, circuit breaker state transitions, wrapper composition, and defaults.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { calculateDelay, withRetry } from "./retry";
+import {
+	CircuitOpenError,
+	calculateDelay,
+	withCircuitBreaker,
+	withRetry,
+	wrapActivity,
+} from "./retry";
 
 // Helpers that track call counts without vi.fn() to avoid the vitest spy wrapper
 // creating intermediate rejected promises that trigger PromiseRejectionHandledWarning.
@@ -300,5 +306,307 @@ describe("calculateDelay", () => {
 				maxDelayMs: 5000,
 			}),
 		).toBe(5000);
+	});
+});
+
+describe("withCircuitBreaker", () => {
+	it("passes through calls in closed state", async () => {
+		let calls = 0;
+		const fn = async () => {
+			calls++;
+			return "ok";
+		};
+		const wrapped = withCircuitBreaker(fn);
+		const result = await wrapped(new AbortController().signal);
+		expect(result).toBe("ok");
+		expect(calls).toBe(1);
+	});
+
+	it("passes AbortSignal through to inner function", async () => {
+		let receivedSignal: AbortSignal | undefined;
+		const fn = async (signal: AbortSignal) => {
+			receivedSignal = signal;
+			return "ok";
+		};
+		const wrapped = withCircuitBreaker(fn);
+		const controller = new AbortController();
+		await wrapped(controller.signal);
+		expect(receivedSignal).toBe(controller.signal);
+	});
+
+	it("opens after failureThreshold consecutive failures", async () => {
+		const { fn } = alwaysFails();
+		const wrapped = withCircuitBreaker(fn, { failureThreshold: 3 });
+		const signal = new AbortController().signal;
+
+		// 3 failures to hit threshold
+		for (let i = 0; i < 3; i++) {
+			await expect(wrapped(signal)).rejects.toThrow("fail");
+		}
+
+		// Next call should be CircuitOpenError (not calling fn)
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+	});
+
+	it("rejects with CircuitOpenError when open without calling fn", async () => {
+		let calls = 0;
+		const fn = async () => {
+			calls++;
+			throw new Error("fail");
+		};
+		const wrapped = withCircuitBreaker(fn, { failureThreshold: 2 });
+		const signal = new AbortController().signal;
+
+		// Trip the breaker
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		expect(calls).toBe(2);
+
+		// Now open — should not call fn
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+		expect(calls).toBe(2);
+	});
+
+	it("transitions to half-open after resetTimeoutMs", async () => {
+		const { fn, getCalls } = alwaysFails();
+		const wrapped = withCircuitBreaker(fn, {
+			failureThreshold: 2,
+			resetTimeoutMs: 5000,
+		});
+		const signal = new AbortController().signal;
+
+		// Trip the breaker
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// Advance past reset timeout
+		await vi.advanceTimersByTimeAsync(5001);
+
+		// Should attempt the call (half-open), not reject with CircuitOpenError
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		expect(getCalls()).toBe(3);
+	});
+
+	it("closes on successful half-open probe", async () => {
+		let calls = 0;
+		let shouldFail = true;
+		const fn = async () => {
+			calls++;
+			if (shouldFail) throw new Error("fail");
+			return "ok";
+		};
+		const wrapped = withCircuitBreaker(fn, {
+			failureThreshold: 2,
+			resetTimeoutMs: 5000,
+		});
+		const signal = new AbortController().signal;
+
+		// Trip the breaker
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// Advance past reset timeout
+		await vi.advanceTimersByTimeAsync(5001);
+
+		// Fix the function, then probe succeeds
+		shouldFail = false;
+		const result = await wrapped(signal);
+		expect(result).toBe("ok");
+
+		// Circuit should be closed now — further calls go through
+		const result2 = await wrapped(signal);
+		expect(result2).toBe("ok");
+		expect(calls).toBe(4);
+	});
+
+	it("re-opens on failed half-open probe", async () => {
+		const { fn, getCalls } = alwaysFails();
+		const wrapped = withCircuitBreaker(fn, {
+			failureThreshold: 2,
+			resetTimeoutMs: 5000,
+		});
+		const signal = new AbortController().signal;
+
+		// Trip the breaker
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// Advance past reset timeout → half-open
+		await vi.advanceTimersByTimeAsync(5001);
+
+		// Probe fails → back to open
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		expect(getCalls()).toBe(3);
+
+		// Should be open again
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+		expect(getCalls()).toBe(3);
+	});
+
+	it("resets failure count on success in closed state", async () => {
+		let calls = 0;
+		let failNext = false;
+		const fn = async () => {
+			calls++;
+			if (failNext) throw new Error("fail");
+			return "ok";
+		};
+		const wrapped = withCircuitBreaker(fn, { failureThreshold: 3 });
+		const signal = new AbortController().signal;
+
+		// 2 failures (not enough to trip)
+		failNext = true;
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// 1 success resets counter
+		failNext = false;
+		await wrapped(signal);
+
+		// 2 more failures — still not tripped because counter was reset
+		failNext = true;
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// Not yet at threshold — should still call fn
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		expect(calls).toBe(6);
+
+		// NOW it should be open
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+	});
+
+	it("uses defaults when no policy provided", async () => {
+		const { fn } = alwaysFails();
+		const wrapped = withCircuitBreaker(fn);
+		const signal = new AbortController().signal;
+
+		// Default failureThreshold is 5
+		for (let i = 0; i < 5; i++) {
+			await expect(wrapped(signal)).rejects.toThrow("fail");
+		}
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+
+		// Default resetTimeoutMs is 30000
+		await vi.advanceTimersByTimeAsync(29999);
+		await expect(wrapped(signal)).rejects.toThrow(CircuitOpenError);
+
+		await vi.advanceTimersByTimeAsync(2);
+		// Should be half-open now — calls fn
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+	});
+
+	it("throws CircuitOpenError in open state regardless of signal", async () => {
+		const { fn } = alwaysFails();
+		const wrapped = withCircuitBreaker(fn, { failureThreshold: 2 });
+
+		// Trip the breaker
+		const signal = new AbortController().signal;
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+		await expect(wrapped(signal)).rejects.toThrow("fail");
+
+		// Open: even with a fresh signal, should get CircuitOpenError
+		const controller = new AbortController();
+		const err = await wrapped(controller.signal).catch((e) => e);
+		expect(err).toBeInstanceOf(CircuitOpenError);
+	});
+});
+
+describe("wrapActivity", () => {
+	it("single wrapper behaves same as calling wrapper directly", async () => {
+		let calls = 0;
+		const fn = async () => {
+			calls++;
+			return "ok";
+		};
+		const wrapper = (f: typeof fn) => withRetry(f, { maxAttempts: 1 });
+		const wrapped = wrapActivity(wrapper)(fn);
+		const result = await wrapped(new AbortController().signal);
+		expect(result).toBe("ok");
+		expect(calls).toBe(1);
+	});
+
+	it("two wrappers compose correctly (outer wraps inner)", async () => {
+		const order: string[] = [];
+		const outerWrapper = <T>(f: (signal: AbortSignal) => Promise<T>) => {
+			return async (signal: AbortSignal) => {
+				order.push("outer-before");
+				const result = await f(signal);
+				order.push("outer-after");
+				return result;
+			};
+		};
+		const innerWrapper = <T>(f: (signal: AbortSignal) => Promise<T>) => {
+			return async (signal: AbortSignal) => {
+				order.push("inner-before");
+				const result = await f(signal);
+				order.push("inner-after");
+				return result;
+			};
+		};
+
+		const fn = async () => "ok";
+		const wrapped = wrapActivity(outerWrapper, innerWrapper)(fn);
+		const result = await wrapped(new AbortController().signal);
+
+		expect(result).toBe("ok");
+		expect(order).toEqual([
+			"outer-before",
+			"inner-before",
+			"inner-after",
+			"outer-after",
+		]);
+	});
+
+	it("empty wrappers list returns identity function", async () => {
+		let calls = 0;
+		const fn = async (_signal: AbortSignal) => {
+			calls++;
+			return "identity";
+		};
+		const wrapped = wrapActivity()(fn);
+		const result = await wrapped(new AbortController().signal);
+		expect(result).toBe("identity");
+		expect(calls).toBe(1);
+	});
+
+	it("three wrappers compose associatively", async () => {
+		const order: string[] = [];
+		const makeWrapper = (name: string) => {
+			return <T>(f: (signal: AbortSignal) => Promise<T>) => {
+				return async (signal: AbortSignal) => {
+					order.push(`${name}-before`);
+					const result = await f(signal);
+					order.push(`${name}-after`);
+					return result;
+				};
+			};
+		};
+
+		const a = makeWrapper("a");
+		const b = makeWrapper("b");
+		const c = makeWrapper("c");
+
+		const fn = async () => "ok";
+
+		// wrapActivity(a, b, c) should equal wrapActivity(a, wrapActivity(b, c))
+		const wrapped1 = wrapActivity(a, b, c)(fn);
+		await wrapped1(new AbortController().signal);
+		const order1 = [...order];
+
+		order.length = 0;
+		const wrapped2 = wrapActivity(a, wrapActivity(b, c))(fn);
+		await wrapped2(new AbortController().signal);
+		const order2 = [...order];
+
+		expect(order1).toEqual(order2);
+		expect(order1).toEqual([
+			"a-before",
+			"b-before",
+			"c-before",
+			"c-after",
+			"b-after",
+			"a-after",
+		]);
 	});
 });

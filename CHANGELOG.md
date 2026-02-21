@@ -18,6 +18,8 @@ Initial release.
 - `query(name, handler)` for exposing live workflow state to external reads
 - `cancel()` with `AbortSignal` propagation to in-flight activities
 - `withRetry(fn, policy)` HOF for activity retry with fixed/linear/exponential backoff
+- `withCircuitBreaker(fn, policy)` HOF for fail-fast circuit breaking (closed → open → half-open)
+- `wrapActivity(...wrappers)` for composing multiple activity wrappers as an endomorphism monoid
 
 ### Cross-Workflow Dependencies
 
