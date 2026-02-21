@@ -50,14 +50,19 @@ export async function createTestRuntime<
 		};
 	}
 
-	// Wrap the workflow to intercept activity calls with mocks
-	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
-		const wrappedCtx: WorkflowContext<
+	function wrapContext(
+		ctx: WorkflowContext<
 			Record<string, unknown>,
 			Record<string, unknown>,
 			Record<string, unknown>
-		> = {
-			query: ctx.query,
+		>,
+	): WorkflowContext<
+		Record<string, unknown>,
+		Record<string, unknown>,
+		Record<string, unknown>
+	> {
+		return {
+			...ctx,
 			activity: <U>(name: string, fn: (signal: AbortSignal) => Promise<U>) => {
 				const mockFn = activities[name];
 				if (mockFn) {
@@ -65,18 +70,28 @@ export async function createTestRuntime<
 				}
 				return ctx.activity(name, fn);
 			},
-			waitFor: ctx.waitFor,
-			waitForAny: ctx.waitForAny,
-			on: ctx.on,
-			done: ctx.done,
-			race: ctx.race,
-			sleep: ctx.sleep,
-			parallel: ctx.parallel,
-			child: ctx.child,
-			waitAll: ctx.waitAll,
-			waitForWorkflow: ctx.waitForWorkflow,
-			workflow: ctx.workflow,
+			child: <U, CS extends Record<string, unknown>>(
+				name: string,
+				workflow: WorkflowFunction<U, CS>,
+			) => {
+				const wrappedChild: WorkflowFunction<U, CS> = function* (childCtx) {
+					const wrappedChildCtx = wrapContext(
+						childCtx as WorkflowContext<
+							Record<string, unknown>,
+							Record<string, unknown>,
+							Record<string, unknown>
+						>,
+					);
+					return yield* (workflow as AnyWorkflowFunction)(wrappedChildCtx);
+				};
+				return ctx.child(name, wrappedChild);
+			},
 		};
+	}
+
+	// Wrap the workflow to intercept activity calls with mocks
+	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
+		const wrappedCtx = wrapContext(ctx);
 		return yield* (workflowFn as AnyWorkflowFunction)(wrappedCtx);
 	};
 

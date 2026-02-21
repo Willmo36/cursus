@@ -250,4 +250,84 @@ describe("createTestRuntime", () => {
 
 		expect(result).toBe(2);
 	});
+
+	describe("mock propagation into child workflows", () => {
+		it("activity mocks apply inside child workflows", async () => {
+			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "real");
+			};
+
+			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const result = await createTestRuntime(parentWorkflow, {
+				activities: { greet: () => "mocked" },
+			});
+
+			expect(result).toBe("mocked");
+		});
+
+		it("activity mocks apply inside nested grandchild workflows", async () => {
+			const grandchild: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fetch", async () => "real-data");
+			};
+
+			const child: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("grandchild", grandchild);
+			};
+
+			const parent: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("child", child);
+			};
+
+			const result = await createTestRuntime(parent, {
+				activities: { fetch: () => "mock-data" },
+			});
+
+			expect(result).toBe("mock-data");
+		});
+
+		it("unmocked activities fall through to real implementation in children", async () => {
+			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+				const a = yield* ctx.activity("mocked", async () => "real-a");
+				const b = yield* ctx.activity("unmocked", async () => "real-b");
+				return `${a}:${b}`;
+			};
+
+			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const result = await createTestRuntime(parentWorkflow, {
+				activities: { mocked: () => "mock-a" },
+			});
+
+			expect(result).toBe("mock-a:real-b");
+		});
+
+		it("pre-queued signals work with child workflows", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					const greeting = yield* ctx.activity(
+						"greet",
+						async () => "real",
+					);
+					return `${greeting}: ${val}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					return yield* ctx.child("sub", childWorkflow);
+				};
+
+			const result = await createTestRuntime(parentWorkflow, {
+				activities: { greet: () => "mocked" },
+				signals: [{ name: "data", payload: "hello" }],
+			});
+
+			expect(result).toBe("mocked: hello");
+		});
+	});
 });
