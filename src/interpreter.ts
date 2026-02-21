@@ -66,6 +66,10 @@ export class Interpreter {
 	private _pendingReject: ((err: CancelledError) => void) | null = null;
 	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
 	private _raceCleanup: (() => void) | null = null;
+	private _raceWaiters: Array<{
+		signal: string;
+		resolve: (payload: unknown) => void;
+	}> | null = null;
 	private _workflowId?: string;
 	private _activeChild: Interpreter | null = null;
 
@@ -298,6 +302,17 @@ export class Interpreter {
 	}
 
 	signal(name: string, payload?: unknown): void {
+		// Race signal branches take priority — a race may have both a bare
+		// waitFor branch and a child branch, and the bare waitFor needs
+		// to be reachable without being swallowed by _activeChild.
+		if (this._raceWaiters) {
+			const waiter = this._raceWaiters.find((w) => w.signal === name);
+			if (waiter) {
+				waiter.resolve(payload);
+				return;
+			}
+		}
+
 		if (this._activeChild) {
 			this._activeChild.signal(name, payload);
 			return;
@@ -397,6 +412,7 @@ export class Interpreter {
 		// Clean up race branches
 		this._raceCleanup?.();
 		this._raceCleanup = null;
+		this._raceWaiters = null;
 
 		this._waitingFor = undefined;
 		this._waitingForAll = undefined;
@@ -995,18 +1011,28 @@ export class Interpreter {
 		type BranchState = {
 			controller?: AbortController;
 			timer?: ReturnType<typeof setTimeout>;
-			signalResolve?: (payload: unknown) => void;
+			childInterpreter?: Interpreter;
+			childUnsub?: () => void;
 		};
 
 		const branchStates: BranchState[] = command.items.map(() => ({}));
+		const raceWaiters: Array<{
+			signal: string;
+			resolve: (payload: unknown) => void;
+		}> = [];
 
 		const cleanupAll = () => {
 			for (const state of branchStates) {
 				state.controller?.abort();
 				if (state.timer != null) clearTimeout(state.timer);
+				state.childInterpreter?.cancel();
+				state.childUnsub?.();
 			}
+			this._raceWaiters = null;
 			this._waitingFor = undefined;
 			this.pendingSignal = undefined;
+			this._waitingForAny = undefined;
+			this.pendingWaitForAny = undefined;
 			this._raceCleanup = null;
 		};
 
@@ -1035,29 +1061,101 @@ export class Interpreter {
 				case "waitFor": {
 					return new Promise<{ index: number; value: unknown }>(
 						(resolve) => {
-							state.signalResolve = (payload: unknown) => {
-								resolve({ index, value: payload });
-							};
-							this._state = "waiting";
-							this._waitingFor = item.signal;
-							this.pendingSignal = {
+							raceWaiters.push({
+								signal: item.signal,
 								resolve: (payload: unknown) => {
-									this._state = "running";
-									this._waitingFor = undefined;
-									this.pendingSignal = undefined;
-									state.signalResolve?.(payload);
+									resolve({ index, value: payload });
 								},
-							};
-							this.notifyChange();
+							});
 						},
 					);
 				}
-				default:
-					throw new Error(
-						`Unsupported command type in race: ${item.type}`,
+				case "waitForAny": {
+					return new Promise<{ index: number; value: unknown }>(
+						(resolve) => {
+							for (const sig of item.signals) {
+								raceWaiters.push({
+									signal: sig,
+									resolve: (payload: unknown) => {
+										resolve({
+											index,
+											value: { signal: sig, payload },
+										});
+									},
+								});
+							}
+						},
 					);
+				}
+				case "parallel": {
+					return this.executeParallel(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "child": {
+					const childLog = new EventLog();
+					const childInterpreter = new Interpreter(
+						item.workflow,
+						childLog,
+					);
+					state.childInterpreter = childInterpreter;
+
+					this._activeChild = childInterpreter;
+					const unsub = childInterpreter.onStateChange(() =>
+						this.syncChildState(),
+					);
+					state.childUnsub = unsub;
+
+					return childInterpreter.run().then((result) => {
+						unsub();
+						if (this._activeChild === childInterpreter) {
+							this._activeChild = null;
+							this.clearChildState();
+						}
+						if (childInterpreter.state === "failed") {
+							throw new Error(
+								childInterpreter.error ??
+									"Child workflow failed",
+							);
+						}
+						return { index, value: result };
+					});
+				}
+				case "waitForWorkflow": {
+					return this.executeWaitForWorkflow(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "waitAll": {
+					return this.executeWaitAll(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "race": {
+					return this.executeRace(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				default: {
+					const _exhaustive: never = item;
+					throw new Error(
+						`Unsupported command type in race: ${(_exhaustive as Command).type}`,
+					);
+				}
 			}
 		});
+
+		// Expose signal-based race branches for signal routing
+		if (raceWaiters.length > 0) {
+			this._raceWaiters = raceWaiters;
+			this._state = "waiting";
+			this._waitingForAny = raceWaiters.map((w) => w.signal);
+			this.notifyChange();
+		}
 
 		// Also race against cancellation
 		const cancelPromise = new Promise<never>((_, reject) => {
@@ -1077,12 +1175,19 @@ export class Interpreter {
 			const state = branchStates[i];
 			state.controller?.abort();
 			if (state.timer != null) clearTimeout(state.timer);
-			if (state.signalResolve) {
-				this._waitingFor = undefined;
-				this.pendingSignal = undefined;
-			}
+			state.childInterpreter?.cancel();
+			state.childUnsub?.();
 		}
 
+		this._raceWaiters = null;
+		this._waitingFor = undefined;
+		this.pendingSignal = undefined;
+		this._waitingForAny = undefined;
+		this.pendingWaitForAny = undefined;
+		if (this._activeChild) {
+			this._activeChild = null;
+			this.clearChildState();
+		}
 		this._state = "running";
 		this._raceCleanup = null;
 

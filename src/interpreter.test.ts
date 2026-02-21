@@ -2750,5 +2750,201 @@ describe("Interpreter", () => {
 
 			vi.useRealTimers();
 		});
+
+		it("races two waitFor branches — first signal received wins", async () => {
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ approve: string; reject: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.waitFor("approve"),
+					ctx.waitFor("reject"),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("reject", "denied");
+
+			const result = await runPromise;
+			expect(result).toEqual({ winner: 1, value: "denied" });
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("races waitFor against waitForAny", async () => {
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ single: string; optA: string; optB: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.waitFor("single"),
+					ctx.waitForAny("optA", "optB"),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("optB", "picked-B");
+
+			const result = await runPromise;
+			expect(result).toEqual({
+				winner: 1,
+				value: { signal: "optB", payload: "picked-B" },
+			});
+		});
+
+		it("races activity against child (child waits for signal)", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					return `child got: ${val}`;
+				};
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ data: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.activity(
+						"slow",
+						() =>
+							new Promise((resolve) =>
+								setTimeout(() => resolve("auto"), 10000),
+							),
+					),
+					ctx.child("sub", childWorkflow),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("data", "hello");
+
+			const result = await runPromise;
+			expect(result).toEqual({
+				winner: 1,
+				value: "child got: hello",
+			});
+		});
+
+		it("races parallel against sleep", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
+				function* (ctx) {
+					return yield* ctx.race(
+						ctx.parallel([
+							{ name: "a", fn: async () => "one" },
+							{ name: "b", fn: async () => "two" },
+						]),
+						ctx.sleep(5000),
+					);
+				};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const result = await interpreter.run();
+
+			expect(result).toEqual({ winner: 0, value: ["one", "two"] });
+
+			vi.useRealTimers();
+		});
+
+		it("races waitForWorkflow against sleep", async () => {
+			vi.useFakeTimers();
+
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockResolvedValue("workflow-result"),
+				start: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				Record<string, unknown>,
+				{ dep: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.waitForWorkflow("dep"),
+					ctx.sleep(5000),
+				);
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+			);
+			const result = await interpreter.run();
+
+			expect(result).toEqual({ winner: 0, value: "workflow-result" });
+
+			vi.useRealTimers();
+		});
+
+		it("cancel cleans up child in race", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					return `got: ${val}`;
+				};
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ data: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.sleep(5000),
+					ctx.child("sub", childWorkflow),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.cancel();
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+		});
+
+		it("exposes all signal names via waitingForAny during multi-signal race", async () => {
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ approve: string; reject: string }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.waitFor("approve"),
+					ctx.waitFor("reject"),
+				);
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAny).toEqual(
+					expect.arrayContaining(["approve", "reject"]),
+				);
+			});
+		});
 	});
 });
