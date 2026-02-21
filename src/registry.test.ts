@@ -673,13 +673,13 @@ describe("WorkflowRegistry", () => {
 			expect(await registry.waitFor("C")).toBe("hello");
 		});
 
-		it("detects a cycle through waitAll with workflow refs", async () => {
+		it("detects a cycle through waitForAll with workflow refs", async () => {
 			const workflowA: WorkflowFunction<
 				unknown,
 				Record<string, unknown>,
 				{ B: string }
 			> = function* (ctx) {
-				const [result] = yield* ctx.waitAll(ctx.workflow("B"));
+				const [result] = yield* ctx.waitForAll(ctx.workflow("B"));
 				return result;
 			};
 

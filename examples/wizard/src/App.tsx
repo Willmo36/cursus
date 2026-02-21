@@ -1,4 +1,4 @@
-// ABOUTME: Signup wizard UI driven by the signup workflow using waitAll.
+// ABOUTME: Signup wizard UI driven by the signup workflow using waitForAll.
 // ABOUTME: Shows email and password inputs together, collects both before creating account.
 import { useState } from "react";
 import { LocalStorage, useWorkflow } from "react-workflow";

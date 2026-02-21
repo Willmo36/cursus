@@ -1,5 +1,5 @@
 // ABOUTME: Two-step signup workflow collecting email and password, then creating an account.
-// ABOUTME: Demonstrates waitAll to collect both fields in any order.
+// ABOUTME: Demonstrates waitForAll to collect both fields in any order.
 import type { WorkflowFunction } from "react-workflow";
 
 type SignupSignals = {
@@ -14,7 +14,7 @@ type SignupResult = {
 
 export const signupWorkflow: WorkflowFunction<SignupResult, SignupSignals> =
 	function* (ctx) {
-		const [email, password] = yield* ctx.waitAll("email", "password");
+		const [email, password] = yield* ctx.waitForAll("email", "password");
 
 		const token = yield* ctx.activity("create-account", async () => {
 			await new Promise((r) => setTimeout(r, 1500));

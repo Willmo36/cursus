@@ -408,13 +408,13 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase F: waitAll", () => {
+	describe("Phase F: waitForAll", () => {
 		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
 			const workflow: WorkflowFunction<
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("email", "password");
+				return yield* ctx.waitForAll("email", "password");
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -445,7 +445,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("a", "b");
+				return yield* ctx.waitForAll("a", "b");
 			};
 
 			const log = new EventLog();
@@ -485,12 +485,12 @@ describe("Interpreter", () => {
 			);
 		});
 
-		it("replays waitAll from event log", async () => {
+		it("replays waitForAll from event log", async () => {
 			const workflow: WorkflowFunction<
 				[string, number],
 				{ name: string; age: number }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("name", "age");
+				return yield* ctx.waitForAll("name", "age");
 			};
 
 			const log = new EventLog([
@@ -528,7 +528,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("email", "password");
+				return yield* ctx.waitForAll("email", "password");
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -546,7 +546,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("collects signal and workflow result concurrently in mixed waitAll", async () => {
+		it("collects signal and workflow result concurrently in mixed waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
 				start: vi.fn(),
@@ -557,7 +557,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -578,7 +578,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("records events for mixed waitAll", async () => {
+		it("records events for mixed waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("profile-data"),
 				start: vi.fn(),
@@ -589,7 +589,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog();
@@ -638,13 +638,13 @@ describe("Interpreter", () => {
 			);
 		});
 
-		it("throws without registry when mixed waitAll has workflow items", async () => {
+		it("throws without registry when mixed waitForAll has workflow items", async () => {
 			const wf: WorkflowFunction<
 				unknown,
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -654,7 +654,7 @@ describe("Interpreter", () => {
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
-		it("replays mixed waitAll from event log", async () => {
+		it("replays mixed waitForAll from event log", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
@@ -665,7 +665,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog([
@@ -702,7 +702,7 @@ describe("Interpreter", () => {
 			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 
-		it("handles signal arriving after workflow completes in mixed waitAll", async () => {
+		it("handles signal arriving after workflow completes in mixed waitForAll", async () => {
 			let resolveWorkflow: ((value: unknown) => void) | undefined;
 			const workflowPromise = new Promise((resolve) => {
 				resolveWorkflow = resolve;
@@ -718,7 +718,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -742,7 +742,7 @@ describe("Interpreter", () => {
 			expect(result).toEqual([{ card: "5678" }, { name: "Max" }]);
 		});
 
-		it("fails the workflow when a dependency workflow rejects in mixed waitAll", async () => {
+		it("fails the workflow when a dependency workflow rejects in mixed waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi
 					.fn()
@@ -755,7 +755,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -765,7 +765,7 @@ describe("Interpreter", () => {
 			expect(interpreter.error).toBe("dependency failed");
 		});
 
-		it("records workflow_dependency_failed when dependency fails in waitAll", async () => {
+		it("records workflow_dependency_failed when dependency fails in waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi
 					.fn()
@@ -778,7 +778,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog();
@@ -804,7 +804,7 @@ describe("Interpreter", () => {
 			).toMatch(/Error: dep boom/);
 		});
 
-		it("cleans up waiting state on dependency failure in waitAll", async () => {
+		it("cleans up waiting state on dependency failure in waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi
 					.fn()
@@ -817,7 +817,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -827,7 +827,7 @@ describe("Interpreter", () => {
 			expect(interpreter.waitingForAll).toBeUndefined();
 		});
 
-		it("replays dependency failure from event log in waitAll", async () => {
+		it("replays dependency failure from event log in waitForAll", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
@@ -838,7 +838,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("payment", ctx.workflow("profile"));
+				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 			};
 
 			const log = new EventLog([
@@ -874,7 +874,7 @@ describe("Interpreter", () => {
 			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 
-		it("guards against late callbacks after first dep fails in multi-dep waitAll", async () => {
+		it("guards against late callbacks after first dep fails in multi-dep waitForAll", async () => {
 			let resolveSecond: ((value: unknown) => void) | undefined;
 			const secondPromise = new Promise((resolve) => {
 				resolveSecond = resolve;
@@ -893,7 +893,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ "fast-fail": unknown; slow: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll(
+				return yield* ctx.waitForAll(
 					ctx.workflow("fast-fail"),
 					ctx.workflow("slow"),
 				);
@@ -906,7 +906,7 @@ describe("Interpreter", () => {
 			// Let the fast-fail rejection propagate
 			await new Promise((r) => setTimeout(r, 0));
 
-			// Now the slow dep resolves after the waitAll already failed
+			// Now the slow dep resolves after the waitForAll already failed
 			resolveSecond?.("late-result");
 			await new Promise((r) => setTimeout(r, 0));
 
@@ -933,7 +933,7 @@ describe("Interpreter", () => {
 			expect(depCompletedEvents).toHaveLength(0);
 		});
 
-		it("logs only the first error when both deps fail in waitAll", async () => {
+		it("logs only the first error when both deps fail in waitForAll", async () => {
 			let rejectSecond: ((err: Error) => void) | undefined;
 			const secondPromise = new Promise((_resolve, reject) => {
 				rejectSecond = reject;
@@ -952,7 +952,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ first: unknown; second: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitAll(
+				return yield* ctx.waitForAll(
 					ctx.workflow("first"),
 					ctx.workflow("second"),
 				);
@@ -985,7 +985,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("workflow can catch waitAll dependency failure and recover", async () => {
+		it("workflow can catch waitForAll dependency failure and recover", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi
 					.fn()
@@ -999,7 +999,7 @@ describe("Interpreter", () => {
 				{ profile: unknown }
 			> = function* (ctx) {
 				try {
-					yield* ctx.waitAll("payment", ctx.workflow("profile"));
+					yield* ctx.waitForAll("payment", ctx.workflow("profile"));
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -2367,7 +2367,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("a", "b");
+				return yield* ctx.waitForAll("a", "b");
 			};
 
 			const parentWorkflow: WorkflowFunction<

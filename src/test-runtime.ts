@@ -125,7 +125,7 @@ export async function createTestRuntime<
 			return;
 		}
 
-		// waitAll: send any matching signals from the queue
+		// waitForAll: send any matching signals from the queue
 		const waitingAll = interpreter.waitingForAll;
 		if (waitingAll) {
 			for (const needed of waitingAll) {

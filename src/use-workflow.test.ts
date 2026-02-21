@@ -174,12 +174,12 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("collects multiple signals with waitAll", async () => {
+		it("collects multiple signals with waitForAll", async () => {
 			const workflow: WorkflowFunction<
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitAll("email", "password");
+				return yield* ctx.waitForAll("email", "password");
 			};
 
 			const { result } = renderHook(() =>
@@ -842,7 +842,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("debug panel shows all events for waitAll with signal + workflow dep", async () => {
+		it("debug panel shows all events for waitForAll with signal + workflow dep", async () => {
 			const profileWorkflow: WorkflowFunction<
 				{ name: string },
 				{ profile: { name: string } }
@@ -856,7 +856,7 @@ describe("useWorkflow", () => {
 				{ payment: string },
 				{ profile: { name: string } }
 			> = function* (ctx) {
-				const [payment, profile] = yield* ctx.waitAll(
+				const [payment, profile] = yield* ctx.waitForAll(
 					"payment",
 					ctx.workflow("profile"),
 				);
@@ -890,7 +890,7 @@ describe("useWorkflow", () => {
 				expect(result.current.profile.waitingFor).toBe("profile");
 			});
 
-			// Wait for checkout to be waiting (waitAll)
+			// Wait for checkout to be waiting (waitForAll)
 			await waitFor(() => {
 				expect(result.current.checkout.state).toBe("waiting");
 			});

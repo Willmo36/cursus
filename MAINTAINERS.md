@@ -75,7 +75,7 @@ sequenceDiagram
 |---------|-------------|----------------|
 | `ActivityCommand` | Run an async function | `ctx.activity(name, fn)` |
 | `WaitForCommand` | Block until a named signal arrives | `ctx.waitFor(signal)` |
-| `WaitAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitAll(...)` |
+| `WaitForAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitForAll(...)` |
 | `WaitForWorkflowCommand` | Block until another workflow completes | `ctx.waitForWorkflow(id)` |
 | `SleepCommand` | Block for a duration | `ctx.sleep(ms)` |
 | `ParallelCommand` | Run multiple activities concurrently | `ctx.parallel(activities)` |
@@ -154,7 +154,7 @@ graph LR
     WF --- WM
 
     SM -->|constrains| waitFor["ctx.waitFor(signal)"]
-    SM -->|constrains| waitAll["ctx.waitAll(...)"]
+    SM -->|constrains| waitForAll["ctx.waitForAll(...)"]
     SM -->|constrains| signal["hook.signal(name, payload)"]
     WM -->|constrains| wfw["ctx.waitForWorkflow(id)"]
     WM -->|constrains| wref["ctx.workflow(id)"]
@@ -171,7 +171,7 @@ const checkoutWorkflow: WorkflowFunction<
   CheckoutSignals,      // SignalMap: what signals it accepts
   CheckoutDeps          // WorkflowMap: what workflows it depends on
 > = function* (ctx) {
-  const [payment, profile] = yield* ctx.waitAll(
+  const [payment, profile] = yield* ctx.waitForAll(
     "payment",              // TS knows this is PaymentInfo
     ctx.workflow("profile") // TS knows this is UserProfile
   );
@@ -187,14 +187,14 @@ graph TB
         WC["WorkflowContext&lt;SignalMap, WorkflowMap&gt;"]
         WC1["waitFor&lt;K&gt;(signal: K) → SignalMap[K]"]
         WC2["waitForWorkflow&lt;K&gt;(id: K) → WorkflowMap[K]"]
-        WC3["waitAll(...) → mapped tuple"]
+        WC3["waitForAll(...) → mapped tuple"]
     end
 
     subgraph "Internal (type-erased)"
         IWC["InternalWorkflowContext"]
         IWC1["waitFor(signal: string) → unknown"]
         IWC2["waitForWorkflow(id: string) → unknown"]
-        IWC3["waitAll(...) → unknown"]
+        IWC3["waitForAll(...) → unknown"]
     end
 
     WC -.->|"as unknown as"| IWC
@@ -208,14 +208,14 @@ The interpreter constructs an `InternalWorkflowContext` (unconstrained) and cast
 
 - The interpreter never reads from `SignalMap` or `WorkflowMap` — it only passes the context through
 - The user's `WorkflowFunction<T, SignalMap, WorkflowMap>` narrows the types at the call site
-- The cast exists because TypeScript can't unify the `waitAll` mapped-tuple return type with `unknown`
+- The cast exists because TypeScript can't unify the `waitForAll` mapped-tuple return type with `unknown`
 
-### Heterogeneous waitAll
+### Heterogeneous waitForAll
 
-`waitAll` accepts a mix of signal names (strings) and workflow references (`WorkflowRef<T>`). The return type is a tuple that preserves each argument's type:
+`waitForAll` accepts a mix of signal names (strings) and workflow references (`WorkflowRef<T>`). The return type is a tuple that preserves each argument's type:
 
 ```typescript
-ctx.waitAll("email", "password", ctx.workflow("profile"))
+ctx.waitForAll("email", "password", ctx.workflow("profile"))
 //          ↓ string  ↓ string   ↓ WorkflowRef<UserProfile>
 // returns: [string,   string,    UserProfile]
 ```

@@ -10,7 +10,7 @@ Initial release.
 - `activity(name, fn)` for side effects (API calls, timers, etc.)
 - `waitFor(signal)` to pause until external input arrives
 - `waitForAny(...signals)` to pause until any of several signals arrives
-- `waitAll(...items)` for heterogeneous parallel waits (signals + workflow refs)
+- `waitForAll(...items)` for heterogeneous parallel waits (signals + workflow refs)
 - `sleep(ms)` for durable timers that survive page reload
 - `child(name, workflowFn)` for nested sub-workflows via `yield*`
 - `race(...branches)` for concurrent branch racing with automatic cleanup
@@ -23,9 +23,9 @@ Initial release.
 
 - `WorkflowRegistry` for shared workflow instance management
 - `waitForWorkflow(id)` to block on another workflow's result
-- `workflow(id)` refs for use in `waitAll`
+- `workflow(id)` refs for use in `waitForAll`
 - Circular dependency detection (DFS-based, throws immediately with full cycle path)
-- Fail-fast error propagation in `waitAll` when a dependency fails
+- Fail-fast error propagation in `waitForAll` when a dependency fails
 
 ### React Integration
 

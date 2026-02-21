@@ -1,7 +1,7 @@
 // ABOUTME: Core type definitions for the workflow engine.
 // ABOUTME: Defines commands, events, context, and storage interfaces.
 
-// --- Heterogeneous waitAll helpers ---
+// --- Heterogeneous waitForAll helpers ---
 
 export type WorkflowRef<T = unknown> = {
 	__brand: "WorkflowRef";
@@ -9,7 +9,7 @@ export type WorkflowRef<T = unknown> = {
 	workflow: string;
 };
 
-export type WaitAllItem =
+export type WaitForAllItem =
 	| { kind: "signal"; name: string }
 	| { kind: "workflow"; workflowId: string };
 
@@ -53,9 +53,9 @@ export type ParallelCommand = {
 	seq: number;
 };
 
-export type WaitAllCommand = {
-	type: "waitAll";
-	items: WaitAllItem[];
+export type WaitForAllCommand = {
+	type: "waitForAll";
+	items: WaitForAllItem[];
 	seq: number;
 };
 
@@ -88,7 +88,7 @@ export type RaceCommand = {
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
-	| WaitAllCommand
+	| WaitForAllCommand
 	| WaitForAnyCommand
 	| SleepCommand
 	| ParallelCommand
@@ -171,14 +171,14 @@ export type ChildFailedEvent = {
 	timestamp: number;
 };
 
-export type WaitAllStartedEvent = {
+export type WaitForAllStartedEvent = {
 	type: "wait_all_started";
-	items: WaitAllItem[];
+	items: WaitForAllItem[];
 	seq: number;
 	timestamp: number;
 };
 
-export type WaitAllCompletedEvent = {
+export type WaitForAllCompletedEvent = {
 	type: "wait_all_completed";
 	seq: number;
 	results: Record<string, unknown>;
@@ -248,8 +248,8 @@ export type WorkflowEvent =
 	| ActivityCompletedEvent
 	| ActivityFailedEvent
 	| SignalReceivedEvent
-	| WaitAllStartedEvent
-	| WaitAllCompletedEvent
+	| WaitForAllStartedEvent
+	| WaitForAllCompletedEvent
 	| TimerStartedEvent
 	| TimerFiredEvent
 	| ChildStartedEvent
@@ -347,7 +347,7 @@ export type WorkflowContext<
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitAll: <K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[]>(
+	waitForAll: <K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[]>(
 		...args: K
 	) => Generator<
 		Command,
@@ -406,7 +406,7 @@ export type InternalWorkflowContext = {
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitAll: (
+	waitForAll: (
 		...args: (string | WorkflowRef)[]
 	) => Generator<Command, unknown, unknown>;
 	race: (

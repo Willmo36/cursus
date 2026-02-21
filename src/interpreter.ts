@@ -10,8 +10,8 @@ import {
 	type InternalWorkflowContext,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
-	type WaitAllCompletedEvent,
-	type WaitAllItem,
+	type WaitForAllCompletedEvent,
+	type WaitForAllItem,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
 	type WorkflowContext,
@@ -43,7 +43,7 @@ export class Interpreter {
 		  }
 		| undefined;
 	private _waitingForAll: string[] | undefined;
-	private pendingWaitAll:
+	private pendingWaitForAll:
 		| {
 				needed: Set<string>;
 				seq: number;
@@ -200,16 +200,16 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-			waitAll: (...args: (string | WorkflowRef)[]) => {
+			waitForAll: (...args: (string | WorkflowRef)[]) => {
 				const seq = ++this.seq;
-				const items: WaitAllItem[] = args.map((arg) =>
+				const items: WaitForAllItem[] = args.map((arg) =>
 					typeof arg === "string"
 						? { kind: "signal" as const, name: arg }
 						: { kind: "workflow" as const, workflowId: arg.workflow },
 				);
 				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
-						type: "waitAll" as const,
+						type: "waitForAll" as const,
 						items,
 						seq,
 					};
@@ -355,9 +355,9 @@ export class Interpreter {
 			return;
 		}
 
-		// waitAll path
-		if (this.pendingWaitAll?.needed.has(name)) {
-			const pending = this.pendingWaitAll;
+		// waitForAll path
+		if (this.pendingWaitForAll?.needed.has(name)) {
+			const pending = this.pendingWaitForAll;
 			pending.needed.delete(name);
 
 			this.log.append({
@@ -418,7 +418,7 @@ export class Interpreter {
 		this._waitingForAll = undefined;
 		this._waitingForAny = undefined;
 		this.pendingSignal = undefined;
-		this.pendingWaitAll = undefined;
+		this.pendingWaitForAll = undefined;
 		this.pendingWaitForAny = undefined;
 		this.notifyChange();
 	}
@@ -497,7 +497,7 @@ export class Interpreter {
 		}
 
 		// InternalWorkflowContext is structurally identical to WorkflowContext at
-		// runtime. The only gap is waitAll's mapped-tuple return type which TS
+		// runtime. The only gap is waitForAll's mapped-tuple return type which TS
 		// can't unify with `unknown` for a generic K — a known TS limitation.
 		const gen = this.workflowFn(this.context as unknown as WorkflowContext);
 
@@ -554,8 +554,8 @@ export class Interpreter {
 				return this.executeActivity(command);
 			case "waitFor":
 				return this.executeWaitFor(command);
-			case "waitAll":
-				return this.executeWaitAll(command);
+			case "waitForAll":
+				return this.executeWaitForAll(command);
 			case "waitForAny":
 				return this.executeWaitForAny(command);
 			case "sleep":
@@ -680,15 +680,15 @@ export class Interpreter {
 		});
 	}
 
-	private async executeWaitAll(
-		command: Extract<Command, { type: "waitAll" }>,
+	private async executeWaitForAll(
+		command: Extract<Command, { type: "waitForAll" }>,
 	): Promise<unknown> {
-		const itemKeys = command.items.map(waitAllItemKey);
+		const itemKeys = command.items.map(waitForAllItemKey);
 
 		// Check for replay: completed
 		const completed = this.log.findCompleted(command.seq, "wait_all_completed");
 		if (completed) {
-			const results = (completed as WaitAllCompletedEvent).results;
+			const results = (completed as WaitForAllCompletedEvent).results;
 			return itemKeys.map((k) => results[k]);
 		}
 
@@ -710,10 +710,10 @@ export class Interpreter {
 		});
 
 		const signalItems = command.items.filter(
-			(i): i is Extract<WaitAllItem, { kind: "signal" }> => i.kind === "signal",
+			(i): i is Extract<WaitForAllItem, { kind: "signal" }> => i.kind === "signal",
 		);
 		const workflowItems = command.items.filter(
-			(i): i is Extract<WaitAllItem, { kind: "workflow" }> =>
+			(i): i is Extract<WaitForAllItem, { kind: "workflow" }> =>
 				i.kind === "workflow",
 		);
 
@@ -721,7 +721,7 @@ export class Interpreter {
 		const registry = this.registry;
 		if (workflowItems.length > 0 && !registry) {
 			throw new Error(
-				"waitAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
+				"waitForAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
 			);
 		}
 
@@ -748,13 +748,13 @@ export class Interpreter {
 				});
 				this._state = "running";
 				this._waitingForAll = undefined;
-				this.pendingWaitAll = undefined;
+				this.pendingWaitForAll = undefined;
 				this.notifyChange();
 				resolve(itemKeys.map((k) => results[k]));
 			};
 
 			// Set up signal collection
-			this.pendingWaitAll = {
+			this.pendingWaitForAll = {
 				needed: new Set(signalItems.map((i) => i.name)),
 				seq: command.seq,
 				onSignal: (name, payload) => {
@@ -766,7 +766,7 @@ export class Interpreter {
 
 			// Fire workflow waits concurrently
 			for (const item of workflowItems) {
-				const key = waitAllItemKey(item);
+				const key = waitForAllItemKey(item);
 
 				this.log.append({
 					type: "workflow_dependency_started",
@@ -808,7 +808,7 @@ export class Interpreter {
 							timestamp: Date.now(),
 						});
 						this._waitingForAll = undefined;
-						this.pendingWaitAll = undefined;
+						this.pendingWaitForAll = undefined;
 						reject(err);
 					});
 			}
@@ -1128,8 +1128,8 @@ export class Interpreter {
 						value,
 					}));
 				}
-				case "waitAll": {
-					return this.executeWaitAll(item).then((value) => ({
+				case "waitForAll": {
+					return this.executeWaitForAll(item).then((value) => ({
 						index,
 						value,
 					}));
@@ -1233,6 +1233,6 @@ export class Interpreter {
 	}
 }
 
-function waitAllItemKey(item: WaitAllItem): string {
+function waitForAllItemKey(item: WaitForAllItem): string {
 	return item.kind === "signal" ? item.name : `workflow:${item.workflowId}`;
 }

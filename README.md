@@ -84,7 +84,7 @@ Commands available inside a workflow generator via `ctx`:
 | `activity(name, fn)` | Execute a side effect (API call, computation). Result is recorded. |
 | `waitFor(signal)` | Pause until a named signal arrives from the UI. |
 | `waitForAny(...signals)` | Pause until any of several signals arrives. |
-| `waitAll(...items)` | Wait for multiple signals and/or workflow results in parallel. |
+| `waitForAll(...items)` | Wait for multiple signals and/or workflow results in parallel. |
 | `sleep(ms)` | Durable timer — survives page reload. |
 | `child(name, fn)` | Run a nested sub-workflow with its own event log. |
 | `waitForWorkflow(id)` | Block until another registered workflow completes. |
