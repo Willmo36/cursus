@@ -669,6 +669,7 @@ export class Interpreter {
 
 		const collected = new Map<string, unknown>();
 		let remaining = command.items.length;
+		let failed = false;
 
 		this._state = "waiting";
 		this._waitingForAll = signalItems.map((i) => i.name);
@@ -719,6 +720,7 @@ export class Interpreter {
 				registry
 					?.waitFor(item.workflowId, { start: true })
 					.then((result) => {
+						if (failed) return;
 						collected.set(key, result);
 						remaining--;
 
@@ -733,6 +735,8 @@ export class Interpreter {
 						tryComplete();
 					})
 					.catch((err) => {
+						if (failed) return;
+						failed = true;
 						const message =
 							err instanceof Error ? err.message : String(err);
 						const stack =

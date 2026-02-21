@@ -874,6 +874,117 @@ describe("Interpreter", () => {
 			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 
+		it("guards against late callbacks after first dep fails in multi-dep waitAll", async () => {
+			let resolveSecond: ((value: unknown) => void) | undefined;
+			const secondPromise = new Promise((resolve) => {
+				resolveSecond = resolve;
+			});
+
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockImplementation((id: string) => {
+					if (id === "fast-fail") return Promise.reject(new Error("boom"));
+					return secondPromise;
+				}),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ "fast-fail": unknown; slow: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll(
+					ctx.workflow("fast-fail"),
+					ctx.workflow("slow"),
+				);
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const runPromise = interpreter.run();
+
+			// Let the fast-fail rejection propagate
+			await new Promise((r) => setTimeout(r, 0));
+
+			// Now the slow dep resolves after the waitAll already failed
+			resolveSecond?.("late-result");
+			await new Promise((r) => setTimeout(r, 0));
+
+			await runPromise;
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("boom");
+
+			const events = log.events();
+			const depFailedEvents = events.filter(
+				(e) => e.type === "workflow_dependency_failed",
+			);
+			expect(depFailedEvents).toHaveLength(1);
+
+			// No wait_all_completed should be logged
+			expect(
+				events.find((e) => e.type === "wait_all_completed"),
+			).toBeUndefined();
+
+			// No workflow_dependency_completed for the late resolve
+			const depCompletedEvents = events.filter(
+				(e) => e.type === "workflow_dependency_completed",
+			);
+			expect(depCompletedEvents).toHaveLength(0);
+		});
+
+		it("logs only the first error when both deps fail in waitAll", async () => {
+			let rejectSecond: ((err: Error) => void) | undefined;
+			const secondPromise = new Promise((_resolve, reject) => {
+				rejectSecond = reject;
+			});
+
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockImplementation((id: string) => {
+					if (id === "first") return Promise.reject(new Error("first-error"));
+					return secondPromise;
+				}),
+				start: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ first: unknown; second: unknown }
+			> = function* (ctx) {
+				return yield* ctx.waitAll(
+					ctx.workflow("first"),
+					ctx.workflow("second"),
+				);
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const runPromise = interpreter.run();
+
+			// Let first rejection propagate
+			await new Promise((r) => setTimeout(r, 0));
+
+			// Second dep also fails
+			rejectSecond?.(new Error("second-error"));
+			await new Promise((r) => setTimeout(r, 0));
+
+			await runPromise;
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toBe("first-error");
+
+			const events = log.events();
+			const depFailedEvents = events.filter(
+				(e) => e.type === "workflow_dependency_failed",
+			);
+			expect(depFailedEvents).toHaveLength(1);
+			expect(depFailedEvents[0]).toMatchObject({
+				workflowId: "first",
+				error: "first-error",
+			});
+		});
+
 		it("workflow can catch waitAll dependency failure and recover", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi
