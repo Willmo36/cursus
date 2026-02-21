@@ -67,6 +67,7 @@ export class Interpreter {
 	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
 	private _raceCleanup: (() => void) | null = null;
 	private _workflowId?: string;
+	private _activeChild: Interpreter | null = null;
 
 	constructor(
 		workflowFn: AnyWorkflowFunction,
@@ -297,6 +298,11 @@ export class Interpreter {
 	}
 
 	signal(name: string, payload?: unknown): void {
+		if (this._activeChild) {
+			this._activeChild.signal(name, payload);
+			return;
+		}
+
 		if (this._state !== "waiting") return;
 
 		// Single waitFor path
@@ -370,6 +376,10 @@ export class Interpreter {
 		this._state = "cancelled";
 		this.log.append({ type: "workflow_cancelled", timestamp: Date.now() });
 
+		// Cancel active child
+		this._activeChild?.cancel();
+		this._activeChild = null;
+
 		// Abort in-flight activity
 		this._abortController?.abort();
 		this._abortController = null;
@@ -395,6 +405,35 @@ export class Interpreter {
 		this.pendingWaitAll = undefined;
 		this.pendingWaitForAny = undefined;
 		this.notifyChange();
+	}
+
+	private syncChildState(): void {
+		const child = this._activeChild;
+		if (!child) return;
+
+		if (child.state === "waiting") {
+			this._state = "waiting";
+			this._waitingFor = child.waitingFor;
+			this._waitingForAll = child.waitingForAll;
+			this._waitingForAny = child.waitingForAny;
+			this.notifyChange();
+		} else {
+			this.clearChildState();
+			this.notifyChange();
+		}
+	}
+
+	private clearChildState(): void {
+		if (
+			this._state !== "completed" &&
+			this._state !== "failed" &&
+			this._state !== "cancelled"
+		) {
+			this._state = "running";
+		}
+		this._waitingFor = undefined;
+		this._waitingForAll = undefined;
+		this._waitingForAny = undefined;
 	}
 
 	private findWaitingSeq(): number {
@@ -814,36 +853,60 @@ export class Interpreter {
 
 		const childLog = new EventLog();
 		const childInterpreter = new Interpreter(command.workflow, childLog);
-		const result = await childInterpreter.run();
 
-		if (childInterpreter.state === "failed") {
-			const childFailedEvent = childLog
-				.events()
-				.find((e) => e.type === "workflow_failed");
-			const stack =
-				childFailedEvent?.type === "workflow_failed"
-					? childFailedEvent.stack
-					: undefined;
+		this._activeChild = childInterpreter;
+		const unsub = childInterpreter.onStateChange(() =>
+			this.syncChildState(),
+		);
+
+		try {
+			const result = await new Promise<unknown>((resolve, reject) => {
+				this._pendingReject = reject;
+				childInterpreter.run().then(resolve, reject);
+			});
+			this._pendingReject = null;
+
+			unsub();
+			this._activeChild = null;
+			this.clearChildState();
+
+			if (childInterpreter.state === "failed") {
+				const childFailedEvent = childLog
+					.events()
+					.find((e) => e.type === "workflow_failed");
+				const stack =
+					childFailedEvent?.type === "workflow_failed"
+						? childFailedEvent.stack
+						: undefined;
+				this.log.append({
+					type: "child_failed",
+					workflowId: command.name,
+					seq: command.seq,
+					error: childInterpreter.error ?? "Unknown error",
+					stack,
+					timestamp: Date.now(),
+				});
+				throw new Error(
+					childInterpreter.error ?? "Child workflow failed",
+				);
+			}
+
 			this.log.append({
-				type: "child_failed",
+				type: "child_completed",
 				workflowId: command.name,
 				seq: command.seq,
-				error: childInterpreter.error ?? "Unknown error",
-				stack,
+				result,
 				timestamp: Date.now(),
 			});
-			throw new Error(childInterpreter.error ?? "Child workflow failed");
+
+			return result;
+		} catch (err) {
+			this._pendingReject = null;
+			unsub();
+			this._activeChild = null;
+			this.clearChildState();
+			throw err;
 		}
-
-		this.log.append({
-			type: "child_completed",
-			workflowId: command.name,
-			seq: command.seq,
-			result,
-			timestamp: Date.now(),
-		});
-
-		return result;
 	}
 
 	private async executeWaitForWorkflow(

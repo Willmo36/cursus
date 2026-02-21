@@ -2313,6 +2313,190 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("Phase G.2: child signal routing", () => {
+		it("delegates signal to child workflow", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					return `child got: ${val}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const result = yield* ctx.child("sub", childWorkflow);
+					return `parent got: ${result}`;
+				};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("data", "hello");
+
+			const result = await runPromise;
+			expect(result).toBe("parent got: child got: hello");
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("parent reports child's waitingFor", async () => {
+			const childWorkflow: WorkflowFunction<string, { info: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("info");
+					return `got: ${val}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { info: string }> =
+				function* (ctx) {
+					return yield* ctx.child("sub", childWorkflow);
+				};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingFor).toBe("info");
+			});
+		});
+
+		it("parent reports child's waitingForAll", async () => {
+			const childWorkflow: WorkflowFunction<
+				[string, string],
+				{ a: string; b: string }
+			> = function* (ctx) {
+				return yield* ctx.waitAll("a", "b");
+			};
+
+			const parentWorkflow: WorkflowFunction<
+				[string, string],
+				{ a: string; b: string }
+			> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAll).toEqual(["a", "b"]);
+			});
+		});
+
+		it("parent reports child's waitingForAny", async () => {
+			const childWorkflow: WorkflowFunction<string, { x: string; y: string }> =
+				function* (ctx) {
+					const { signal, payload } = yield* ctx.waitForAny("x", "y");
+					return `${signal}:${payload}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { x: string; y: string }> =
+				function* (ctx) {
+					return yield* ctx.child("sub", childWorkflow);
+				};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAny).toEqual(["x", "y"]);
+			});
+		});
+
+		it("delegates signal through nested grandchild", async () => {
+			const grandchild: WorkflowFunction<string, { deep: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("deep");
+					return `grandchild: ${val}`;
+				};
+
+			const child: WorkflowFunction<string, { deep: string }> =
+				function* (ctx) {
+					return yield* ctx.child("grandchild", grandchild);
+				};
+
+			const parent: WorkflowFunction<string, { deep: string }> =
+				function* (ctx) {
+					return yield* ctx.child("child", child);
+				};
+
+			const interpreter = new Interpreter(parent, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingFor).toBe("deep");
+			});
+
+			interpreter.signal("deep", "value");
+
+			const result = await runPromise;
+			expect(result).toBe("grandchild: value");
+		});
+
+		it("cancel propagates to active child", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					return `got: ${val}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					return yield* ctx.child("sub", childWorkflow);
+				};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.cancel();
+			await runPromise;
+
+			expect(interpreter.state).toBe("cancelled");
+		});
+
+		it("signal is harmless when child is running an activity", async () => {
+			let resolveActivity: ((value: string) => void) | undefined;
+			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity(
+					"slow",
+					() =>
+						new Promise<string>((resolve) => {
+							resolveActivity = resolve;
+						}),
+				);
+			};
+
+			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(resolveActivity).toBeDefined();
+			});
+
+			// Signal while child is running (not waiting) — should not crash
+			interpreter.signal("anything", "ignored");
+
+			resolveActivity!("done");
+
+			const result = await runPromise;
+			expect(result).toBe("done");
+			expect(interpreter.state).toBe("completed");
+		});
+	});
+
 	describe("Phase K: race", () => {
 		it("resolves with the activity when it beats the sleep", async () => {
 			vi.useFakeTimers();

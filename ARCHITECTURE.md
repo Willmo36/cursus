@@ -171,6 +171,38 @@ The test interpreter runs the generator synchronously, injecting results without
 
 3. **History compaction deferred.** Not needed for initial version.
 
+## Algebraic Structure
+
+The command/interpreter architecture has a precise algebraic structure. Understanding it explains why certain combinators compose correctly and identifies when they break.
+
+### Free Monad
+
+`Generator<Command, T, unknown>` forms a free monad over the `Command` functor. Each `yield` suspends the computation, returning a command to the interpreter. `yield*` (generator delegation) is monadic bind — it sequences two command-producing computations, threading the result of the first into the second. The interpreter is the natural transformation `Free<Command, T> → Promise<T>` that gives meaning to each command.
+
+This is why workflows compose: `yield*` is associative, and the interpreter can be swapped (production vs. test) without changing the workflow's structure.
+
+### Profunctor
+
+`Workflow<SignalMap, T>` is a profunctor — contravariant in its signal input (what signals it accepts) and covariant in its result output (what value it produces). In concrete terms:
+
+- **Covariant (result):** If workflow A returns `T`, a parent can `yield* ctx.child("a", A)` and receive `T`. Results flow out naturally.
+- **Contravariant (signals):** If workflow A accepts signal `"submit"`, the parent must be able to route `"submit"` into A. Signals must flow in.
+
+`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `waitFor`.
+
+### Monad Laws
+
+For pure computation (activities, sleep), the monad laws hold:
+
+- **Left identity:** `yield* ctx.activity("x", f)` behaves the same whether wrapped in a child or inlined.
+- **Associativity:** `yield* a; yield* b; yield* c` groups the same regardless of nesting.
+
+**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `waitFor`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
+
+### Design Principle
+
+Every combinator must preserve both directions of the profunctor. Concretely: if a workflow accepts signals, any wrapper (`child`, `race`, `on`) must route signals through to it. If a combinator drops the contravariant part, it breaks composition.
+
 ## Future Work
 
 - **Saga/compensation pattern.** A first-class `ctx.compensate()` primitive for registering undo actions that execute in LIFO order on failure. Deferred because try/catch in generators handles basic cases, and none of the initial examples require it. Promote to a primitive if the pattern recurs.
