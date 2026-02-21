@@ -2,11 +2,11 @@
 
 ## Design Gaps
 
-- [ ] **No error propagation for failed workflow dependencies in waitAll** — `workflow_dependency_failed` exists now, but waitAll still doesn't handle the case where one of N items fails. No way for the workflow to handle partial failures.
+- [x] **No error propagation for failed workflow dependencies in waitAll** — Fixed: `failed` guard flag ensures fail-fast cleanup when one of N deps fails. First failure rejects the waitAll, subsequent callbacks become no-ops.
 
 - [ ] **Circular dependency deadlock** — `registry.ts`. If workflow A depends on workflow B and B depends on A, both hang forever. No detection, no error, no timeout.
 
-- [ ] **LocalStorage isn't multi-tab safe** — `storage.ts:44-49`. `append` does read-modify-write without any locking. Two tabs running the same workflow will clobber each other's events.
+- [ ] **LocalStorage isn't multi-tab safe** — `storage.ts:44-49`. `append` does read-modify-write without any locking. Two tabs running the same workflow will clobber each other's events. **Planned fix:** wrap `append` and `compact` in `navigator.locks.request()` (Web Locks API) with a no-op fallback for environments that lack it (jsdom, SSR, older browsers).
 
 ## Code Quality
 
