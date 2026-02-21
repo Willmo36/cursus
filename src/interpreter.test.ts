@@ -2947,4 +2947,175 @@ describe("Interpreter", () => {
 			});
 		});
 	});
+
+	describe("Profunctor: signal routing through combinators", () => {
+		it("on handler calling ctx.child with waitFor receives signal", async () => {
+			const childWorkflow: WorkflowFunction<string, { input: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("input");
+					return `child: ${val}`;
+				};
+
+			const workflow: WorkflowFunction<
+				string,
+				{ go: undefined; input: string }
+			> = function* (ctx) {
+				return yield* ctx.on<string>({
+					go: function* (ctx) {
+						const result = yield* ctx.child("sub", childWorkflow);
+						yield* ctx.done(result);
+					},
+				});
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			// Send "go" to enter the handler
+			interpreter.signal("go");
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingFor).toBe("input");
+			});
+
+			// Send "input" which should route through to the child
+			interpreter.signal("input", "hello");
+
+			const result = await runPromise;
+			expect(result).toBe("child: hello");
+		});
+
+		it("race with multiple waitFor routes signal to correct branch", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ approve: string; reject: string }
+			> = function* (ctx) {
+				const { winner, value } = yield* ctx.race(
+					ctx.waitFor("approve"),
+					ctx.waitFor("reject"),
+				);
+				return winner === 0
+					? `approved: ${value}`
+					: `rejected: ${value}`;
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("approve", "ok");
+
+			const result = await runPromise;
+			expect(result).toBe("approved: ok");
+		});
+
+		it("test runtime delivers signals into child workflows", async () => {
+			const childWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("data");
+					return `child: ${val}`;
+				};
+
+			const parentWorkflow: WorkflowFunction<string, { data: string }> =
+				function* (ctx) {
+					return yield* ctx.child("sub", childWorkflow);
+				};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(parentWorkflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingFor).toBe("data");
+			});
+
+			interpreter.signal("data", "hello");
+
+			const result = await runPromise;
+			expect(result).toBe("child: hello");
+		});
+
+		it("nested child in on handler routes signals through full chain", async () => {
+			const grandchild: WorkflowFunction<string, { value: string }> =
+				function* (ctx) {
+					const val = yield* ctx.waitFor("value");
+					return `deep: ${val}`;
+				};
+
+			const child: WorkflowFunction<string, { value: string }> =
+				function* (ctx) {
+					return yield* ctx.child("grandchild", grandchild);
+				};
+
+			const workflow: WorkflowFunction<
+				string,
+				{ start: undefined; value: string }
+			> = function* (ctx) {
+				return yield* ctx.on<string>({
+					start: function* (ctx) {
+						const result = yield* ctx.child("child", child);
+						yield* ctx.done(result);
+					},
+				});
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("start");
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingFor).toBe("value");
+			});
+
+			interpreter.signal("value", "deep-data");
+
+			const result = await runPromise;
+			expect(result).toBe("deep: deep-data");
+		});
+
+		it("child with waitForAny routes correct signal", async () => {
+			const childWorkflow: WorkflowFunction<
+				string,
+				{ a: string; b: string }
+			> = function* (ctx) {
+				const { signal, payload } = yield* ctx.waitForAny("a", "b");
+				return `${signal}:${payload}`;
+			};
+
+			const parentWorkflow: WorkflowFunction<
+				string,
+				{ a: string; b: string }
+			> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const interpreter = new Interpreter(parentWorkflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.waitingForAny).toEqual(["a", "b"]);
+			});
+
+			interpreter.signal("b", "bee");
+
+			const result = await runPromise;
+			expect(result).toBe("b:bee");
+		});
+	});
 });
