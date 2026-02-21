@@ -3,9 +3,9 @@
 
 import { EventLog } from "./event-log";
 import {
-	CancelledError,
 	type ActivityScheduledEvent,
 	type AnyWorkflowFunction,
+	CancelledError,
 	type Command,
 	type InternalWorkflowContext,
 	type RaceCompletedEvent,
@@ -137,9 +137,7 @@ export class Interpreter {
 				const handlerNames = Object.keys(handlers);
 				return (function* (): Generator<Command, T, unknown> {
 					for (;;) {
-						const { signal, payload } = yield* ctx.waitForAny(
-							...handlerNames,
-						);
+						const { signal, payload } = yield* ctx.waitForAny(...handlerNames);
 						const handler = handlers[signal];
 						if (!handler) continue;
 						try {
@@ -710,7 +708,8 @@ export class Interpreter {
 		});
 
 		const signalItems = command.items.filter(
-			(i): i is Extract<WaitForAllItem, { kind: "signal" }> => i.kind === "signal",
+			(i): i is Extract<WaitForAllItem, { kind: "signal" }> =>
+				i.kind === "signal",
 		);
 		const workflowItems = command.items.filter(
 			(i): i is Extract<WaitForAllItem, { kind: "workflow" }> =>
@@ -795,10 +794,8 @@ export class Interpreter {
 					.catch((err) => {
 						if (failed) return;
 						failed = true;
-						const message =
-							err instanceof Error ? err.message : String(err);
-						const stack =
-							err instanceof Error ? err.stack : undefined;
+						const message = err instanceof Error ? err.message : String(err);
+						const stack = err instanceof Error ? err.stack : undefined;
 						this.log.append({
 							type: "workflow_dependency_failed",
 							workflowId: item.workflowId,
@@ -871,9 +868,7 @@ export class Interpreter {
 		const childInterpreter = new Interpreter(command.workflow, childLog);
 
 		this._activeChild = childInterpreter;
-		const unsub = childInterpreter.onStateChange(() =>
-			this.syncChildState(),
-		);
+		const unsub = childInterpreter.onStateChange(() => this.syncChildState());
 
 		try {
 			const result = await new Promise<unknown>((resolve, reject) => {
@@ -902,9 +897,7 @@ export class Interpreter {
 					stack,
 					timestamp: Date.now(),
 				});
-				throw new Error(
-					childInterpreter.error ?? "Child workflow failed",
-				);
+				throw new Error(childInterpreter.error ?? "Child workflow failed");
 			}
 
 			this.log.append({
@@ -1045,47 +1038,39 @@ export class Interpreter {
 				case "activity": {
 					const controller = new AbortController();
 					state.controller = controller;
-					return item
-						.fn(controller.signal)
-						.then((value) => ({ index, value }));
+					return item.fn(controller.signal).then((value) => ({ index, value }));
 				}
 				case "sleep": {
-					return new Promise<{ index: number; value: unknown }>(
-						(resolve) => {
-							state.timer = setTimeout(() => {
-								resolve({ index, value: undefined });
-							}, item.durationMs);
-						},
-					);
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						state.timer = setTimeout(() => {
+							resolve({ index, value: undefined });
+						}, item.durationMs);
+					});
 				}
 				case "waitFor": {
-					return new Promise<{ index: number; value: unknown }>(
-						(resolve) => {
-							raceWaiters.push({
-								signal: item.signal,
-								resolve: (payload: unknown) => {
-									resolve({ index, value: payload });
-								},
-							});
-						},
-					);
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						raceWaiters.push({
+							signal: item.signal,
+							resolve: (payload: unknown) => {
+								resolve({ index, value: payload });
+							},
+						});
+					});
 				}
 				case "waitForAny": {
-					return new Promise<{ index: number; value: unknown }>(
-						(resolve) => {
-							for (const sig of item.signals) {
-								raceWaiters.push({
-									signal: sig,
-									resolve: (payload: unknown) => {
-										resolve({
-											index,
-											value: { signal: sig, payload },
-										});
-									},
-								});
-							}
-						},
-					);
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						for (const sig of item.signals) {
+							raceWaiters.push({
+								signal: sig,
+								resolve: (payload: unknown) => {
+									resolve({
+										index,
+										value: { signal: sig, payload },
+									});
+								},
+							});
+						}
+					});
 				}
 				case "parallel": {
 					return this.executeParallel(item).then((value) => ({
@@ -1095,10 +1080,7 @@ export class Interpreter {
 				}
 				case "child": {
 					const childLog = new EventLog();
-					const childInterpreter = new Interpreter(
-						item.workflow,
-						childLog,
-					);
+					const childInterpreter = new Interpreter(item.workflow, childLog);
 					state.childInterpreter = childInterpreter;
 
 					this._activeChild = childInterpreter;
@@ -1115,8 +1097,7 @@ export class Interpreter {
 						}
 						if (childInterpreter.state === "failed") {
 							throw new Error(
-								childInterpreter.error ??
-									"Child workflow failed",
+								childInterpreter.error ?? "Child workflow failed",
 							);
 						}
 						return { index, value: result };
@@ -1162,10 +1143,7 @@ export class Interpreter {
 			this._pendingReject = reject;
 		});
 
-		const raceResult = await Promise.race([
-			...branchPromises,
-			cancelPromise,
-		]);
+		const raceResult = await Promise.race([...branchPromises, cancelPromise]);
 
 		this._pendingReject = null;
 

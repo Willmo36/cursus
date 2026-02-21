@@ -6,11 +6,10 @@ export type { WorkflowLayer } from "./layer";
 export { createLayer } from "./layer";
 export { WorkflowLayerProvider } from "./layer-provider";
 export { WorkflowRegistry } from "./registry";
-export { LocalStorage, MemoryStorage } from "./storage";
 export type { RetryPolicy } from "./retry";
 export { withRetry } from "./retry";
+export { LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
-export { CancelledError } from "./types";
 export type {
 	ActivityCommand,
 	AnyWorkflowFunction,
@@ -36,6 +35,7 @@ export type {
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
+export { CancelledError } from "./types";
 export { useWorkflow } from "./use-workflow";
 export type { WorkflowEventLog } from "./use-workflow-events";
 export { useWorkflowEvents } from "./use-workflow-events";

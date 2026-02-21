@@ -586,15 +586,21 @@ describe("WorkflowRegistry", () => {
 
 	describe("circular dependency detection", () => {
 		it("detects a direct cycle (A → B → A)", async () => {
-			const workflowA: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("B");
-				};
+			const workflowA: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ B: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("B");
+			};
 
-			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("A");
-				};
+			const workflowB: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ A: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("A");
+			};
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
@@ -612,20 +618,29 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("detects a transitive cycle (A → B → C → A)", async () => {
-			const workflowA: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("B");
-				};
+			const workflowA: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ B: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("B");
+			};
 
-			const workflowB: WorkflowFunction<string, Record<string, unknown>, { C: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("C");
-				};
+			const workflowB: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ C: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("C");
+			};
 
-			const workflowC: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("A");
-				};
+			const workflowC: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ A: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("A");
+			};
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
@@ -648,15 +663,21 @@ describe("WorkflowRegistry", () => {
 				return yield* ctx.activity("greet", async () => "hello");
 			};
 
-			const workflowA: WorkflowFunction<string, Record<string, unknown>, { target: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("target");
-				};
+			const workflowA: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ target: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("target");
+			};
 
-			const workflowC: WorkflowFunction<string, Record<string, unknown>, { target: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("target");
-				};
+			const workflowC: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ target: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("target");
+			};
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
@@ -683,10 +704,13 @@ describe("WorkflowRegistry", () => {
 				return result;
 			};
 
-			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("A");
-				};
+			const workflowB: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ A: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("A");
+			};
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
@@ -706,15 +730,21 @@ describe("WorkflowRegistry", () => {
 				return yield* ctx.activity("greet", async () => "hello");
 			};
 
-			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("A");
-				};
+			const workflowB: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ A: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("A");
+			};
 
-			const workflowC: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
-				function* (ctx) {
-					return yield* ctx.waitForWorkflow("B");
-				};
+			const workflowC: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ B: string }
+			> = function* (ctx) {
+				return yield* ctx.waitForWorkflow("B");
+			};
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(

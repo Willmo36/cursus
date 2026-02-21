@@ -178,10 +178,7 @@ describe("createTestRuntime", () => {
 				});
 				return "unreachable";
 			} catch {
-				const result = yield* ctx.activity(
-					"recover",
-					async () => "recovered",
-				);
+				const result = yield* ctx.activity("recover", async () => "recovered");
 				return result;
 			}
 		};
@@ -227,18 +224,20 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs an on/done loop with pre-queued signals", async () => {
-		const workflow: WorkflowFunction<number, { inc: undefined; finish: undefined }> =
-			function* (ctx) {
-				let count = 0;
-				return yield* ctx.on<number>({
-					inc: function* () {
-						count++;
-					},
-					finish: function* (ctx) {
-						yield* ctx.done(count);
-					},
-				});
-			};
+		const workflow: WorkflowFunction<
+			number,
+			{ inc: undefined; finish: undefined }
+		> = function* (ctx) {
+			let count = 0;
+			return yield* ctx.on<number>({
+				inc: function* () {
+					count++;
+				},
+				finish: function* (ctx) {
+					yield* ctx.done(count);
+				},
+			});
+		};
 
 		const result = await createTestRuntime(workflow, {
 			signals: [
@@ -310,10 +309,7 @@ describe("createTestRuntime", () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
 					const val = yield* ctx.waitFor("data");
-					const greeting = yield* ctx.activity(
-						"greet",
-						async () => "real",
-					);
+					const greeting = yield* ctx.activity("greet", async () => "real");
 					return `${greeting}: ${val}`;
 				};
 

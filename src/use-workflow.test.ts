@@ -514,10 +514,9 @@ describe("useWorkflow", () => {
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
 
-			const { result } = renderHook(
-				() => useWorkflow<number>("counter"),
-				{ wrapper },
-			);
+			const { result } = renderHook(() => useWorkflow<number>("counter"), {
+				wrapper,
+			});
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("completed");

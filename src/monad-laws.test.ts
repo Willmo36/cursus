@@ -9,6 +9,7 @@ import type { Command, WorkflowFunction } from "./types";
  * A "pure" workflow that returns a value without yielding any commands.
  * This is the unit/return of the monad.
  */
+// biome-ignore lint/correctness/useYield: pure intentionally yields nothing — it's the monad unit
 function* pure<T>(value: T): Generator<Command, T, unknown> {
 	return value;
 }
@@ -16,6 +17,7 @@ function* pure<T>(value: T): Generator<Command, T, unknown> {
 describe("Monad laws", () => {
 	describe("Pure/return", () => {
 		it("workflow that yields no commands returns value directly", async () => {
+			// biome-ignore lint/correctness/useYield: testing pure return with no yields
 			const workflow: WorkflowFunction<number> = function* () {
 				return 42;
 			};
@@ -40,10 +42,7 @@ describe("Monad laws", () => {
 				ctx: Parameters<WorkflowFunction<string>>[0],
 				x: number,
 			): Generator<Command, string, unknown> {
-				const result = yield* ctx.activity(
-					"double",
-					async () => x * 2,
-				);
+				const result = yield* ctx.activity("double", async () => x * 2);
 				return `result: ${result}`;
 			}
 
@@ -100,17 +99,19 @@ describe("Monad laws", () => {
 				};
 
 			// Via ctx.child (yield* delegation to sub-interpreter)
-			const viaChild: WorkflowFunction<string, { data: string }> =
-				function* (ctx) {
-					return yield* ctx.child("sub", childWorkflow);
-				};
+			const viaChild: WorkflowFunction<string, { data: string }> = function* (
+				ctx,
+			) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
 
 			// Inline (same logic, no child)
-			const inline: WorkflowFunction<string, { data: string }> =
-				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
-					return `got: ${val}`;
-				};
+			const inline: WorkflowFunction<string, { data: string }> = function* (
+				ctx,
+			) {
+				const val = yield* ctx.waitFor("data");
+				return `got: ${val}`;
+			};
 
 			const childResult = await createTestRuntime(viaChild, {
 				signals: [{ name: "data", payload: "test" }],
@@ -136,20 +137,14 @@ describe("Monad laws", () => {
 				ctx: Parameters<WorkflowFunction<string>>[0],
 				name: string,
 			): Generator<Command, string, unknown> {
-				return yield* ctx.activity(
-					"greet",
-					async () => `Hello, ${name}!`,
-				);
+				return yield* ctx.activity("greet", async () => `Hello, ${name}!`);
 			}
 
 			function* formatGreeting(
 				ctx: Parameters<WorkflowFunction<string>>[0],
 				greeting: string,
 			): Generator<Command, string, unknown> {
-				return yield* ctx.activity(
-					"format",
-					async () => `[${greeting}]`,
-				);
+				return yield* ctx.activity("format", async () => `[${greeting}]`);
 			}
 
 			// Left-associated: (m >>= f) >>= g

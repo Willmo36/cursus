@@ -291,7 +291,10 @@ export type WorkflowState =
 // --- Registry interface (avoids circular imports) ---
 
 export type WorkflowRegistryInterface = {
-	waitFor<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
+	waitFor<T>(
+		workflowId: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T>;
 	start(workflowId: string): Promise<void>;
 };
 
@@ -341,7 +344,10 @@ export type WorkflowContext<
 	done: <T>(value: T) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	parallel: <T>(
-		activities: Array<{ name: string; fn: (signal: AbortSignal) => Promise<T> }>,
+		activities: Array<{
+			name: string;
+			fn: (signal: AbortSignal) => Promise<T>;
+		}>,
 	) => Generator<Command, T[], unknown>;
 	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
