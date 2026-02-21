@@ -584,6 +584,154 @@ describe("WorkflowRegistry", () => {
 		expect(events).toEqual([]);
 	});
 
+	describe("circular dependency detection", () => {
+		it("detects a direct cycle (A → B → A)", async () => {
+			const workflowA: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("B");
+				};
+
+			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("A");
+				};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ A: workflowA, B: workflowB },
+				storage,
+			);
+
+			await registry.start("A");
+
+			expect(registry.getState("A")).toBe("failed");
+			const interpreter = registry.getInterpreter("A");
+			expect(interpreter?.error).toMatch(/Circular dependency/);
+			expect(interpreter?.error).toContain("A");
+			expect(interpreter?.error).toContain("B");
+		});
+
+		it("detects a transitive cycle (A → B → C → A)", async () => {
+			const workflowA: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("B");
+				};
+
+			const workflowB: WorkflowFunction<string, Record<string, unknown>, { C: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("C");
+				};
+
+			const workflowC: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("A");
+				};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ A: workflowA, B: workflowB, C: workflowC },
+				storage,
+			);
+
+			await registry.start("A");
+
+			expect(registry.getState("A")).toBe("failed");
+			const interpreter = registry.getInterpreter("A");
+			expect(interpreter?.error).toMatch(/Circular dependency/);
+			expect(interpreter?.error).toContain("A");
+			expect(interpreter?.error).toContain("B");
+			expect(interpreter?.error).toContain("C");
+		});
+
+		it("does not false-positive when two workflows depend on the same target", async () => {
+			const workflowTarget: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const workflowA: WorkflowFunction<string, Record<string, unknown>, { target: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("target");
+				};
+
+			const workflowC: WorkflowFunction<string, Record<string, unknown>, { target: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("target");
+				};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ target: workflowTarget, A: workflowA, C: workflowC },
+				storage,
+			);
+
+			await registry.start("A");
+			await registry.start("C");
+
+			expect(registry.getState("A")).toBe("completed");
+			expect(registry.getState("C")).toBe("completed");
+			expect(await registry.waitFor("A")).toBe("hello");
+			expect(await registry.waitFor("C")).toBe("hello");
+		});
+
+		it("detects a cycle through waitAll with workflow refs", async () => {
+			const workflowA: WorkflowFunction<
+				unknown,
+				Record<string, unknown>,
+				{ B: string }
+			> = function* (ctx) {
+				const [result] = yield* ctx.waitAll(ctx.workflow("B"));
+				return result;
+			};
+
+			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("A");
+				};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ A: workflowA, B: workflowB },
+				storage,
+			);
+
+			await registry.start("A");
+
+			expect(registry.getState("A")).toBe("failed");
+			const interpreter = registry.getInterpreter("A");
+			expect(interpreter?.error).toMatch(/Circular dependency/);
+		});
+
+		it("cleans up dependency edges after workflow completes", async () => {
+			const workflowA: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const workflowB: WorkflowFunction<string, Record<string, unknown>, { A: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("A");
+				};
+
+			const workflowC: WorkflowFunction<string, Record<string, unknown>, { B: string }> =
+				function* (ctx) {
+					return yield* ctx.waitForWorkflow("B");
+				};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ A: workflowA, B: workflowB, C: workflowC },
+				storage,
+			);
+
+			// B depends on A; after both complete, starting C (which depends on B) should work
+			await registry.start("B");
+			expect(registry.getState("B")).toBe("completed");
+
+			await registry.start("C");
+			expect(registry.getState("C")).toBe("completed");
+			expect(await registry.waitFor("C")).toBe("hello");
+		});
+	});
+
 	it("onStateChange returns unsubscribe function", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const data = yield* ctx.waitFor<string>("submit");

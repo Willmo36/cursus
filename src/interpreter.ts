@@ -66,15 +66,18 @@ export class Interpreter {
 	private _pendingReject: ((err: CancelledError) => void) | null = null;
 	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
 	private _raceCleanup: (() => void) | null = null;
+	private _workflowId?: string;
 
 	constructor(
 		workflowFn: AnyWorkflowFunction,
 		log: EventLog,
 		registry?: WorkflowRegistryInterface,
+		workflowId?: string,
 	) {
 		this.workflowFn = workflowFn;
 		this.log = log;
 		this.registry = registry;
+		this._workflowId = workflowId;
 		this.seq = 0;
 
 		// The context methods work with `unknown` internally; generic narrowing
@@ -718,7 +721,7 @@ export class Interpreter {
 				});
 
 				registry
-					?.waitFor(item.workflowId, { start: true })
+					?.waitFor(item.workflowId, { start: true, caller: this._workflowId })
 					.then((result) => {
 						if (failed) return;
 						collected.set(key, result);
@@ -881,6 +884,7 @@ export class Interpreter {
 		try {
 			const result = await this.registry.waitFor(command.workflowId, {
 				start: command.start,
+				caller: this._workflowId,
 			});
 
 			this.log.append({

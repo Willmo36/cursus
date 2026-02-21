@@ -30,6 +30,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private entries: Map<string, WorkflowEntry>;
 	private _storage: WorkflowStorage;
 	private workflowChangeListeners: Array<() => void> = [];
+	private deps = new Map<string, Set<string>>();
 
 	constructor(
 		workflows: Record<string, AnyWorkflowFunction>,
@@ -61,6 +62,45 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		return entry;
 	}
 
+	private addDependency(caller: string, target: string): void {
+		let edges = this.deps.get(caller);
+		if (!edges) {
+			edges = new Set();
+			this.deps.set(caller, edges);
+		}
+		edges.add(target);
+
+		// DFS from target following outgoing edges, looking for caller
+		const visited = new Set<string>();
+		const path = [caller, target];
+		const hasCycle = (node: string): boolean => {
+			if (node === caller) return true;
+			if (visited.has(node)) return false;
+			visited.add(node);
+			const next = this.deps.get(node);
+			if (!next) return false;
+			for (const neighbor of next) {
+				path.push(neighbor);
+				if (hasCycle(neighbor)) return true;
+				path.pop();
+			}
+			return false;
+		};
+
+		if (hasCycle(target)) {
+			// Remove the edge we just added before throwing
+			edges.delete(target);
+			if (edges.size === 0) this.deps.delete(caller);
+			throw new Error(
+				`Circular dependency detected: ${path.join(" -> ")}`,
+			);
+		}
+	}
+
+	private removeDependency(id: string): void {
+		this.deps.delete(id);
+	}
+
 	async start(id: string): Promise<void> {
 		const entry = this.getEntry(id);
 
@@ -71,7 +111,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		const log = new EventLog(events);
 		let persistedCount = events.length;
 
-		const interpreter = new Interpreter(entry.fn, log, this);
+		const interpreter = new Interpreter(entry.fn, log, this, id);
 		entry.interpreter = interpreter;
 
 		const persistEvents = async () => {
@@ -113,6 +153,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		if (interpreter.state === "completed") {
 			entry.completed = true;
 			entry.result = interpreter.result;
+			this.removeDependency(id);
 			for (const waiter of entry.waiters) {
 				waiter.resolve(interpreter.result);
 			}
@@ -120,6 +161,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		} else if (interpreter.state === "failed") {
 			entry.failed = true;
 			entry.error = interpreter.error;
+			this.removeDependency(id);
 			for (const waiter of entry.waiters) {
 				waiter.reject(new Error(interpreter.error ?? "Workflow failed"));
 			}
@@ -127,9 +169,10 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		}
 	}
 
-	async waitFor<T>(id: string, options?: { start?: boolean }): Promise<T> {
+	async waitFor<T>(id: string, options?: { start?: boolean; caller?: string }): Promise<T> {
 		const entry = this.getEntry(id);
 		const shouldStart = options?.start ?? true;
+		const caller = options?.caller;
 
 		// Already completed
 		if (entry.completed) {
@@ -139,6 +182,11 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		// Already failed
 		if (entry.failed) {
 			throw new Error(entry.error ?? "Workflow failed");
+		}
+
+		// Check for circular dependencies before proceeding
+		if (caller) {
+			this.addDependency(caller, id);
 		}
 
 		// Not started yet — auto-start if requested
@@ -167,6 +215,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		entry.failed = false;
 		entry.result = undefined;
 		entry.error = undefined;
+		this.removeDependency(id);
 
 		await this._storage.clear(id);
 

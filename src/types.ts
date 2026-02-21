@@ -291,7 +291,7 @@ export type WorkflowState =
 // --- Registry interface (avoids circular imports) ---
 
 export type WorkflowRegistryInterface = {
-	waitFor<T>(workflowId: string, options?: { start?: boolean }): Promise<T>;
+	waitFor<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
 	start(workflowId: string): Promise<void>;
 };
 

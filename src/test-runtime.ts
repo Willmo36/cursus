@@ -38,7 +38,7 @@ export async function createTestRuntime<
 	let mockRegistry: WorkflowRegistryInterface | undefined;
 	if (workflowResults) {
 		mockRegistry = {
-			async waitFor<R>(workflowId: string): Promise<R> {
+			async waitFor<R>(workflowId: string, _options?: { start?: boolean; caller?: string }): Promise<R> {
 				if (!(workflowId in workflowResults)) {
 					throw new Error(
 						`No mock result for workflow "${workflowId}" in workflowResults`,
