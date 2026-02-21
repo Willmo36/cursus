@@ -224,28 +224,81 @@ describe("withRetry", () => {
 		await expect(wrapped(new AbortController().signal)).rejects.toThrow("once");
 		expect(getCalls()).toBe(1);
 	});
-
 });
 
 describe("calculateDelay", () => {
 	it("calculates exponential delay", () => {
-		expect(calculateDelay(0, { backoff: "exponential", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(1000);
-		expect(calculateDelay(1, { backoff: "exponential", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(2000);
-		expect(calculateDelay(2, { backoff: "exponential", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(4000);
+		expect(
+			calculateDelay(0, {
+				backoff: "exponential",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(1000);
+		expect(
+			calculateDelay(1, {
+				backoff: "exponential",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(2000);
+		expect(
+			calculateDelay(2, {
+				backoff: "exponential",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(4000);
 	});
 
 	it("calculates fixed delay", () => {
-		expect(calculateDelay(0, { backoff: "fixed", initialDelayMs: 500, maxDelayMs: 30000 })).toBe(500);
-		expect(calculateDelay(5, { backoff: "fixed", initialDelayMs: 500, maxDelayMs: 30000 })).toBe(500);
+		expect(
+			calculateDelay(0, {
+				backoff: "fixed",
+				initialDelayMs: 500,
+				maxDelayMs: 30000,
+			}),
+		).toBe(500);
+		expect(
+			calculateDelay(5, {
+				backoff: "fixed",
+				initialDelayMs: 500,
+				maxDelayMs: 30000,
+			}),
+		).toBe(500);
 	});
 
 	it("calculates linear delay", () => {
-		expect(calculateDelay(0, { backoff: "linear", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(1000);
-		expect(calculateDelay(1, { backoff: "linear", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(2000);
-		expect(calculateDelay(2, { backoff: "linear", initialDelayMs: 1000, maxDelayMs: 30000 })).toBe(3000);
+		expect(
+			calculateDelay(0, {
+				backoff: "linear",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(1000);
+		expect(
+			calculateDelay(1, {
+				backoff: "linear",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(2000);
+		expect(
+			calculateDelay(2, {
+				backoff: "linear",
+				initialDelayMs: 1000,
+				maxDelayMs: 30000,
+			}),
+		).toBe(3000);
 	});
 
 	it("caps at maxDelayMs", () => {
-		expect(calculateDelay(10, { backoff: "exponential", initialDelayMs: 1000, maxDelayMs: 5000 })).toBe(5000);
+		expect(
+			calculateDelay(10, {
+				backoff: "exponential",
+				initialDelayMs: 1000,
+				maxDelayMs: 5000,
+			}),
+		).toBe(5000);
 	});
 });

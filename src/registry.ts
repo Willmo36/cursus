@@ -91,9 +91,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 			// Remove the edge we just added before throwing
 			edges.delete(target);
 			if (edges.size === 0) this.deps.delete(caller);
-			throw new Error(
-				`Circular dependency detected: ${path.join(" -> ")}`,
-			);
+			throw new Error(`Circular dependency detected: ${path.join(" -> ")}`);
 		}
 	}
 
@@ -169,7 +167,10 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		}
 	}
 
-	async waitFor<T>(id: string, options?: { start?: boolean; caller?: string }): Promise<T> {
+	async waitFor<T>(
+		id: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T> {
 		const entry = this.getEntry(id);
 		const shouldStart = options?.start ?? true;
 		const caller = options?.caller;
