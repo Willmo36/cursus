@@ -1,5 +1,7 @@
 # react-workflow
 
+**Workflows, not reducers.**
+
 Durable workflows for React, inspired by [Temporal](https://temporal.io). Write multi-step UI flows as generator functions. State survives page reloads via event-sourcing replay — no manual serialization needed.
 
 ```
