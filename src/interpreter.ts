@@ -399,12 +399,12 @@ export class Interpreter {
 		return this.seq;
 	}
 
-	private isReplayingEvent(type: string): boolean {
+	private hasEvent(type: string): boolean {
 		return this.log.events().some((e) => e.type === type);
 	}
 
 	async run(): Promise<unknown> {
-		if (!this.isReplayingEvent("workflow_started")) {
+		if (!this.hasEvent("workflow_started")) {
 			// No workflow_started in the log — either a fresh run or compacted storage.
 			// Check for compacted terminal events before starting the generator.
 			const events = this.log.events();
@@ -458,7 +458,7 @@ export class Interpreter {
 
 			this._result = next.value;
 			this._state = "completed";
-			if (!this.isReplayingEvent("workflow_completed")) {
+			if (!this.hasEvent("workflow_completed")) {
 				this.log.append({
 					type: "workflow_completed",
 					result: next.value,
@@ -477,7 +477,7 @@ export class Interpreter {
 			const stack = err instanceof Error ? err.stack : undefined;
 			this._state = "failed";
 			this._error = message;
-			if (!this.isReplayingEvent("workflow_failed")) {
+			if (!this.hasEvent("workflow_failed")) {
 				this.log.append({
 					type: "workflow_failed",
 					error: message,

@@ -131,6 +131,7 @@ export function useWorkflow(
 
 		// Inline mode: run the workflow directly
 		let cancelled = false;
+		let unsubscribe: (() => void) | undefined;
 
 		async function start() {
 			const events = await storageRef.current.load(workflowId);
@@ -165,7 +166,7 @@ export function useWorkflow(
 				persistEvents();
 			}
 
-			interpreter.onStateChange(syncState);
+			unsubscribe = interpreter.onStateChange(syncState);
 
 			await interpreter.run();
 
@@ -193,6 +194,7 @@ export function useWorkflow(
 		start();
 
 		return () => {
+			unsubscribe?.();
 			interpreterRef.current?.cancel();
 			cancelled = true;
 			registry?.unobserve(workflowId);

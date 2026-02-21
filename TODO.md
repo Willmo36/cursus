@@ -10,9 +10,9 @@
 
 ## Code Quality
 
-- [ ] **`isReplayingEvent` is misleadingly named** — `interpreter.ts`. It checks "does any event of this type exist in the log?" — correct for its call sites (`workflow_started`, `workflow_completed`, `workflow_failed`) since those are singleton events, but the name implies something broader. Should be `hasEvent(type)`.
+- [x] **`isReplayingEvent` is misleadingly named** — Renamed to `hasEvent(type)`.
 
-- [ ] **Listener leak in inline useWorkflow** — `use-workflow.ts`. `interpreter.onStateChange(syncState)` returns an unsubscribe function that's never called. Since the interpreter is created inside the effect and gets GC'd with its listeners, this is mostly harmless but sloppy.
+- [x] **Listener leak in inline useWorkflow** — Fixed: `onStateChange` unsubscribe is now hoisted and called in the effect cleanup.
 
 ## Up Next
 
