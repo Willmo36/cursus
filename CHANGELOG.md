@@ -57,5 +57,6 @@ Initial release.
 - `chat-room` — long-running workflow with repeated signals
 - `checkout` — cross-workflow dependency (profile + checkout)
 - `shop` — product browse/cart/checkout with real HTTP
+- `env-config` — workflow as environment provider
 - `error-recovery` — dependency failure handling
 - `race` — fetch-with-timeout pattern

@@ -224,6 +224,7 @@ The `examples/` directory contains runnable Vite apps:
 - **shop** — real HTTP with error simulation
 - **chat-room** — long-running workflow with repeated signals
 - **cookie-banner** — result derived from event history
+- **env-config** — workflow as environment provider
 - **error-recovery** — dependency failure handling
 - **race** — fetch-with-timeout pattern
 
