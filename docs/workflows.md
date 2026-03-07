@@ -130,6 +130,32 @@ if (winner === 0) {
 
 The losing branch's `AbortSignal` is triggered, so you can clean up in-flight requests.
 
+### Escalation with Race
+
+A common pattern is racing a signal against a timeout — for example, waiting for a manager's approval and escalating if it doesn't arrive in time:
+
+```ts
+const approval: WorkflowFunction<"approved" | "escalated", { approve: string }> =
+  function* (ctx) {
+    const { winner, value } = yield* ctx.race(
+      ctx.waitFor("approve"),
+      ctx.sleep(24 * 60 * 60 * 1000), // 24 hours
+    );
+
+    if (winner === 0) {
+      return "approved";
+    }
+
+    // Timeout — escalate to next level
+    yield* ctx.activity("escalate", async () => {
+      await fetch("/api/escalate", { method: "POST" });
+    });
+    return "escalated";
+  };
+```
+
+The signal and sleep are both durable — if the user refreshes, the remaining timeout resumes from where it left off and any signal already received replays instantly.
+
 ## Signal Loops with on/done
 
 For workflows that handle multiple signals in a loop (like a shopping cart), use `on` with `done`:

@@ -2923,6 +2923,88 @@ describe("Interpreter", () => {
 				);
 			});
 		});
+
+		it("races waitFor against sleep — signal wins", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ approve: string }
+			> = function* (ctx) {
+				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("approve", "approved-by-manager");
+
+			const result = await runPromise;
+			expect(result).toEqual({ winner: 0, value: "approved-by-manager" });
+			expect(interpreter.state).toBe("completed");
+
+			vi.useRealTimers();
+		});
+
+		it("races waitFor against sleep — timeout wins", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ approve: string }
+			> = function* (ctx) {
+				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(100));
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			const runPromise = interpreter.run();
+
+			await vi.advanceTimersByTimeAsync(100);
+			const result = await runPromise;
+
+			expect(result).toEqual({ winner: 1, value: undefined });
+			expect(interpreter.state).toBe("completed");
+
+			vi.useRealTimers();
+		});
+
+		it("races waitFor against sleep — replays from event log", async () => {
+			vi.useFakeTimers();
+
+			const workflow: WorkflowFunction<
+				{ winner: number; value: unknown },
+				{ approve: string }
+			> = function* (ctx) {
+				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));
+			};
+
+			// First run: signal wins
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			const runPromise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.state).toBe("waiting");
+			});
+
+			interpreter.signal("approve", "yes");
+			const firstResult = await runPromise;
+			expect(firstResult).toEqual({ winner: 0, value: "yes" });
+
+			// Replay from recorded events
+			const replayLog = new EventLog(log.events());
+			const replayed = new Interpreter(workflow, replayLog);
+			const replayResult = await replayed.run();
+
+			expect(replayResult).toEqual({ winner: 0, value: "yes" });
+			expect(replayed.state).toBe("completed");
+
+			vi.useRealTimers();
+		});
 	});
 
 	describe("Profunctor: signal routing through combinators", () => {
