@@ -27,7 +27,7 @@ export function WorkflowLayerProvider({
 				layer.workflows,
 				layer.storage,
 				layer.onEvent,
-				layer.versions as Record<string, number> | undefined,
+				layer.versions,
 			),
 		[layer],
 	);
