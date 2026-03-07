@@ -2493,13 +2493,14 @@ describe("Interpreter", () => {
 		it("resolves with the activity when it beats the sleep", async () => {
 			vi.useFakeTimers();
 
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
-						ctx.activity("fast", async () => "data"),
-						ctx.sleep(5000),
-					);
-				};
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
+					ctx.activity("fast", async () => "data"),
+					ctx.sleep(5000),
+				);
+			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
 			const result = await interpreter.run();
@@ -2513,13 +2514,14 @@ describe("Interpreter", () => {
 		it("resolves with the sleep when the activity is slow", async () => {
 			vi.useFakeTimers();
 
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
 						ctx.activity(
 							"slow",
 							(signal) =>
-								new Promise((resolve, reject) => {
+								new Promise<string>((resolve, reject) => {
 									const timer = setTimeout(() => resolve("late"), 10000);
 									signal.addEventListener(
 										"abort",
@@ -2548,9 +2550,10 @@ describe("Interpreter", () => {
 		});
 
 		it("records race_started and race_completed events", async () => {
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
 						ctx.activity("fetch", async () => "data"),
 						ctx.sleep(5000),
 					);
@@ -2579,10 +2582,13 @@ describe("Interpreter", () => {
 		});
 
 		it("replays from event log without executing activities", async () => {
-			const activityFn = vi.fn().mockResolvedValue("data");
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
+			const activityFn = vi
+				.fn<(signal: AbortSignal) => Promise<string>>()
+				.mockResolvedValue("data");
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
 						ctx.activity("fetch", activityFn),
 						ctx.sleep(5000),
 					);
@@ -2621,13 +2627,14 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			let receivedSignal: AbortSignal | undefined;
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
 						ctx.activity(
 							"slow",
 							(signal) =>
-								new Promise((resolve, reject) => {
+								new Promise<string>((resolve, reject) => {
 									receivedSignal = signal;
 									const timer = setTimeout(() => resolve("late"), 10000);
 									signal.addEventListener(
@@ -2658,14 +2665,14 @@ describe("Interpreter", () => {
 
 		it("races activity against waitFor signal", async () => {
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ manual: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
 					ctx.activity(
 						"auto",
 						() =>
-							new Promise((resolve) =>
+							new Promise<string>((resolve) =>
 								setTimeout(() => resolve("auto-result"), 5000),
 							),
 					),
@@ -2708,13 +2715,14 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			let activitySignal: AbortSignal | undefined;
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string } | { winner: 1; value: void }
+			> = function* (ctx) {
 					return yield* ctx.race(
 						ctx.activity(
 							"slow",
 							(signal) =>
-								new Promise((resolve) => {
+								new Promise<string>((resolve) => {
 									activitySignal = signal;
 									setTimeout(() => resolve("done"), 10000);
 								}),
@@ -2739,7 +2747,7 @@ describe("Interpreter", () => {
 
 		it("races two waitFor branches — first signal received wins", async () => {
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ approve: string; reject: string }
 			> = function* (ctx) {
 				return yield* ctx.race(ctx.waitFor("approve"), ctx.waitFor("reject"));
@@ -2761,7 +2769,13 @@ describe("Interpreter", () => {
 
 		it("races waitFor against waitForAny", async () => {
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				| { winner: 0; value: string }
+				| {
+						winner: 1;
+						value:
+							| { signal: "optA"; payload: string }
+							| { signal: "optB"; payload: string };
+					},
 				{ single: string; optA: string; optB: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
@@ -2794,14 +2808,14 @@ describe("Interpreter", () => {
 				};
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ data: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
 					ctx.activity(
 						"slow",
 						() =>
-							new Promise((resolve) =>
+							new Promise<string>((resolve) =>
 								setTimeout(() => resolve("auto"), 10000),
 							),
 					),
@@ -2828,9 +2842,10 @@ describe("Interpreter", () => {
 		it("races parallel against sleep", async () => {
 			vi.useFakeTimers();
 
-			const workflow: WorkflowFunction<{ winner: number; value: unknown }> =
-				function* (ctx) {
-					return yield* ctx.race(
+			const workflow: WorkflowFunction<
+				{ winner: 0; value: string[] } | { winner: 1; value: void }
+			> = function* (ctx) {
+				return yield* ctx.race(
 						ctx.parallel([
 							{ name: "a", fn: async () => "one" },
 							{ name: "b", fn: async () => "two" },
@@ -2856,7 +2871,7 @@ describe("Interpreter", () => {
 			};
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: void },
 				Record<string, unknown>,
 				{ dep: string }
 			> = function* (ctx) {
@@ -2883,7 +2898,7 @@ describe("Interpreter", () => {
 				};
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: void } | { winner: 1; value: string },
 				{ data: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
@@ -2907,7 +2922,7 @@ describe("Interpreter", () => {
 
 		it("exposes all signal names via waitingForAny during multi-signal race", async () => {
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ approve: string; reject: string }
 			> = function* (ctx) {
 				return yield* ctx.race(ctx.waitFor("approve"), ctx.waitFor("reject"));
@@ -2928,7 +2943,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
 				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));
@@ -2954,7 +2969,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
 				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(100));
@@ -2976,7 +2991,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
-				{ winner: number; value: unknown },
+				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
 				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));

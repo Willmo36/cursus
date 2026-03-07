@@ -1,6 +1,14 @@
 // ABOUTME: Core type definitions for the workflow engine.
 // ABOUTME: Defines commands, events, context, and storage interfaces.
 
+// --- Race result discriminated union ---
+
+type RaceResult<T extends unknown[]> = {
+	[I in keyof T]: I extends `${infer N extends number}`
+		? { winner: N; value: T[I] }
+		: never;
+}[number];
+
 // --- Heterogeneous waitForAll helpers ---
 
 export type WorkflowRef<T = unknown> = {
@@ -366,9 +374,28 @@ export type WorkflowContext<
 		},
 		unknown
 	>;
-	race: (
-		...branches: Generator<Command, unknown, unknown>[]
-	) => Generator<Command, { winner: number; value: unknown }, unknown>;
+	race: {
+		<A, B>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+		): Generator<Command, RaceResult<[A, B]>, unknown>;
+		<A, B, C>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+			c: Generator<Command, C, unknown>,
+		): Generator<Command, RaceResult<[A, B, C]>, unknown>;
+		<A, B, C, D>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+			c: Generator<Command, C, unknown>,
+			d: Generator<Command, D, unknown>,
+		): Generator<Command, RaceResult<[A, B, C, D]>, unknown>;
+		(...branches: Generator<Command, unknown, unknown>[]): Generator<
+			Command,
+			{ winner: number; value: unknown },
+			unknown
+		>;
+	};
 	waitForWorkflow: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
 		options?: { start?: boolean },

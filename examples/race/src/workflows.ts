@@ -28,7 +28,7 @@ export const fetchWorkflow: WorkflowFunction<FetchResult> = function* (ctx) {
 		ctx.sleep(3000),
 	);
 	if (result.winner === 0) {
-		return { status: "ok" as const, data: result.value as string };
+		return { status: "ok" as const, data: result.value };
 	}
 	return { status: "timeout" as const };
 };
@@ -41,12 +41,12 @@ export const approvalWorkflow: WorkflowFunction<
 	ApprovalResult,
 	{ approve: string }
 > = function* (ctx) {
-	const { winner, value } = yield* ctx.race(
+	const result = yield* ctx.race(
 		ctx.waitFor("approve"),
 		ctx.sleep(10_000),
 	);
-	if (winner === 0) {
-		return { status: "approved" as const, by: value as string };
+	if (result.winner === 0) {
+		return { status: "approved" as const, by: result.value };
 	}
 	return { status: "escalated" as const };
 };
