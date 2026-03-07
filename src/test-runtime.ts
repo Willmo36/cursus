@@ -79,7 +79,7 @@ export async function createTestRuntime<
 			) => {
 				const wrappedChild: WorkflowFunction<U, CS> = function* (childCtx) {
 					const wrappedChildCtx = wrapContext(
-						childCtx as WorkflowContext<
+						childCtx as unknown as WorkflowContext<
 							Record<string, unknown>,
 							Record<string, unknown>,
 							Record<string, unknown>
