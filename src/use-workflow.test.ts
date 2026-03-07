@@ -975,6 +975,73 @@ describe("useWorkflow", () => {
 		});
 	});
 
+	describe("versioning (inline mode)", () => {
+		it("inline workflow with version change wipes and restarts", async () => {
+			let callCount = 0;
+			const workflow: WorkflowFunction<number> = function* (ctx) {
+				callCount++;
+				return yield* ctx.activity("count", async () => callCount);
+			};
+
+			const storage = new MemoryStorage();
+
+			// First run with version 1
+			const { result: result1, unmount } = renderHook(() =>
+				useWorkflow("ver-test", workflow, { storage, version: 1 }),
+			);
+
+			await waitFor(() => {
+				expect(result1.current.state).toBe("completed");
+				expect(result1.current.result).toBe(1);
+			});
+
+			unmount();
+
+			// Second run with version 2 — should wipe and restart
+			const { result: result2 } = renderHook(() =>
+				useWorkflow("ver-test", workflow, { storage, version: 2 }),
+			);
+
+			await waitFor(() => {
+				expect(result2.current.state).toBe("completed");
+				expect(result2.current.result).toBe(2);
+			});
+		});
+
+		it("inline workflow without version behaves as before", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const storage = new MemoryStorage();
+
+			// First run without version
+			const { result: result1, unmount } = renderHook(() =>
+				useWorkflow("no-ver", workflow, { storage }),
+			);
+
+			await waitFor(() => {
+				expect(result1.current.state).toBe("completed");
+			});
+
+			expect(activityFn).toHaveBeenCalledTimes(1);
+			unmount();
+
+			// Second run without version — should replay
+			const { result: result2 } = renderHook(() =>
+				useWorkflow("no-ver", workflow, { storage }),
+			);
+
+			await waitFor(() => {
+				expect(result2.current.state).toBe("completed");
+				expect(result2.current.result).toBe("hello");
+			});
+
+			expect(activityFn).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	describe("onEvent observer (inline mode)", () => {
 		it("fires observer for each event during workflow execution", async () => {
 			const observed: Array<{ workflowId: string; event: WorkflowEvent }> = [];

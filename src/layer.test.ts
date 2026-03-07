@@ -22,6 +22,24 @@ describe("createLayer", () => {
 		expect(layer.storage).toBe(storage);
 	});
 
+	it("accepts and preserves versions option", () => {
+		const wfA: WorkflowFunction<string> = function* (ctx) {
+			return yield* ctx.activity("a", async () => "a");
+		};
+		const wfB: WorkflowFunction<number> = function* (ctx) {
+			return yield* ctx.activity("b", async () => 42);
+		};
+
+		const storage = new MemoryStorage();
+		const layer = createLayer<{ alpha: string; beta: number }>(
+			{ alpha: wfA, beta: wfB },
+			storage,
+			{ versions: { alpha: 2 } },
+		);
+
+		expect(layer.versions).toEqual({ alpha: 2 });
+	});
+
 	it("accepts multiple workflows", () => {
 		const wfA: WorkflowFunction<string> = function* (ctx) {
 			return yield* ctx.activity("a", async () => "a");

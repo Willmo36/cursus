@@ -3,6 +3,7 @@
 
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
+import { checkVersion } from "./storage";
 import type {
 	AnyWorkflowFunction,
 	WorkflowEvent,
@@ -33,14 +34,17 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private workflowChangeListeners: Array<() => void> = [];
 	private deps = new Map<string, Set<string>>();
 	private observers: WorkflowEventObserver[];
+	private versions?: Record<string, number>;
 
 	constructor(
 		workflows: Record<string, AnyWorkflowFunction>,
 		storage: WorkflowStorage,
 		observers?: WorkflowEventObserver[],
+		versions?: Record<string, number>,
 	) {
 		this._storage = storage;
 		this.observers = observers ?? [];
+		this.versions = versions;
 		this.entries = new Map();
 		for (const [id, fn] of Object.entries(workflows)) {
 			this.entries.set(id, {
@@ -109,6 +113,7 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		// Idempotent — no-op if already started
 		if (entry.interpreter) return;
 
+		await checkVersion(this._storage, id, this.versions?.[id]);
 		const events = await this._storage.load(id);
 		const onAppend =
 			this.observers.length > 0

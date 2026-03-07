@@ -12,7 +12,7 @@ import {
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { RegistryContext } from "./registry-provider";
-import { MemoryStorage } from "./storage";
+import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
 	WorkflowEvent,
@@ -25,6 +25,7 @@ import type {
 type UseWorkflowOptions = {
 	storage?: WorkflowStorage;
 	onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
+	version?: number;
 };
 
 type UseWorkflowResult<
@@ -137,6 +138,7 @@ export function useWorkflow(
 		let unsubscribe: (() => void) | undefined;
 
 		async function start() {
+			await checkVersion(storageRef.current, workflowId, options?.version);
 			const events = await storageRef.current.load(workflowId);
 			const observers: WorkflowEventObserver[] = options?.onEvent
 				? Array.isArray(options.onEvent)

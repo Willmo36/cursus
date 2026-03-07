@@ -792,6 +792,141 @@ describe("WorkflowRegistry", () => {
 		});
 	});
 
+	describe("versioning", () => {
+		it("versioned workflow starts fresh normally", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ greet: workflow },
+				storage,
+				undefined,
+				{ greet: 1 },
+			);
+			await registry.start("greet");
+
+			expect(registry.getState("greet")).toBe("completed");
+			expect(await registry.waitFor("greet")).toBe("hello");
+		});
+
+		it("versioned workflow with same version replays from storage", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const storage = new MemoryStorage();
+
+			// First run — stores events + version
+			const registry1 = new WorkflowRegistry(
+				{ greet: workflow },
+				storage,
+				undefined,
+				{ greet: 1 },
+			);
+			await registry1.start("greet");
+			expect(activityFn).toHaveBeenCalledTimes(1);
+
+			// Second run — same version, should replay without re-running activity
+			const registry2 = new WorkflowRegistry(
+				{ greet: workflow },
+				storage,
+				undefined,
+				{ greet: 1 },
+			);
+			await registry2.start("greet");
+			expect(activityFn).toHaveBeenCalledTimes(1);
+			expect(await registry2.waitFor("greet")).toBe("hello");
+		});
+
+		it("versioned workflow with different version wipes and restarts", async () => {
+			let callCount = 0;
+			const workflow: WorkflowFunction<number> = function* (ctx) {
+				callCount++;
+				return yield* ctx.activity("count", async () => callCount);
+			};
+
+			const storage = new MemoryStorage();
+
+			// First run with version 1
+			const registry1 = new WorkflowRegistry(
+				{ counter: workflow },
+				storage,
+				undefined,
+				{ counter: 1 },
+			);
+			await registry1.start("counter");
+			expect(await registry1.waitFor("counter")).toBe(1);
+
+			// Second run with version 2 — should wipe and restart
+			const registry2 = new WorkflowRegistry(
+				{ counter: workflow },
+				storage,
+				undefined,
+				{ counter: 2 },
+			);
+			await registry2.start("counter");
+			expect(await registry2.waitFor("counter")).toBe(2);
+		});
+
+		it("versioned workflow after compaction with different version wipes and restarts", async () => {
+			let callCount = 0;
+			const workflow: WorkflowFunction<number> = function* (ctx) {
+				callCount++;
+				return yield* ctx.activity("count", async () => callCount);
+			};
+
+			const storage = new MemoryStorage();
+
+			// First run — compacts to terminal event
+			const registry1 = new WorkflowRegistry(
+				{ counter: workflow },
+				storage,
+				undefined,
+				{ counter: 1 },
+			);
+			await registry1.start("counter");
+
+			// Confirm it compacted
+			const events = await storage.load("counter");
+			expect(events).toHaveLength(1);
+			expect(events[0].type).toBe("workflow_completed");
+
+			// Second run with different version — should wipe compacted data
+			const registry2 = new WorkflowRegistry(
+				{ counter: workflow },
+				storage,
+				undefined,
+				{ counter: 2 },
+			);
+			await registry2.start("counter");
+			expect(await registry2.waitFor("counter")).toBe(2);
+		});
+
+		it("unversioned workflow ignores version check", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			await storage.saveVersion("greet", 99);
+			await storage.append("greet", [
+				{
+					type: "workflow_completed",
+					result: "old-result",
+					timestamp: 1,
+				},
+			]);
+
+			// No versions passed — should replay from storage
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+			expect(await registry.waitFor("greet")).toBe("old-result");
+		});
+	});
+
 	it("onStateChange returns unsubscribe function", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const data = yield* ctx.waitFor<string>("submit");

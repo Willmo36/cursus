@@ -17,7 +17,7 @@ export {
 	withRetry,
 	wrapActivity,
 } from "./retry";
-export { LocalStorage, MemoryStorage } from "./storage";
+export { checkVersion, LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {
 	ActivityCommand,

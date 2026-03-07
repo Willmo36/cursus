@@ -13,21 +13,23 @@ export type WorkflowLayer<
 	workflows: { [K in keyof Provides]: AnyWorkflowFunction };
 	storage: WorkflowStorage;
 	onEvent?: WorkflowEventObserver[];
+	versions?: Partial<{ [K in keyof Provides]: number }>;
 };
 
-type CreateLayerOptions = {
+type CreateLayerOptions<Provides extends Record<string, unknown>> = {
 	onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
+	versions?: Partial<{ [K in keyof Provides]: number }>;
 };
 
 export function createLayer<Provides extends Record<string, unknown>>(
 	workflows: { [K in keyof Provides]: AnyWorkflowFunction },
 	storage: WorkflowStorage,
-	options?: CreateLayerOptions,
+	options?: CreateLayerOptions<Provides>,
 ): WorkflowLayer<Provides> {
 	const onEvent = options?.onEvent
 		? Array.isArray(options.onEvent)
 			? options.onEvent
 			: [options.onEvent]
 		: undefined;
-	return { workflows, storage, onEvent };
+	return { workflows, storage, onEvent, versions: options?.versions };
 }

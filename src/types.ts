@@ -439,4 +439,6 @@ export type WorkflowStorage = {
 	append(workflowId: string, events: WorkflowEvent[]): Promise<void>;
 	compact(workflowId: string, events: WorkflowEvent[]): Promise<void>;
 	clear(workflowId: string): Promise<void>;
+	loadVersion?(workflowId: string): Promise<number | undefined>;
+	saveVersion?(workflowId: string, version: number): Promise<void>;
 };
