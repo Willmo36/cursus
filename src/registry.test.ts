@@ -6,7 +6,11 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction } from "./types";
+import type {
+	WorkflowEvent,
+	WorkflowEventObserver,
+	WorkflowFunction,
+} from "./types";
 
 describe("WorkflowRegistry", () => {
 	it("start() runs a registered workflow to completion", async () => {
@@ -759,6 +763,32 @@ describe("WorkflowRegistry", () => {
 			await registry.start("C");
 			expect(registry.getState("C")).toBe("completed");
 			expect(await registry.waitFor("C")).toBe("hello");
+		});
+	});
+
+	describe("event observers", () => {
+		it("observers are called when workflows run", async () => {
+			const observed: Array<{ workflowId: string; event: WorkflowEvent }> = [];
+			const observer: WorkflowEventObserver = (wid, event) =>
+				observed.push({ workflowId: wid, event });
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage, [
+				observer,
+			]);
+			await registry.start("greet");
+
+			const types = observed
+				.filter((o) => o.workflowId === "greet")
+				.map((o) => o.event.type);
+			expect(types).toContain("workflow_started");
+			expect(types).toContain("activity_scheduled");
+			expect(types).toContain("activity_completed");
+			expect(types).toContain("workflow_completed");
 		});
 	});
 

@@ -15,6 +15,8 @@ import { RegistryContext } from "./registry-provider";
 import { MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
+	WorkflowEvent,
+	WorkflowEventObserver,
 	WorkflowFunction,
 	WorkflowState,
 	WorkflowStorage,
@@ -22,6 +24,7 @@ import type {
 
 type UseWorkflowOptions = {
 	storage?: WorkflowStorage;
+	onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
 };
 
 type UseWorkflowResult<
@@ -135,13 +138,28 @@ export function useWorkflow(
 
 		async function start() {
 			const events = await storageRef.current.load(workflowId);
-			const log = new EventLog(events);
+			const observers: WorkflowEventObserver[] = options?.onEvent
+				? Array.isArray(options.onEvent)
+					? options.onEvent
+					: [options.onEvent]
+				: [];
+			const onAppend =
+				observers.length > 0
+					? (event: WorkflowEvent) => {
+							for (const obs of observers) {
+								obs(workflowId, event);
+							}
+						}
+					: undefined;
+			const log = new EventLog(events, onAppend);
 			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
 				workflowFn as AnyWorkflowFunction,
 				log,
 				registry ?? undefined,
+				undefined,
+				observers,
 			);
 			interpreterRef.current = interpreter;
 			registry?.observe(workflowId, interpreter);

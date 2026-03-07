@@ -22,7 +22,7 @@ export function WorkflowLayerProvider({
 	children,
 }: WorkflowLayerProviderProps) {
 	const registry = useMemo(
-		() => new WorkflowRegistry(layer.workflows, layer.storage),
+		() => new WorkflowRegistry(layer.workflows, layer.storage, layer.onEvent),
 		[layer],
 	);
 	return (

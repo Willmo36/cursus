@@ -425,6 +425,13 @@ export type InternalWorkflowContext = {
 	workflow: (id: string) => WorkflowRef;
 };
 
+// --- Observers ---
+
+export type WorkflowEventObserver = (
+	workflowId: string,
+	event: WorkflowEvent,
+) => void;
+
 // --- Storage ---
 
 export type WorkflowStorage = {

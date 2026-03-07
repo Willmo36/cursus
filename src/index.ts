@@ -38,6 +38,7 @@ export type {
 	WorkflowContext,
 	WorkflowDependencyFailedEvent,
 	WorkflowEvent,
+	WorkflowEventObserver,
 	WorkflowFunction,
 	WorkflowRef,
 	WorkflowRegistryInterface,

@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction } from "./types";
+import type { WorkflowEvent, WorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -972,6 +972,34 @@ describe("useWorkflow", () => {
 					expect.objectContaining({ type: "workflow_completed" }),
 				);
 			});
+		});
+	});
+
+	describe("onEvent observer (inline mode)", () => {
+		it("fires observer for each event during workflow execution", async () => {
+			const observed: Array<{ workflowId: string; event: WorkflowEvent }> = [];
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const { result } = renderHook(() =>
+				useWorkflow("obs-test", workflow, {
+					storage: new MemoryStorage(),
+					onEvent: (wid, event) => observed.push({ workflowId: wid, event }),
+				}),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+			});
+
+			const types = observed
+				.filter((o) => o.workflowId === "obs-test")
+				.map((o) => o.event.type);
+			expect(types).toContain("workflow_started");
+			expect(types).toContain("activity_scheduled");
+			expect(types).toContain("activity_completed");
+			expect(types).toContain("workflow_completed");
 		});
 	});
 });

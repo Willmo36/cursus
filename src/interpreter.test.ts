@@ -3090,4 +3090,62 @@ describe("Interpreter", () => {
 			expect(result).toBe("b:bee");
 		});
 	});
+
+	describe("Event observers", () => {
+		it("observer on EventLog receives all events from a workflow run", async () => {
+			const observed: import("./types").WorkflowEvent[] = [];
+			const log = new EventLog([], (event) => observed.push(event));
+
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			const types = observed.map((e) => e.type);
+			expect(types).toEqual([
+				"workflow_started",
+				"activity_scheduled",
+				"activity_completed",
+				"workflow_completed",
+			]);
+		});
+
+		it("observers array on Interpreter fires for child workflow events", async () => {
+			type ObservedEntry = {
+				workflowId: string;
+				event: import("./types").WorkflowEvent;
+			};
+			const observed: ObservedEntry[] = [];
+			const observer = (wid: string, event: import("./types").WorkflowEvent) =>
+				observed.push({ workflowId: wid, event });
+
+			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("childTask", async () => "child-result");
+			};
+
+			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.child("sub", childWorkflow);
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(
+				parentWorkflow,
+				log,
+				undefined,
+				undefined,
+				[observer],
+			);
+			await interpreter.run();
+
+			// Child events should have been observed with the child's workflow ID
+			const childEvents = observed.filter((o) => o.workflowId === "sub");
+			const childTypes = childEvents.map((o) => o.event.type);
+			expect(childTypes).toContain("workflow_started");
+			expect(childTypes).toContain("activity_scheduled");
+			expect(childTypes).toContain("activity_completed");
+			expect(childTypes).toContain("workflow_completed");
+		});
+	});
 });

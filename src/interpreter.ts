@@ -16,6 +16,7 @@ import {
 	type WorkflowCompletedEvent,
 	type WorkflowContext,
 	type WorkflowEvent,
+	type WorkflowEventObserver,
 	type WorkflowFailedEvent,
 	type WorkflowFunction,
 	type WorkflowRef,
@@ -72,17 +73,20 @@ export class Interpreter {
 	}> | null = null;
 	private _workflowId?: string;
 	private _activeChild: Interpreter | null = null;
+	private observers: WorkflowEventObserver[];
 
 	constructor(
 		workflowFn: AnyWorkflowFunction,
 		log: EventLog,
 		registry?: WorkflowRegistryInterface,
 		workflowId?: string,
+		observers?: WorkflowEventObserver[],
 	) {
 		this.workflowFn = workflowFn;
 		this.log = log;
 		this.registry = registry;
 		this._workflowId = workflowId;
+		this.observers = observers ?? [];
 		this.seq = 0;
 
 		// The context methods work with `unknown` internally; generic narrowing
@@ -864,8 +868,23 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 
-		const childLog = new EventLog();
-		const childInterpreter = new Interpreter(command.workflow, childLog);
+		const childName = command.name;
+		const childOnAppend =
+			this.observers.length > 0
+				? (event: WorkflowEvent) => {
+						for (const obs of this.observers) {
+							obs(childName, event);
+						}
+					}
+				: undefined;
+		const childLog = new EventLog([], childOnAppend);
+		const childInterpreter = new Interpreter(
+			command.workflow,
+			childLog,
+			undefined,
+			undefined,
+			this.observers,
+		);
 
 		this._activeChild = childInterpreter;
 		const unsub = childInterpreter.onStateChange(() => this.syncChildState());
@@ -1079,8 +1098,23 @@ export class Interpreter {
 					}));
 				}
 				case "child": {
-					const childLog = new EventLog();
-					const childInterpreter = new Interpreter(item.workflow, childLog);
+					const raceChildName = item.name;
+					const raceChildOnAppend =
+						this.observers.length > 0
+							? (event: WorkflowEvent) => {
+									for (const obs of this.observers) {
+										obs(raceChildName, event);
+									}
+								}
+							: undefined;
+					const childLog = new EventLog([], raceChildOnAppend);
+					const childInterpreter = new Interpreter(
+						item.workflow,
+						childLog,
+						undefined,
+						undefined,
+						this.observers,
+					);
 					state.childInterpreter = childInterpreter;
 
 					this._activeChild = childInterpreter;

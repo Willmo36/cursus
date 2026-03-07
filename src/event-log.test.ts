@@ -6,6 +6,56 @@ import { EventLog } from "./event-log";
 import type { WorkflowEvent } from "./types";
 
 describe("EventLog", () => {
+	describe("onAppend observer", () => {
+		it("calls onAppend for each appended event", () => {
+			const observed: WorkflowEvent[] = [];
+			const log = new EventLog([], (event) => observed.push(event));
+
+			const e1: WorkflowEvent = {
+				type: "workflow_started",
+				timestamp: 1,
+			};
+			const e2: WorkflowEvent = {
+				type: "workflow_completed",
+				result: "done",
+				timestamp: 2,
+			};
+			log.append(e1);
+			log.append(e2);
+
+			expect(observed).toEqual([e1, e2]);
+		});
+
+		it("does not call onAppend for initial events", () => {
+			const observed: WorkflowEvent[] = [];
+			const initial: WorkflowEvent[] = [
+				{ type: "workflow_started", timestamp: 1 },
+				{ type: "activity_scheduled", name: "fetch", seq: 1, timestamp: 2 },
+			];
+			const log = new EventLog(initial, (event) => observed.push(event));
+
+			expect(observed).toEqual([]);
+
+			const e: WorkflowEvent = {
+				type: "workflow_completed",
+				result: "ok",
+				timestamp: 3,
+			};
+			log.append(e);
+			expect(observed).toEqual([e]);
+		});
+
+		it("works without an onAppend callback", () => {
+			const log = new EventLog();
+			const event: WorkflowEvent = {
+				type: "workflow_started",
+				timestamp: 1,
+			};
+			log.append(event);
+			expect(log.events()).toEqual([event]);
+		});
+	});
+
 	it("starts empty", () => {
 		const log = new EventLog();
 		expect(log.events()).toEqual([]);

@@ -6,6 +6,7 @@ import { Interpreter } from "./interpreter";
 import type {
 	AnyWorkflowFunction,
 	WorkflowEvent,
+	WorkflowEventObserver,
 	WorkflowRegistryInterface,
 	WorkflowState,
 	WorkflowStorage,
@@ -31,12 +32,15 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 	private _storage: WorkflowStorage;
 	private workflowChangeListeners: Array<() => void> = [];
 	private deps = new Map<string, Set<string>>();
+	private observers: WorkflowEventObserver[];
 
 	constructor(
 		workflows: Record<string, AnyWorkflowFunction>,
 		storage: WorkflowStorage,
+		observers?: WorkflowEventObserver[],
 	) {
 		this._storage = storage;
+		this.observers = observers ?? [];
 		this.entries = new Map();
 		for (const [id, fn] of Object.entries(workflows)) {
 			this.entries.set(id, {
@@ -106,10 +110,24 @@ export class WorkflowRegistry implements WorkflowRegistryInterface {
 		if (entry.interpreter) return;
 
 		const events = await this._storage.load(id);
-		const log = new EventLog(events);
+		const onAppend =
+			this.observers.length > 0
+				? (event: WorkflowEvent) => {
+						for (const obs of this.observers) {
+							obs(id, event);
+						}
+					}
+				: undefined;
+		const log = new EventLog(events, onAppend);
 		let persistedCount = events.length;
 
-		const interpreter = new Interpreter(entry.fn, log, this, id);
+		const interpreter = new Interpreter(
+			entry.fn,
+			log,
+			this,
+			id,
+			this.observers,
+		);
 		entry.interpreter = interpreter;
 
 		const persistEvents = async () => {
