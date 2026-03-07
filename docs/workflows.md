@@ -22,6 +22,7 @@ The type parameters are:
 | `SignalMap` | `Record<string, unknown>` | Maps signal names to payload types |
 | `WorkflowMap` | `Record<string, never>` | Maps workflow IDs to result types (for cross-workflow deps) |
 | `QueryMap` | `Record<string, never>` | Maps query names to return types |
+| `PublishType` | `never` | The type of value this workflow can publish (uncallable when `never`) |
 
 ## Activities
 
@@ -202,6 +203,36 @@ const count = query("count"); // reactive, updates on state changes
 ```
 
 Queries are not persisted — they're computed from the live workflow state.
+
+## Publish
+
+`publish` lets a workflow provide a value to consumers while continuing to run. This is useful for long-lived workflows that produce an intermediate result — like a session workflow that publishes the user account on login but keeps running to handle revocation.
+
+```ts
+const sessionWorkflow: WorkflowFunction<
+  void,
+  { login: { user: string } },
+  Record<string, never>,
+  Record<string, never>,
+  { user: string } // PublishType — 5th type parameter
+> = function* (ctx) {
+  const { user } = yield* ctx.waitFor("login");
+  yield* ctx.publish({ user });
+
+  // Workflow keeps running after publish
+  yield* ctx.waitFor("login"); // wait for re-auth, revocation, etc.
+};
+```
+
+When a workflow publishes:
+
+- All current `waitForWorkflow` callers resolve immediately with the published value
+- Future `waitForWorkflow` calls return the published value without waiting
+- The workflow generator continues executing
+
+The 5th type parameter on `WorkflowFunction` controls the publish type. When omitted (defaults to `never`), `ctx.publish` is uncallable — you get a type error if you try to use it.
+
+On replay, the publish event replays from the event log without calling the registry.
 
 ## Error Handling
 

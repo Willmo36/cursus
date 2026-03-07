@@ -127,7 +127,8 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | Method | Description |
 |--------|-------------|
 | `start(id)` | Start a workflow. Idempotent. |
-| `waitFor<T>(id, options?)` | Wait for a workflow's result. Auto-starts by default. |
+| `waitFor<T>(id, options?)` | Wait for a workflow's result (or published value). Auto-starts by default. |
+| `publish(id, value)` | Mark a workflow as published and resolve all waiters. |
 | `reset(id)` | Cancel, clear storage, allow restart. |
 | `signal(id, name, payload?)` | Send a signal to a running workflow. |
 | `getState(id)` | Get current `WorkflowState`. |
@@ -189,8 +190,8 @@ Returns `true` if storage was wiped due to version mismatch. No-op when version 
 ### WorkflowFunction
 
 ```ts
-type WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap> = (
-  ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap>,
+type WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap, PublishType = never> = (
+  ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
 ) => Generator<Command, T, unknown>;
 ```
 
@@ -211,6 +212,7 @@ type WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap> = (
 | `query` | `(name, handler) => void` | Register a query handler |
 | `waitForWorkflow` | `(id, options?) => Generator` | Wait for a workflow dependency |
 | `workflow` | `(id) => WorkflowRef` | Create a typed workflow reference |
+| `publish` | `(value) => Generator` | Resolve waiters without completing (requires `PublishType`) |
 
 ### WorkflowState
 
@@ -240,6 +242,7 @@ Thrown into the generator when a workflow is cancelled.
 type WorkflowRegistryInterface = {
   waitFor<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
   start(workflowId: string): Promise<void>;
+  publish(workflowId: string, value: unknown): void;
 };
 ```
 
@@ -359,4 +362,5 @@ These are the internal command types yielded by workflow generators. Exported fo
 | `ChildCommand` | Child workflow delegation |
 | `WaitForWorkflowCommand` | Cross-workflow dependency |
 | `RaceCommand` | Race branches |
+| `PublishCommand` | Publish a value to waiters |
 | `Command` | Union of all command types |

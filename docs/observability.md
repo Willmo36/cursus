@@ -72,6 +72,7 @@ Every workflow operation produces one or more events:
 | `workflow_dependency_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Dependency failed |
 | `race_started` | `seq`, `items`, `timestamp` | Race begins |
 | `race_completed` | `seq`, `winner`, `value`, `timestamp` | Race resolved |
+| `workflow_published` | `value`, `seq`, `timestamp` | Workflow published a value |
 
 ## useWorkflowEvents
 

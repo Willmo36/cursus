@@ -88,6 +88,38 @@ The third type parameter (`WorkflowMap`) declares which workflows this one can d
 
 `waitForWorkflow` auto-starts the target workflow if it hasn't been started yet. If it's already completed, the result is returned immediately.
 
+### Publish + waitForWorkflow
+
+For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `waitForWorkflow` get the published value immediately:
+
+```ts
+const sessionWorkflow: WorkflowFunction<
+  void,
+  { login: { user: string } },
+  Record<string, never>,
+  Record<string, never>,
+  { user: string }
+> = function* (ctx) {
+  const { user } = yield* ctx.waitFor("login");
+  yield* ctx.publish({ user });
+  // keeps running — handles revocation, tier changes, etc.
+  yield* ctx.waitFor("login");
+};
+
+const checkoutWorkflow: WorkflowFunction<
+  string,
+  Record<string, unknown>,
+  { session: { user: string } }
+> = function* (ctx) {
+  const account = yield* ctx.waitForWorkflow("session");
+  return yield* ctx.activity("place-order", async () => {
+    return `order for ${account.user}`;
+  });
+};
+```
+
+Resolution order for `waitForWorkflow`: published → completed → failed → wait.
+
 ## Workflow References in waitForAll
 
 You can mix signals and workflow dependencies in `waitForAll`:
