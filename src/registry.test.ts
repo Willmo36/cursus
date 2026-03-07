@@ -956,4 +956,166 @@ describe("WorkflowRegistry", () => {
 		// Should NOT have received the completed notification
 		expect(states).not.toContain("completed");
 	});
+
+	describe("publish", () => {
+		it("publish() resolves existing waiters", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				// Keep running — don't return yet
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+
+			// Start session workflow (it will wait for login)
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Add a waiter before publishing
+			let waiterResult: unknown;
+			const waiterPromise = registry.waitFor("session", { start: false }).then((r) => {
+				waiterResult = r;
+			});
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Send login signal to trigger publish
+			registry.signal("session", "login", { user: "max" });
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(waiterResult).toEqual({ user: "max" });
+		});
+
+		it("waitFor returns published value immediately after publish", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Send login — triggers publish
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			// After publish, new waitFor should resolve immediately
+			const result = await registry.waitFor("session", { start: false });
+			expect(result).toEqual({ user: "max" });
+		});
+
+		it("waitFor returns completed value for non-publishing workflows", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+
+			const result = await registry.waitFor<string>("greet");
+			expect(result).toBe("hello");
+		});
+
+		it("integration: waitForWorkflow gets published value from another workflow", async () => {
+			const sessionWorkflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const checkoutWorkflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ session: { user: string } }
+			> = function* (ctx) {
+				const account = yield* ctx.waitForWorkflow("session");
+				return `checkout for ${account.user}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ session: sessionWorkflow, checkout: checkoutWorkflow },
+				storage,
+			);
+
+			// Start session
+			const sessionPromise = registry.start("session");
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Login
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Start checkout — should get published value immediately
+			const checkoutPromise = registry.start("checkout");
+			await new Promise((r) => setTimeout(r, 10));
+
+			const result = await registry.waitFor<string>("checkout");
+			expect(result).toBe("checkout for max");
+		});
+
+		it("reset clears published state", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Published — waitFor should resolve immediately
+			const r1 = await registry.waitFor("session", { start: false });
+			expect(r1).toEqual({ user: "max" });
+
+			// Reset
+			await registry.reset("session");
+
+			// After reset, waitFor should not resolve immediately
+			let resolved = false;
+			registry
+				.waitFor("session", { start: false })
+				.then(() => { resolved = true; });
+			await new Promise((r) => setTimeout(r, 20));
+			expect(resolved).toBe(false);
+		});
+	});
 });

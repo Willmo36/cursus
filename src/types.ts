@@ -87,6 +87,12 @@ export type WaitForWorkflowCommand = {
 	seq: number;
 };
 
+export type PublishCommand = {
+	type: "publish";
+	value: unknown;
+	seq: number;
+};
+
 export type RaceCommand = {
 	type: "race";
 	items: Command[];
@@ -102,7 +108,8 @@ export type Command =
 	| ParallelCommand
 	| ChildCommand
 	| WaitForWorkflowCommand
-	| RaceCommand;
+	| RaceCommand
+	| PublishCommand;
 
 // --- Events (recorded in the event log) ---
 
@@ -217,6 +224,13 @@ export type WorkflowDependencyFailedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowPublishedEvent = {
+	type: "workflow_published";
+	value: unknown;
+	seq: number;
+	timestamp: number;
+};
+
 export type RaceStartedEvent = {
 	type: "race_started";
 	seq: number;
@@ -266,6 +280,7 @@ export type WorkflowEvent =
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyCompletedEvent
 	| WorkflowDependencyFailedEvent
+	| WorkflowPublishedEvent
 	| RaceStartedEvent
 	| RaceCompletedEvent
 	| WorkflowCompletedEvent
@@ -281,13 +296,16 @@ export type WorkflowFunction<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 	QueryMap extends Record<string, unknown> = Record<string, never>,
-> = (ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap>) => Workflow<T>;
+	PublishType = never,
+> = (
+	ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
+) => Workflow<T>;
 
 // Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
 // Uses `any` for SignalMap/WorkflowMap to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
-export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any>;
+export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any, any>;
 
 export type WorkflowState =
 	| "running"
@@ -304,6 +322,7 @@ export type WorkflowRegistryInterface = {
 		options?: { start?: boolean; caller?: string },
 	): Promise<T>;
 	start(workflowId: string): Promise<void>;
+	publish(workflowId: string, value: unknown): void;
 };
 
 // --- Context (provided to workflow generators) ---
@@ -312,9 +331,10 @@ export type OnHandlers<
 	SignalMap extends Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown>,
 	QueryMap extends Record<string, unknown>,
+	PublishType = never,
 > = {
 	[K in keyof SignalMap & string]?: (
-		ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap>,
+		ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
 		payload: SignalMap[K],
 	) => Generator<Command, void, unknown>;
 };
@@ -323,6 +343,7 @@ export type WorkflowContext<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 	QueryMap extends Record<string, unknown> = Record<string, never>,
+	PublishType = never,
 > = {
 	query: <K extends keyof QueryMap & string>(
 		name: K,
@@ -347,7 +368,7 @@ export type WorkflowContext<
 		unknown
 	>;
 	on: <T>(
-		handlers: OnHandlers<SignalMap, WorkflowMap, QueryMap>,
+		handlers: OnHandlers<SignalMap, WorkflowMap, QueryMap, PublishType>,
 	) => Generator<Command, T, unknown>;
 	done: <T>(value: T) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
@@ -403,6 +424,7 @@ export type WorkflowContext<
 	workflow: <K extends keyof WorkflowMap & string>(
 		id: K,
 	) => WorkflowRef<WorkflowMap[K]>;
+	publish: (value: PublishType) => Generator<Command, void, unknown>;
 };
 
 // Internal context type for the interpreter. Matches WorkflowContext structurally
@@ -450,6 +472,7 @@ export type InternalWorkflowContext = {
 		options?: { start?: boolean },
 	) => Generator<Command, unknown, unknown>;
 	workflow: (id: string) => WorkflowRef;
+	publish: (value: unknown) => Generator<Command, void, unknown>;
 };
 
 // --- Observers ---

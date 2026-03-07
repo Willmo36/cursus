@@ -546,6 +546,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -578,6 +579,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("profile-data"),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -654,6 +656,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -707,6 +710,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockReturnValue(workflowPromise),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -742,6 +746,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -763,6 +768,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -799,6 +805,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -820,6 +827,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -875,6 +883,7 @@ describe("Interpreter", () => {
 					return secondPromise;
 				}),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -934,6 +943,7 @@ describe("Interpreter", () => {
 					return secondPromise;
 				}),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -978,6 +988,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1442,6 +1453,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("login-result"),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1466,6 +1478,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("result"),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1504,6 +1517,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("user-data"),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1540,6 +1554,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1576,6 +1591,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1620,6 +1636,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -1655,6 +1672,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn(),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const wf: WorkflowFunction<
@@ -2868,6 +2886,7 @@ describe("Interpreter", () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitFor: vi.fn().mockResolvedValue("workflow-result"),
 				start: vi.fn(),
+				publish: vi.fn(),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3243,6 +3262,163 @@ describe("Interpreter", () => {
 			expect(childTypes).toContain("activity_scheduled");
 			expect(childTypes).toContain("activity_completed");
 			expect(childTypes).toContain("workflow_completed");
+		});
+	});
+
+	describe("Phase L: publish", () => {
+		it("records workflow_published event", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("account-123");
+				return "done";
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(
+				workflow,
+				log,
+				mockRegistry,
+				"session",
+			);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_published",
+					value: "account-123",
+					seq: 1,
+				}),
+			);
+		});
+
+		it("calls registry.publish with workflow ID and value", async () => {
+			const publishFn = vi.fn();
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+				publish: publishFn,
+			};
+
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("account-123");
+				return "done";
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+				"session",
+			);
+			await interpreter.run();
+
+			expect(publishFn).toHaveBeenCalledWith("session", "account-123");
+		});
+
+		it("workflow continues executing after publish", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("account-123");
+				const result = yield* ctx.activity("doMore", async () => "extra");
+				return result;
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+				"session",
+			);
+			const result = await interpreter.run();
+
+			expect(result).toBe("extra");
+			expect(interpreter.state).toBe("completed");
+		});
+
+		it("replays publish from event log without calling registry", async () => {
+			const publishFn = vi.fn();
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				start: vi.fn(),
+				publish: publishFn,
+			};
+
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("account-123");
+				return "done";
+			};
+
+			// Pre-populate log with the publish event (replay scenario)
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{ type: "workflow_published", value: "account-123", seq: 1, timestamp: 2 },
+				{ type: "workflow_completed", result: "done", timestamp: 3 },
+			]);
+
+			const interpreter = new Interpreter(
+				workflow,
+				log,
+				mockRegistry,
+				"session",
+			);
+			await interpreter.run();
+
+			expect(publishFn).not.toHaveBeenCalled();
+		});
+
+		it("throws without registry", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("account-123");
+				return "done";
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toContain("publish requires a WorkflowRegistry");
 		});
 	});
 });

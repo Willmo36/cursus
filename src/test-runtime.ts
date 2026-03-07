@@ -50,6 +50,7 @@ export async function createTestRuntime<
 				return workflowResults[workflowId] as R;
 			},
 			async start(): Promise<void> {},
+			publish() {},
 		};
 	}
 
@@ -85,7 +86,8 @@ export async function createTestRuntime<
 							Record<string, unknown>
 						>,
 					);
-					return yield* (workflow as AnyWorkflowFunction)(wrappedChildCtx);
+					// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
+				return yield* (workflow as AnyWorkflowFunction)(wrappedChildCtx as any);
 				};
 				return ctx.child(name, wrappedChild);
 			},
@@ -95,7 +97,8 @@ export async function createTestRuntime<
 	// Wrap the workflow to intercept activity calls with mocks
 	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
 		const wrappedCtx = wrapContext(ctx);
-		return yield* (workflowFn as AnyWorkflowFunction)(wrappedCtx);
+		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
+		return yield* (workflowFn as AnyWorkflowFunction)(wrappedCtx as any);
 	};
 
 	const log = new EventLog();

@@ -254,6 +254,12 @@ export class Interpreter {
 			workflow: (id: string): WorkflowRef => {
 				return { __brand: "WorkflowRef", workflow: id } as WorkflowRef;
 			},
+			publish: (value: unknown) => {
+				const seq = ++this.seq;
+				return (function* (): Generator<Command, void, unknown> {
+					yield { type: "publish" as const, value, seq };
+				})();
+			},
 		};
 	}
 
@@ -501,7 +507,8 @@ export class Interpreter {
 		// InternalWorkflowContext is structurally identical to WorkflowContext at
 		// runtime. The only gap is waitForAll's mapped-tuple return type which TS
 		// can't unify with `unknown` for a generic K — a known TS limitation.
-		const gen = this.workflowFn(this.context as unknown as WorkflowContext);
+		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary between InternalWorkflowContext and user-facing WorkflowContext
+		const gen = this.workflowFn(this.context as any);
 
 		try {
 			let next = gen.next();
@@ -570,6 +577,8 @@ export class Interpreter {
 				return this.executeWaitForWorkflow(command);
 			case "race":
 				return this.executeRace(command);
+			case "publish":
+				return this.executePublish(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -1002,6 +1011,34 @@ export class Interpreter {
 		}
 	}
 
+	private async executePublish(
+		command: Extract<Command, { type: "publish" }>,
+	): Promise<void> {
+		// Replay path
+		const existing = this.log.findCompleted(
+			command.seq,
+			"workflow_published",
+		);
+		if (existing) {
+			return;
+		}
+
+		// Live: require registry
+		if (!this.registry) {
+			throw new Error(
+				"publish requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
+			);
+		}
+
+		this.registry.publish(this._workflowId!, command.value);
+		this.log.append({
+			type: "workflow_published",
+			value: command.value,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+	}
+
 	private async executeRace(
 		command: Extract<Command, { type: "race" }>,
 	): Promise<{ winner: number; value: unknown }> {
@@ -1154,6 +1191,11 @@ export class Interpreter {
 						index,
 						value,
 					}));
+				}
+				case "publish": {
+					throw new Error(
+						"publish cannot be used inside a race branch",
+					);
 				}
 				default: {
 					const _exhaustive: never = item;

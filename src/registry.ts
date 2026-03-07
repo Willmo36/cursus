@@ -20,6 +20,8 @@ type WorkflowEntry = {
 	completed: boolean;
 	failed: boolean;
 	error?: string;
+	published: boolean;
+	publishedValue?: unknown;
 	observed: boolean;
 	waiters: Array<{
 		resolve: (value: unknown) => void;
@@ -54,6 +56,7 @@ export class WorkflowRegistry<
 				fn,
 				completed: false,
 				failed: false,
+				published: false,
 				observed: false,
 				waiters: [],
 				listeners: [],
@@ -201,6 +204,11 @@ export class WorkflowRegistry<
 		const shouldStart = options?.start ?? true;
 		const caller = options?.caller;
 
+		// Already published (workflow still running but has a value for consumers)
+		if (entry.published) {
+			return entry.publishedValue as T;
+		}
+
 		// Already completed
 		if (entry.completed) {
 			return entry.result as T;
@@ -233,6 +241,16 @@ export class WorkflowRegistry<
 		});
 	}
 
+	publish(id: string, value: unknown): void {
+		const entry = this.getEntry(id);
+		entry.published = true;
+		entry.publishedValue = value;
+		for (const waiter of entry.waiters) {
+			waiter.resolve(value);
+		}
+		entry.waiters = [];
+	}
+
 	async reset(id: string): Promise<void> {
 		const entry = this.getEntry(id);
 
@@ -240,6 +258,8 @@ export class WorkflowRegistry<
 		entry.interpreter = undefined;
 		entry.completed = false;
 		entry.failed = false;
+		entry.published = false;
+		entry.publishedValue = undefined;
 		entry.result = undefined;
 		entry.error = undefined;
 		this.removeDependency(id);
@@ -291,6 +311,7 @@ export class WorkflowRegistry<
 			interpreter,
 			completed: false,
 			failed: false,
+			published: false,
 			observed: true,
 			waiters: [],
 			listeners: [],
