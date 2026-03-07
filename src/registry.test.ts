@@ -803,7 +803,7 @@ describe("WorkflowRegistry", () => {
 				{ greet: workflow },
 				storage,
 				undefined,
-				{ greet: 1 },
+				{ greet: 1, },
 			);
 			await registry.start("greet");
 

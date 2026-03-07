@@ -1,0 +1,217 @@
+---
+sidebar_position: 2
+---
+
+# Workflows
+
+A workflow is a generator function that yields commands through the `WorkflowContext`. Every `yield*` is a durable checkpoint — the engine records events so it can replay past steps on reload without re-executing them.
+
+```ts
+import type { WorkflowFunction } from "react-workflow";
+
+const myWorkflow: WorkflowFunction<ResultType, SignalMap, WorkflowMap, QueryMap> = function* (ctx) {
+  // ...
+};
+```
+
+The type parameters are:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `ResultType` | required | The workflow's return type |
+| `SignalMap` | `Record<string, unknown>` | Maps signal names to payload types |
+| `WorkflowMap` | `Record<string, never>` | Maps workflow IDs to result types (for cross-workflow deps) |
+| `QueryMap` | `Record<string, never>` | Maps query names to return types |
+
+## Activities
+
+Activities are async side effects — API calls, computations, anything that shouldn't run twice on replay.
+
+```ts
+const result = yield* ctx.activity("fetch-user", async (signal) => {
+  const res = await fetch("/api/user", { signal });
+  return res.json();
+});
+```
+
+The activity function receives an `AbortSignal` that fires on workflow cancellation.
+
+On replay, the engine returns the stored result without calling the function again.
+
+## Signals
+
+Signals are how the UI pushes data into the workflow. The workflow pauses until the signal arrives.
+
+### waitFor
+
+Wait for a single named signal:
+
+```ts
+const email = yield* ctx.waitFor<string>("email");
+```
+
+### waitForAll
+
+Wait for multiple signals (and/or workflow results) to all arrive. Returns a tuple in order:
+
+```ts
+const [email, password] = yield* ctx.waitForAll("email", "password");
+```
+
+You can mix signals with workflow references (see [Layers](./layers.md)):
+
+```ts
+const [payment, profile] = yield* ctx.waitForAll(
+  "payment",
+  ctx.workflow("profile"),
+);
+```
+
+### waitForAny
+
+Wait for the first of several signals. Returns which signal fired:
+
+```ts
+const { signal, payload } = yield* ctx.waitForAny("accept", "reject");
+
+if (signal === "accept") {
+  // ...
+}
+```
+
+## Sleep
+
+Pause the workflow for a duration. Durable — survives page reloads:
+
+```ts
+yield* ctx.sleep(5000); // 5 seconds
+```
+
+## Parallel
+
+Run multiple activities concurrently. All must complete:
+
+```ts
+const [users, posts] = yield* ctx.parallel([
+  { name: "fetch-users", fn: async () => fetchUsers() },
+  { name: "fetch-posts", fn: async () => fetchPosts() },
+]);
+```
+
+## Child Workflows
+
+Delegate to a sub-workflow via `yield*`. The child runs in the same interpreter with its own event log scope:
+
+```ts
+const childResult = yield* ctx.child("validate", validationWorkflow);
+```
+
+Activity mocks propagate into children during testing.
+
+## Race
+
+Race multiple branches — the first to complete wins, others are discarded:
+
+```ts
+const { winner, value } = yield* ctx.race(
+  ctx.activity("fetch", async (signal) => {
+    const res = await fetch("/api/slow", { signal });
+    return res.json();
+  }),
+  ctx.sleep(5000),
+);
+
+if (winner === 0) {
+  // fetch won
+} else {
+  // timeout
+}
+```
+
+The losing branch's `AbortSignal` is triggered, so you can clean up in-flight requests.
+
+## Signal Loops with on/done
+
+For workflows that handle multiple signals in a loop (like a shopping cart), use `on` with `done`:
+
+```ts
+const finalCount = yield* ctx.on<number>({
+  increment: function* () {
+    count++;
+  },
+  decrement: function* () {
+    count--;
+  },
+  checkout: function* (ctx) {
+    yield* ctx.done(count);
+  },
+});
+```
+
+`on` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `ctx.done(value)`, which terminates the loop and returns the value.
+
+## Queries
+
+Queries let the UI read workflow-internal state without signals:
+
+```ts
+const workflow: WorkflowFunction<string, SignalMap, never, { count: number }> =
+  function* (ctx) {
+    let count = 0;
+    ctx.query("count", () => count);
+
+    // count changes as the workflow progresses...
+    count++;
+    const data = yield* ctx.waitFor("submit");
+    count++;
+    return data;
+  };
+```
+
+The UI reads it via the hook:
+
+```tsx
+const { query } = useWorkflow("my-wf", workflow);
+const count = query("count"); // reactive, updates on state changes
+```
+
+Queries are not persisted — they're computed from the live workflow state.
+
+## Error Handling
+
+Workflows support standard try/catch. If an activity throws, the error propagates through the generator:
+
+```ts
+try {
+  const data = yield* ctx.activity("risky", async () => {
+    throw new Error("boom");
+  });
+} catch (err) {
+  const fallback = yield* ctx.activity("recover", async () => "safe value");
+  return fallback;
+}
+```
+
+Uncaught errors put the workflow in the `"failed"` state with the error message available via `useWorkflow().error`.
+
+## Cancellation
+
+Workflows can be cancelled programmatically. In-flight activities receive an abort signal:
+
+```ts
+const { cancel } = useWorkflow("my-wf", workflow);
+
+// Later:
+cancel();
+```
+
+A cancelled workflow enters the `"cancelled"` state. You can catch `CancelledError` inside the workflow if you need cleanup logic.
+
+## Type Safety
+
+`WorkflowFunction` is fully generic. TypeScript enforces that:
+
+- `signal("name", payload)` matches your `SignalMap`
+- `waitForWorkflow("id")` matches your `WorkflowMap`
+- `query("name")` matches your `QueryMap`
+- The return type flows through to `useWorkflow().result`

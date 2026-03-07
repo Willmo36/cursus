@@ -8,6 +8,8 @@ Durable workflows for React, inspired by [Temporal](https://temporal.io). Write 
 npm install react-workflow
 ```
 
+Requires React 18+.
+
 ## Quick Example
 
 Define a workflow as a generator function:
@@ -73,6 +75,24 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Composable** — `yield*` delegates to sub-workflows. Multi-step wizards are just function calls.
 - **Testable** — the generator doesn't know how commands get executed. Swap in mocks with `createTestRuntime`.
 
+## Features
+
+- **Durable execution** — event-sourced replay survives page reloads
+- **Signals** — `waitFor`, `waitForAll`, `waitForAny` for UI-to-workflow communication
+- **Activities** — async side effects with automatic replay skipping
+- **Timers** — durable `sleep` that survives reloads
+- **Parallel & Race** — concurrent activities and first-to-complete racing
+- **Child workflows** — compose via `yield*` delegation
+- **Cross-workflow dependencies** — `waitForWorkflow` with circular dependency detection
+- **Signal loops** — `on`/`done` for long-running interactive workflows
+- **Queries** — read workflow-internal state from the UI
+- **Layers** — share workflows across the component tree via React context
+- **Versioning** — version-stamp workflows to detect and wipe stale event logs
+- **Resilience** — `withRetry`, `withCircuitBreaker`, composable `wrapActivity`
+- **Testing** — `createTestRuntime` with mock activities and pre-queued signals
+- **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
+- **Type-safe** — fully generic `WorkflowFunction` with typed signals, queries, and workflow deps
+
 ## API Overview
 
 ### Workflow Context
@@ -86,6 +106,7 @@ Commands available inside a workflow generator via `ctx`:
 | `waitForAny(...signals)` | Pause until any of several signals arrives. |
 | `waitForAll(...items)` | Wait for multiple signals and/or workflow results in parallel. |
 | `sleep(ms)` | Durable timer — survives page reload. |
+| `parallel(activities)` | Run multiple activities concurrently. |
 | `child(name, fn)` | Run a nested sub-workflow with its own event log. |
 | `waitForWorkflow(id)` | Block until another registered workflow completes. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |
@@ -96,15 +117,17 @@ Commands available inside a workflow generator via `ctx`:
 
 ```ts
 const {
-  state,        // "running" | "waiting" | "completed" | "failed" | "cancelled"
-  result,       // T | undefined
-  error,        // string | undefined
-  waitingFor,   // current signal name, if waiting
-  signal,       // (name, payload) => void — send data into the workflow
-  query,        // (name) => value — read live query state
-  cancel,       // () => void — cancel with AbortSignal propagation
-  reset,        // () => void — clear event log and restart
-} = useWorkflow(id, workflowFn, { storage });
+  state,          // "running" | "waiting" | "completed" | "failed" | "cancelled"
+  result,         // T | undefined
+  error,          // string | undefined
+  waitingFor,     // current signal name, if waiting on waitFor
+  waitingForAll,  // signal names, if waiting on waitForAll
+  waitingForAny,  // signal names, if waiting on waitForAny
+  signal,         // (name, payload) => void — send data into the workflow
+  query,          // (name) => value — read live query state
+  cancel,         // () => void — cancel with AbortSignal propagation
+  reset,          // () => void — clear event log and restart
+} = useWorkflow(id, workflowFn, { storage, version?, onEvent? });
 ```
 
 ### Cross-Workflow Dependencies
@@ -117,6 +140,7 @@ import { createLayer, WorkflowLayerProvider, useWorkflow } from "react-workflow"
 const layer = createLayer(
   { profile: profileWorkflow, checkout: checkoutWorkflow },
   new LocalStorage(),
+  { versions: { checkout: 2 } },  // optional versioning
 );
 
 function App() {
@@ -137,7 +161,7 @@ function* (ctx) {
 
 Circular dependencies are detected and throw immediately with a descriptive error.
 
-### Retry
+### Resilience
 
 Wrap any activity function with automatic retry and backoff:
 
@@ -154,9 +178,7 @@ const result = yield* ctx.activity(
 );
 ```
 
-### Circuit Breaker
-
-Fail fast when an activity is repeatedly failing:
+Fail fast when a service is repeatedly failing:
 
 ```ts
 import { withCircuitBreaker } from "react-workflow";
@@ -164,8 +186,8 @@ import { withCircuitBreaker } from "react-workflow";
 const result = yield* ctx.activity(
   "fetchData",
   withCircuitBreaker(async (signal) => fetch("/api/data", { signal }), {
-    failureThreshold: 5,   // failures before opening (default: 5)
-    resetTimeoutMs: 30000,  // ms before probing again (default: 30000)
+    failureThreshold: 5,
+    resetTimeoutMs: 30000,
   }),
 );
 ```
@@ -176,14 +198,12 @@ Compose multiple wrappers with `wrapActivity`:
 import { withRetry, withCircuitBreaker, wrapActivity } from "react-workflow";
 
 const resilient = wrapActivity(
-  withRetry({ maxAttempts: 3, backoff: "exponential" }),
-  withCircuitBreaker({ failureThreshold: 5 }),
+  withCircuitBreaker,  // outer
+  withRetry,           // inner
 );
 
 const result = yield* ctx.activity("fetchData", resilient(fetchData));
 ```
-
-Wrappers apply left-to-right: retry wraps circuit breaker wraps the raw function.
 
 ### Testing
 
@@ -212,21 +232,35 @@ expect(result).toEqual({ displayName: "Alice" });
 | `MemoryStorage` | Tests, ephemeral workflows |
 | Custom `WorkflowStorage` | Implement `load`, `append`, `compact`, `clear` for any backend |
 
+## Documentation
+
+- [Getting Started](./docs/getting-started.md)
+- [Workflows](./docs/workflows.md) — the `WorkflowContext` API
+- [Layers](./docs/layers.md) — shared workflows and cross-workflow dependencies
+- [Storage](./docs/storage.md) — persistence and versioning
+- [Testing](./docs/testing.md) — `createTestRuntime`
+- [Resilience](./docs/resilience.md) — retry and circuit breaker
+- [Observability](./docs/observability.md) — event observers and debug panel
+- [API Reference](./docs/api-reference.md) — exhaustive type and export reference
+
 ## Examples
 
 The `examples/` directory contains runnable Vite apps:
 
-- **login** — credential validation with retry loop
-- **sso-login** — OAuth-style token exchange
-- **wizard** — sequential multi-step form
-- **job-application** — nested child workflows
-- **checkout** — cross-workflow dependencies
-- **shop** — real HTTP with error simulation
-- **chat-room** — long-running workflow with repeated signals
-- **cookie-banner** — result derived from event history
-- **env-config** — workflow as environment provider
-- **error-recovery** — dependency failure handling
-- **race** — fetch-with-timeout pattern
+| Example | Demonstrates |
+|---------|-------------|
+| `login` | Credential validation with retry loop |
+| `sso-login` | OAuth-style token exchange |
+| `wizard` | Sequential multi-step form |
+| `job-application` | Nested child workflows |
+| `checkout` | Cross-workflow dependencies with `waitForAll` |
+| `shop` | Multi-workflow layer with queries and error simulation |
+| `chat-room` | Long-running `on`/`done` loop |
+| `cookie-banner` | Result derived from event history |
+| `env-config` | Workflow as environment provider |
+| `error-recovery` | `withRetry` and dependency failure handling |
+| `race` | Fetch-with-timeout via `race` |
+| `opentelemetry` | Event observer integration |
 
 ```
 cd examples/login
