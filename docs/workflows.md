@@ -234,6 +234,13 @@ The 5th type parameter on `WorkflowFunction` controls the publish type. When omi
 
 On replay, the publish event replays from the event log without calling the registry.
 
+### When to use `return` vs `publish`
+
+- **Does your workflow have a definitive end state?** Use `return`. The workflow completes and consumers get the final value via `waitForWorkflow` or `useWorkflow().result`.
+- **Does your workflow need to provide a value but keep running?** Use `publish`. Consumers get the value immediately via `waitForWorkflow`, and the workflow continues handling signals (upgrades, revocation, live updates, etc.).
+- **Can you publish multiple times?** Yes. Each `yield* ctx.publish(value)` updates the value for future `waitForWorkflow` callers and resolves any currently waiting consumers.
+- **Can a workflow both publish and return?** Yes. `publish` provides an intermediate value while the workflow is alive. `return` ends the workflow. Once a workflow returns, `waitForWorkflow` resolves with the published value (if any) or the completed value.
+
 ## Error Handling
 
 Workflows support standard try/catch. If an activity throws, the error propagates through the generator:
