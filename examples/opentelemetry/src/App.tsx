@@ -1,6 +1,6 @@
 // ABOUTME: UI for the opentelemetry example showing a traced checkout workflow.
 // ABOUTME: Each workflow event creates an OTel span visible in the browser console.
-import { useWorkflow, WorkflowDebugPanel } from "react-workflow";
+import { useWorkflow } from "react-workflow";
 import { storage } from "./storage";
 import { tracingObserver } from "./tracing";
 import type { OrderResult } from "./workflows";
@@ -8,31 +8,23 @@ import { checkoutWorkflow } from "./workflows";
 
 export function App() {
 	return (
-		<>
-			<div
-				style={{ maxWidth: 520, margin: "40px auto", fontFamily: "system-ui" }}
-			>
-				<h1>OpenTelemetry Tracing</h1>
-				<p style={{ color: "#666" }}>
-					Open the browser console to see OTel spans as each workflow event
-					fires.
-				</p>
-				<hr
-					style={{
-						margin: "24px 0",
-						border: "none",
-						borderTop: "1px solid #ddd",
-					}}
-				/>
-				<Checkout />
-			</div>
-			<WorkflowDebugPanel
-				onClear={async () => {
-					await storage.clear("checkout");
-					window.location.reload();
+		<div
+			style={{ maxWidth: 520, margin: "40px auto", fontFamily: "system-ui" }}
+		>
+			<h1>OpenTelemetry Tracing</h1>
+			<p style={{ color: "#666" }}>
+				Open the browser console to see OTel spans as each workflow event
+				fires.
+			</p>
+			<hr
+				style={{
+					margin: "24px 0",
+					border: "none",
+					borderTop: "1px solid #ddd",
 				}}
 			/>
-		</>
+			<Checkout />
+		</div>
 	);
 }
 
