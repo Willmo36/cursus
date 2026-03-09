@@ -1118,6 +1118,69 @@ describe("WorkflowRegistry", () => {
 			await new Promise((r) => setTimeout(r, 20));
 			expect(resolved).toBe(false);
 		});
+
+		it("compaction preserves workflow_published event alongside terminal event", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				return `done for ${user}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+			registry.signal("session", "login", { user: "max" });
+			await startPromise;
+
+			// After compaction, storage should have both published and terminal events
+			const events = await storage.load("session");
+			expect(events).toHaveLength(2);
+			expect(events[0]).toMatchObject({
+				type: "workflow_published",
+				value: { user: "max" },
+			});
+			expect(events[1]).toMatchObject({
+				type: "workflow_completed",
+				result: "done for max",
+			});
+		});
+
+		it("reload from compacted storage restores published state for waitFor", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				return `done for ${user}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry1 = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry1.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+			registry1.signal("session", "login", { user: "max" });
+			await startPromise;
+
+			// Create a fresh registry loading from the same (compacted) storage
+			const registry2 = new WorkflowRegistry({ session: workflow }, storage);
+			const result = await registry2.waitFor<{ user: string }>("session");
+
+			// waitFor should return the published value, not the completed value
+			expect(result).toEqual({ user: "max" });
+		});
 	});
 
 	describe("getTrace", () => {

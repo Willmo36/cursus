@@ -164,9 +164,17 @@ export class WorkflowRegistry<
 		// Persist final events
 		await persistEvents();
 
-		// Compact storage for terminal workflows — only the terminal event matters on reload
+		// Compact storage for terminal workflows — keep published + terminal events for reload
 		if (interpreter.state === "completed" || interpreter.state === "failed") {
 			const allEvents = log.events();
+			const compacted: WorkflowEvent[] = [];
+			const publishedEvent = allEvents
+				.slice()
+				.reverse()
+				.find((e) => e.type === "workflow_published");
+			if (publishedEvent) {
+				compacted.push(publishedEvent);
+			}
 			const terminalEvent = allEvents
 				.slice()
 				.reverse()
@@ -175,8 +183,22 @@ export class WorkflowRegistry<
 						e.type === "workflow_completed" || e.type === "workflow_failed",
 				);
 			if (terminalEvent) {
-				await this._storage.compact(id, [terminalEvent]);
+				compacted.push(terminalEvent);
 			}
+			if (compacted.length > 0) {
+				await this._storage.compact(id, compacted);
+			}
+		}
+
+		// Hydrate published state from persisted events (survives compaction)
+		const publishedEvent = log
+			.events()
+			.slice()
+			.reverse()
+			.find((e) => e.type === "workflow_published");
+		if (publishedEvent && publishedEvent.type === "workflow_published") {
+			entry.published = true;
+			entry.publishedValue = publishedEvent.value;
 		}
 
 		if (interpreter.state === "completed") {
@@ -184,7 +206,9 @@ export class WorkflowRegistry<
 			entry.result = interpreter.result;
 			this.removeDependency(id);
 			for (const waiter of entry.waiters) {
-				waiter.resolve(interpreter.result);
+				waiter.resolve(
+					entry.published ? entry.publishedValue : interpreter.result,
+				);
 			}
 			entry.waiters = [];
 		} else if (interpreter.state === "failed") {
@@ -229,7 +253,7 @@ export class WorkflowRegistry<
 		// Not started yet — auto-start if requested
 		if (!entry.interpreter && shouldStart) {
 			await this.start(id);
-			// After start completes, entry should be completed or failed
+			if (entry.published) return entry.publishedValue as T;
 			if (entry.completed) return entry.result as T;
 			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
 		}
