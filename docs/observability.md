@@ -4,14 +4,14 @@ sidebar_position: 7
 
 # Observability
 
-react-workflow emits structured events for every workflow operation. You can observe these events for logging, tracing, analytics, or debugging.
+cursus emits structured events for every workflow operation. You can observe these events for logging, tracing, analytics, or debugging.
 
 ## WorkflowEventObserver
 
 An observer is a function that receives every event as it's appended to the log:
 
 ```ts
-import type { WorkflowEventObserver } from "react-workflow";
+import type { WorkflowEventObserver } from "cursus";
 
 const logger: WorkflowEventObserver = (workflowId, event) => {
   console.log(`[${workflowId}] ${event.type}`, event);
@@ -79,7 +79,7 @@ Every workflow operation produces one or more events:
 Every workflow's events can be wrapped in a `WorkflowTrace` envelope that includes version metadata. This is the integration point for monitoring tools that need to accept events from multiple library versions.
 
 ```ts
-import { WorkflowRegistry, EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "react-workflow";
+import { WorkflowRegistry, EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "cursus";
 
 const trace = registry.getTrace("checkout");
 // {
@@ -96,7 +96,7 @@ const trace = registry.getTrace("checkout");
 A JSON Schema (`eventSchema`) is also exported for validating traces from external sources:
 
 ```ts
-import { eventSchema } from "react-workflow";
+import { eventSchema } from "cursus";
 import Ajv from "ajv/dist/2020";
 
 const validate = new Ajv().compile(eventSchema);
@@ -108,7 +108,7 @@ const valid = validate(trace);
 The `useWorkflowEvents` hook gives you live event logs for all workflows in the current layer. It re-renders when events are appended:
 
 ```tsx
-import { useWorkflowEvents } from "react-workflow";
+import { useWorkflowEvents } from "cursus/react";
 
 function EventInspector() {
   const logs = useWorkflowEvents();
@@ -149,7 +149,7 @@ A ready-made debug panel component with two views:
 - **Timeline** — visual timeline with spans and markers
 
 ```tsx
-import { WorkflowDebugPanel } from "react-workflow";
+import { WorkflowDebugPanel } from "cursus/devtools";
 
 function App() {
   return (
@@ -176,7 +176,7 @@ The observer pattern integrates with any tracing system. Here's a sketch using O
 ```ts
 import { trace } from "@opentelemetry/api";
 
-const tracer = trace.getTracer("react-workflow");
+const tracer = trace.getTracer("cursus");
 const spans = new Map<string, ReturnType<typeof tracer.startSpan>>();
 
 const otelObserver: WorkflowEventObserver = (workflowId, event) => {

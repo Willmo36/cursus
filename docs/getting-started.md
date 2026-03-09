@@ -4,24 +4,24 @@ sidebar_position: 1
 
 # Getting Started
 
-react-workflow brings durable workflows to React. Workflows are generator functions that yield commands — activities, signals, timers — and the library handles persistence, replay, and coordination automatically.
+cursus brings durable workflows to React. Workflows are generator functions that yield commands — activities, signals, timers — and the library handles persistence, replay, and coordination automatically.
 
 If a user refreshes mid-workflow, the engine replays the event log and resumes exactly where it left off, without re-running completed activities.
 
 ## Installation
 
 ```bash
-npm install react-workflow
+npm install cursus
 ```
 
-Peer dependencies: `react >= 18.0.0`, `react-dom >= 18.0.0`
+Optional peer dependencies: `react >= 18.0.0`, `react-dom >= 18.0.0` (required for `cursus/react` and `cursus/devtools`)
 
 ## Your First Workflow
 
 A workflow is a generator function that receives a context object:
 
 ```ts
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 const greetingWorkflow: WorkflowFunction<string> = function* (ctx) {
   const name = yield* ctx.waitFor<string>("name");
@@ -45,7 +45,8 @@ Every `yield*` is a checkpoint. If the page reloads after step 1, the engine rep
 The `useWorkflow` hook runs a workflow and gives you reactive state:
 
 ```tsx
-import { useWorkflow, MemoryStorage } from "react-workflow";
+import { MemoryStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 
 function Greeter() {
   const { state, result, waitingFor, signal } = useWorkflow(
@@ -95,7 +96,7 @@ function Greeter() {
 By default, inline workflows use an ephemeral `MemoryStorage`. To survive page reloads, pass `LocalStorage`:
 
 ```tsx
-import { LocalStorage } from "react-workflow";
+import { LocalStorage } from "cursus";
 
 const { state, result } = useWorkflow("greeter", greetingWorkflow, {
   storage: new LocalStorage("my-app"),

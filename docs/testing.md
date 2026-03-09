@@ -9,7 +9,7 @@ sidebar_position: 5
 ## Basic Usage
 
 ```ts
-import { createTestRuntime } from "react-workflow";
+import { createTestRuntime } from "cursus";
 
 const result = await createTestRuntime(myWorkflow, {
   activities: {

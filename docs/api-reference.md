@@ -4,7 +4,7 @@ sidebar_position: 8
 
 # API Reference
 
-Exhaustive reference for all public exports from `react-workflow`.
+Exhaustive reference for all public exports from `cursus`.
 
 ## Hooks
 
@@ -157,7 +157,7 @@ In-memory storage. Events are lost on page reload.
 class LocalStorage implements WorkflowStorage
 ```
 
-**Constructor:** `new LocalStorage(prefix = "react-workflow")`
+**Constructor:** `new LocalStorage(prefix = "cursus")`
 
 Persists to `window.localStorage`. Keys: `${prefix}:${workflowId}` for events, `${prefix}:${workflowId}:v` for version.
 
@@ -382,7 +382,7 @@ The npm package version, injected at build time.
 ### eventSchema
 
 ```ts
-import { eventSchema } from "react-workflow";
+import { eventSchema } from "cursus";
 ```
 
 JSON Schema (draft 2020-12) describing `WorkflowTrace` and all event types. Useful for validating events from external sources.

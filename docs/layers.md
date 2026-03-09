@@ -11,7 +11,7 @@ This is how you build multi-step flows where different components drive differen
 ## Creating a Layer
 
 ```ts
-import { createLayer, LocalStorage } from "react-workflow";
+import { createLayer, LocalStorage } from "cursus";
 
 const layer = createLayer<{
   profile: { name: string };
@@ -32,7 +32,7 @@ The generic parameter maps workflow IDs to their result types.
 Wrap your component tree with `WorkflowLayerProvider`:
 
 ```tsx
-import { WorkflowLayerProvider } from "react-workflow";
+import { WorkflowLayerProvider } from "cursus/react";
 
 function App() {
   return (

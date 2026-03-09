@@ -1,21 +1,21 @@
-# react-workflow
+# cursus
 
 **Workflows, not reducers.**
 
-Durable workflows for React, inspired by [Temporal](https://temporal.io). Write multi-step UI flows as generator functions. State survives page reloads via event-sourcing replay — no manual serialization needed.
+Durable workflows for JavaScript, inspired by [Temporal](https://temporal.io). Write multi-step flows as generator functions. State survives page reloads via event-sourcing replay — no manual serialization needed.
 
 ```
-npm install react-workflow
+npm install cursus
 ```
 
-Requires React 18+.
+React bindings available via `cursus/react`. Devtools via `cursus/devtools`.
 
 ## Quick Example
 
 Define a workflow as a generator function:
 
 ```ts
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type Signals = { credentials: { username: string; password: string } };
 type Result = { displayName: string };
@@ -40,7 +40,8 @@ const loginWorkflow: WorkflowFunction<Result, Signals> = function* (ctx) {
 Use it in a component:
 
 ```tsx
-import { useWorkflow, LocalStorage } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 
 const storage = new LocalStorage();
 
@@ -135,7 +136,8 @@ const {
 Register multiple workflows and let them depend on each other:
 
 ```tsx
-import { createLayer, WorkflowLayerProvider, useWorkflow } from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowLayerProvider, useWorkflow } from "cursus/react";
 
 const layer = createLayer(
   { profile: profileWorkflow, checkout: checkoutWorkflow },
@@ -166,7 +168,7 @@ Circular dependencies are detected and throw immediately with a descriptive erro
 Wrap any activity function with automatic retry and backoff:
 
 ```ts
-import { withRetry } from "react-workflow";
+import { withRetry } from "cursus";
 
 const result = yield* ctx.activity(
   "fetchData",
@@ -181,7 +183,7 @@ const result = yield* ctx.activity(
 Fail fast when a service is repeatedly failing:
 
 ```ts
-import { withCircuitBreaker } from "react-workflow";
+import { withCircuitBreaker } from "cursus";
 
 const result = yield* ctx.activity(
   "fetchData",
@@ -195,7 +197,7 @@ const result = yield* ctx.activity(
 Compose multiple wrappers with `wrapActivity`:
 
 ```ts
-import { withRetry, withCircuitBreaker, wrapActivity } from "react-workflow";
+import { withRetry, withCircuitBreaker, wrapActivity } from "cursus";
 
 const resilient = wrapActivity(
   withCircuitBreaker,  // outer
@@ -210,7 +212,7 @@ const result = yield* ctx.activity("fetchData", resilient(fetchData));
 Test workflows without React, storage, or real async:
 
 ```ts
-import { createTestRuntime } from "react-workflow";
+import { createTestRuntime } from "cursus";
 
 const result = await createTestRuntime(loginWorkflow, {
   activities: {

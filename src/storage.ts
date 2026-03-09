@@ -37,7 +37,7 @@ export class MemoryStorage implements WorkflowStorage {
 export class LocalStorage implements WorkflowStorage {
 	private prefix: string;
 
-	constructor(prefix = "react-workflow") {
+	constructor(prefix = "cursus") {
 		this.prefix = prefix;
 	}
 

@@ -7,7 +7,7 @@ sidebar_position: 2
 A workflow is a generator function that yields commands through the `WorkflowContext`. Every `yield*` is a durable checkpoint — the engine records events so it can replay past steps on reload without re-executing them.
 
 ```ts
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 const myWorkflow: WorkflowFunction<ResultType, SignalMap, WorkflowMap, QueryMap> = function* (ctx) {
   // ...

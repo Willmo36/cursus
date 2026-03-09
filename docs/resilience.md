@@ -4,14 +4,14 @@ sidebar_position: 6
 
 # Resilience
 
-react-workflow provides higher-order functions that wrap activity functions with retry and circuit breaker logic. These wrappers are transparent to the event log — they compose around the `(AbortSignal) => Promise<T>` signature that activities already use.
+cursus provides higher-order functions that wrap activity functions with retry and circuit breaker logic. These wrappers are transparent to the event log — they compose around the `(AbortSignal) => Promise<T>` signature that activities already use.
 
 ## withRetry
 
 Retries a failed activity with configurable backoff:
 
 ```ts
-import { withRetry } from "react-workflow";
+import { withRetry } from "cursus";
 
 const result = yield* ctx.activity(
   "fetch-data",
@@ -50,7 +50,7 @@ Retries respect the `AbortSignal` — if the workflow is cancelled during a retr
 Prevents repeated calls to a failing service. After enough failures, the circuit opens and calls fail immediately with `CircuitOpenError`:
 
 ```ts
-import { withCircuitBreaker, CircuitOpenError } from "react-workflow";
+import { withCircuitBreaker, CircuitOpenError } from "cursus";
 
 const fetchWithBreaker = withCircuitBreaker(
   async (signal) => {
@@ -87,7 +87,7 @@ try {
 `wrapActivity` composes multiple wrappers into one. Wrappers apply right-to-left (innermost first):
 
 ```ts
-import { wrapActivity, withRetry, withCircuitBreaker } from "react-workflow";
+import { wrapActivity, withRetry, withCircuitBreaker } from "cursus";
 
 const resilient = wrapActivity(
   withCircuitBreaker,  // outer: stops calling if service is down

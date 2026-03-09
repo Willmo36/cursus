@@ -13,7 +13,7 @@ Workflows persist their event logs to storage. On reload, the engine replays eve
 In-memory storage that doesn't survive page reloads. Useful for tests and ephemeral workflows:
 
 ```ts
-import { MemoryStorage } from "react-workflow";
+import { MemoryStorage } from "cursus";
 
 const storage = new MemoryStorage();
 ```
@@ -25,7 +25,7 @@ This is the default when no storage is provided to `useWorkflow`.
 Persists to `window.localStorage`. Survives page reloads:
 
 ```ts
-import { LocalStorage } from "react-workflow";
+import { LocalStorage } from "cursus";
 
 const storage = new LocalStorage("my-app");
 ```
@@ -37,7 +37,7 @@ The prefix scopes keys to avoid collisions. Events are stored as JSON at `${pref
 Implement the `WorkflowStorage` interface to use any backend:
 
 ```ts
-import type { WorkflowStorage, WorkflowEvent } from "react-workflow";
+import type { WorkflowStorage, WorkflowEvent } from "cursus";
 
 const myStorage: WorkflowStorage = {
   async load(workflowId: string): Promise<WorkflowEvent[]> {
@@ -123,7 +123,7 @@ Don't bump for:
 The `checkVersion` helper is exported for advanced use cases:
 
 ```ts
-import { checkVersion } from "react-workflow";
+import { checkVersion } from "cursus";
 
 const wiped = await checkVersion(storage, "checkout", 2);
 // wiped: true if storage was cleared due to version mismatch
