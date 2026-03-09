@@ -1,6 +1,6 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
 // ABOUTME: Demonstrates sequential waitFor calls with a final submission activity.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type PersonalInfo = {
 	name: string;

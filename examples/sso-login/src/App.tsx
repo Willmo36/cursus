@@ -1,6 +1,7 @@
 // ABOUTME: SSO login UI that walks through the OAuth flow steps.
 // ABOUTME: Shows connection status, a simulated callback button, and session info.
-import { LocalStorage, useWorkflow } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 import { ssoWorkflow } from "./workflow";
 
 const storage = new LocalStorage();

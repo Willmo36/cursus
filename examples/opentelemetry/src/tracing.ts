@@ -7,7 +7,7 @@ import {
 	SimpleSpanProcessor,
 	WebTracerProvider,
 } from "@opentelemetry/sdk-trace-web";
-import type { WorkflowEvent, WorkflowEventObserver } from "react-workflow";
+import type { WorkflowEvent, WorkflowEventObserver } from "cursus";
 
 // --- Provider setup ---
 
@@ -15,7 +15,7 @@ const provider = new WebTracerProvider();
 provider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
 provider.register();
 
-const tracer = trace.getTracer("react-workflow");
+const tracer = trace.getTracer("cursus");
 
 // --- Span management ---
 

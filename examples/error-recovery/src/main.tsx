@@ -2,7 +2,8 @@
 // ABOUTME: Registers the payment workflow in a layer so the order workflow can depend on it.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { WorkflowLayerProvider, createLayer } from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowLayerProvider } from "cursus/react";
 import { App } from "./App";
 import { storage } from "./storage";
 import { paymentWorkflow } from "./workflows";

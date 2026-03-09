@@ -3,7 +3,8 @@
 import "./index.css";
 import { StrictMode, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { WorkflowLayerProvider, createLayer } from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowLayerProvider } from "cursus/react";
 import { App } from "./App";
 import { createApiFetch } from "./api";
 import { ErrorToggleCtx } from "./error-toggle";

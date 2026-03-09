@@ -1,7 +1,8 @@
 // ABOUTME: Chat room UI with username entry, message list, and close button.
 // ABOUTME: Hydrates past messages from localStorage events on reload.
 import { useEffect, useMemo, useState } from "react";
-import { LocalStorage, useWorkflow } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 import type { ChatMessage } from "./workflow";
 import { chatWorkflow } from "./workflow";
 

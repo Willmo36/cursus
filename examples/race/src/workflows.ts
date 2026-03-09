@@ -1,6 +1,6 @@
 // ABOUTME: Data-fetch workflow that races an API call against a timeout.
 // ABOUTME: Demonstrates ctx.race to implement the timeout-an-activity pattern.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 export type FetchResult =
 	| { status: "ok"; data: string }

@@ -1,7 +1,8 @@
 // ABOUTME: Cookie consent banner UI driven by the cookie workflow.
 // ABOUTME: Shows a banner overlay until consent is given, with accept/reject/customize options.
 import { useState } from "react";
-import { LocalStorage, useWorkflow } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 import type { CookieChoice, CookiePreferences } from "./workflow";
 import { cookieWorkflow } from "./workflow";
 

@@ -1,6 +1,6 @@
 // ABOUTME: Chat room workflow that accumulates messages in a loop until closed.
 // ABOUTME: Demonstrates waitFor in a loop with discriminated union events.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 export type ChatMessage = {
 	username: string;

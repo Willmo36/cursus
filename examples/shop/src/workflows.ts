@@ -1,6 +1,6 @@
 // ABOUTME: Workflow definitions for the shop example.
 // ABOUTME: Catalog fetches products, cart manages items via signals, checkout coordinates login and cart.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 import {
 	type ApiFetch,
 	addToCart,

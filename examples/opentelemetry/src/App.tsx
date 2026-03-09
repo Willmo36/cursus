@@ -1,6 +1,6 @@
 // ABOUTME: UI for the opentelemetry example showing a traced checkout workflow.
 // ABOUTME: Each workflow event creates an OTel span visible in the browser console.
-import { useWorkflow } from "react-workflow";
+import { useWorkflow } from "cursus/react";
 import { storage } from "./storage";
 import { tracingObserver } from "./tracing";
 import type { OrderResult } from "./workflows";

@@ -1,6 +1,6 @@
 // ABOUTME: Session and checkout workflows demonstrating the publish pattern.
 // ABOUTME: Session publishes the account on login and keeps running for revocation.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type Account = { user: string; tier: string };
 

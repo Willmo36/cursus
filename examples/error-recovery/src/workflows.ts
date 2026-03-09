@@ -1,6 +1,6 @@
 // ABOUTME: Payment and order workflows demonstrating dependency error recovery.
 // ABOUTME: The payment workflow always fails; the order workflow catches the failure gracefully.
-import { type WorkflowFunction, withRetry } from "react-workflow";
+import { type WorkflowFunction, withRetry } from "cursus";
 
 // --- Payment workflow (registered in layer, always fails) ---
 

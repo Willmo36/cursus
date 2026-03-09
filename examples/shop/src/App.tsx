@@ -1,7 +1,7 @@
 // ABOUTME: Main layout for the shop example.
 // ABOUTME: Header with error toggle, product grid, cart sidebar, checkout flow, and debug panel.
 import { useState } from "react";
-import { WorkflowDebugPanel } from "react-workflow";
+import { WorkflowDebugPanel } from "cursus/devtools";
 import { Cart } from "./Cart";
 import { Checkout } from "./Checkout";
 import { useErrorToggle } from "./error-toggle";

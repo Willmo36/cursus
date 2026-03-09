@@ -1,6 +1,7 @@
 // ABOUTME: UI for the env-config example showing resolved environment and user profile.
 // ABOUTME: Both workflows auto-run on mount with no user interaction needed.
-import { useWorkflow, WorkflowDebugPanel } from "react-workflow";
+import { WorkflowDebugPanel } from "cursus/devtools";
+import { useWorkflow } from "cursus/react";
 import { storage } from "./storage";
 import type { EnvConfig, UserProfile } from "./workflows";
 import { userWorkflow } from "./workflows";

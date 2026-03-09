@@ -1,7 +1,8 @@
 // ABOUTME: Login form UI driven by the login workflow.
 // ABOUTME: Shows a login form with error feedback on failure, and a greeting on success.
 import { useState } from "react";
-import { LocalStorage, useWorkflow } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 import { loginWorkflow } from "./workflow";
 
 const storage = new LocalStorage();

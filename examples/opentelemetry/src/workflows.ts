@@ -1,6 +1,6 @@
 // ABOUTME: Checkout workflow demonstrating OTel-traced activities and signals.
 // ABOUTME: Simulates a multi-step checkout with validation, payment, and confirmation.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 export type OrderResult = {
 	orderId: string;

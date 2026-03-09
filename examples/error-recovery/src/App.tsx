@@ -1,7 +1,8 @@
 // ABOUTME: UI for the error recovery example.
 // ABOUTME: Payment form feeds the layer workflow; order flow shows the caught failure.
 import { useState } from "react";
-import { WorkflowDebugPanel, useWorkflow } from "react-workflow";
+import { WorkflowDebugPanel } from "cursus/devtools";
+import { useWorkflow } from "cursus/react";
 import { storage } from "./storage";
 import { orderWorkflow } from "./workflows";
 

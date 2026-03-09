@@ -1,6 +1,6 @@
 // ABOUTME: Login workflow with retry loop for failed authentication attempts.
 // ABOUTME: Demonstrates waitFor + activity in a loop with conditional branching.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type Credentials = {
 	username: string;

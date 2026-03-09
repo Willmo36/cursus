@@ -1,6 +1,6 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
 // ABOUTME: The checkout workflow uses waitForWorkflow to wait for the profile workflow.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 // --- Profile workflow (registered globally) ---
 

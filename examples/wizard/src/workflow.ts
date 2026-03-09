@@ -1,6 +1,6 @@
 // ABOUTME: Two-step signup workflow collecting email and password, then creating an account.
 // ABOUTME: Demonstrates waitForAll to collect both fields in any order.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type SignupSignals = {
 	email: string;

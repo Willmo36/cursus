@@ -1,7 +1,8 @@
 // ABOUTME: UI for the race example.
 // ABOUTME: Shows fetch-with-timeout and approval-with-escalation race patterns.
 import { useEffect, useState } from "react";
-import { WorkflowDebugPanel, useWorkflow } from "react-workflow";
+import { WorkflowDebugPanel } from "cursus/devtools";
+import { useWorkflow } from "cursus/react";
 import { storage } from "./storage";
 import {
 	type ApprovalResult,

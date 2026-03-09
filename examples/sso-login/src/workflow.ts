@@ -1,6 +1,6 @@
 // ABOUTME: SSO OAuth flow workflow: initiate, wait for callback, exchange token.
 // ABOUTME: Demonstrates the activity-waitFor-activity pattern.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 type SsoSignals = {
 	"sso-callback": string;

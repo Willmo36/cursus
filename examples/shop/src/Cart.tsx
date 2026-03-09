@@ -1,6 +1,6 @@
 // ABOUTME: Cart sidebar showing current items with quantity and remove buttons.
 // ABOUTME: Reads cart state from workflow query and signals checkout when ready.
-import { useWorkflow } from "react-workflow";
+import { useWorkflow } from "cursus/react";
 import type { CartItem } from "./types";
 
 export function Cart({ onCheckout }: { onCheckout: () => void }) {

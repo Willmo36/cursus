@@ -1,7 +1,7 @@
 // ABOUTME: Product grid that loads products via a catalog workflow.
 // ABOUTME: Shows loading, error with retry, and product cards with add-to-cart buttons.
 import { useMemo } from "react";
-import { useWorkflow } from "react-workflow";
+import { useWorkflow } from "cursus/react";
 import { useErrorToggle } from "./error-toggle";
 import { storage } from "./storage";
 import type { Product } from "./types";

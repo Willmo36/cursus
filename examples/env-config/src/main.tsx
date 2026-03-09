@@ -2,7 +2,8 @@
 // ABOUTME: Creates a workflow layer with the env workflow and mounts the app.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createLayer, WorkflowLayerProvider } from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowLayerProvider } from "cursus/react";
 import { App } from "./App";
 import { storage } from "./storage";
 import { envWorkflow } from "./workflows";

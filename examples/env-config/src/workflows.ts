@@ -1,6 +1,6 @@
 // ABOUTME: Environment and user profile workflows demonstrating infrastructure dependencies.
 // ABOUTME: The env workflow parses config; the user workflow consumes it via waitForWorkflow.
-import type { WorkflowFunction } from "react-workflow";
+import type { WorkflowFunction } from "cursus";
 
 // --- Types ---
 

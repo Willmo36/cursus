@@ -1,7 +1,8 @@
 // ABOUTME: Multi-page job application form with step indicator.
 // ABOUTME: Collects personal info, education, submits, and shows confirmation.
 import { useState } from "react";
-import { LocalStorage, useWorkflow } from "react-workflow";
+import { LocalStorage } from "cursus";
+import { useWorkflow } from "cursus/react";
 import { applicationWorkflow } from "./workflow";
 
 const storage = new LocalStorage();

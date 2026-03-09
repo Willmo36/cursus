@@ -2,7 +2,8 @@
 // ABOUTME: Wraps the app in WorkflowLayerProvider with the profile workflow registered.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createLayer, WorkflowLayerProvider } from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowLayerProvider } from "cursus/react";
 import { App } from "./App";
 import { storage } from "./storage";
 import { profileWorkflow } from "./workflows";

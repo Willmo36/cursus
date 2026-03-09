@@ -1,7 +1,7 @@
 // ABOUTME: Checkout flow with login form and order confirmation.
 // ABOUTME: Sends login credentials as a signal to the checkout workflow.
 import { useState } from "react";
-import { useWorkflow } from "react-workflow";
+import { useWorkflow } from "cursus/react";
 import type { Order } from "./types";
 
 export function Checkout({ onBack }: { onBack: () => void }) {

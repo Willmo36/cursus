@@ -1,11 +1,8 @@
 // ABOUTME: Main layout for the publish example app.
 // ABOUTME: Session login + checkout flow demonstrating publish and waitForWorkflow.
-import {
-	WorkflowDebugPanel,
-	WorkflowLayerProvider,
-	createLayer,
-	useWorkflow,
-} from "react-workflow";
+import { createLayer } from "cursus";
+import { WorkflowDebugPanel } from "cursus/devtools";
+import { WorkflowLayerProvider, useWorkflow } from "cursus/react";
 import { storage } from "./storage";
 import { checkoutWorkflow, sessionWorkflow } from "./workflows";
 
