@@ -540,6 +540,39 @@ describe("useWorkflow", () => {
 		});
 	});
 
+	describe("published", () => {
+		it("published is undefined before publish, then set after", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const { result } = renderHook(() =>
+				useWorkflow("pub-1", workflow, { storage: new MemoryStorage() }),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			expect(result.current.published).toBeUndefined();
+
+			act(() => {
+				result.current.signal("login", { user: "max" });
+			});
+
+			await waitFor(() => {
+				expect(result.current.published).toEqual({ user: "max" });
+			});
+		});
+	});
+
 	describe("cancellation", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;

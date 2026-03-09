@@ -3727,7 +3727,7 @@ describe("Interpreter", () => {
 			expect(publishFn).not.toHaveBeenCalled();
 		});
 
-		it("throws without registry", async () => {
+		it("works without registry (sets published value locally)", async () => {
 			const workflow: WorkflowFunction<
 				string,
 				Record<string, unknown>,
@@ -3742,8 +3742,8 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(workflow, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
-			expect(interpreter.error).toContain("publish requires a WorkflowRegistry");
+			expect(interpreter.state).toBe("completed");
+			expect(interpreter.published).toBe("account-123");
 		});
 	});
 });

@@ -1101,15 +1101,8 @@ export class Interpreter {
 			return;
 		}
 
-		// Live: require registry
-		if (!this.registry) {
-			throw new Error(
-				"publish requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
 		this._publishedValue = command.value;
-		this.registry.publish(this._workflowId!, command.value);
+		this.registry?.publish(this._workflowId!, command.value);
 		this.log.append({
 			type: "workflow_published",
 			value: command.value,

@@ -38,6 +38,7 @@ type UseWorkflowResult<
 	waitingFor: (keyof SignalMap & string) | undefined;
 	waitingForAll: string[] | undefined;
 	waitingForAny: string[] | undefined;
+	published: unknown;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
 		payload: SignalMap[K],
@@ -83,6 +84,7 @@ export function useWorkflow(
 	const [waitingForAny, setWaitingForAny] = useState<string[] | undefined>(
 		undefined,
 	);
+	const [published, setPublished] = useState<unknown>(undefined);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
 	const interpreterRef = useRef<Interpreter | null>(null);
 	const storageRef = useRef(storage);
@@ -109,6 +111,7 @@ export function useWorkflow(
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
 				setWaitingForAny(interpreter.waitingForAny);
+				setPublished(interpreter.published);
 			}
 
 			const unsubscribe = registry.onStateChange(workflowId, syncState);
@@ -173,6 +176,7 @@ export function useWorkflow(
 				setWaitingFor(interpreter.waitingFor);
 				setWaitingForAll(interpreter.waitingForAll);
 				setWaitingForAny(interpreter.waitingForAny);
+				setPublished(interpreter.published);
 				persistEvents();
 			}
 
@@ -235,6 +239,7 @@ export function useWorkflow(
 			setWaitingFor(undefined);
 			setWaitingForAll(undefined);
 			setWaitingForAny(undefined);
+			setPublished(undefined);
 			await registry.start(workflowId);
 			return;
 		}
@@ -247,6 +252,7 @@ export function useWorkflow(
 		setWaitingFor(undefined);
 		setWaitingForAll(undefined);
 		setWaitingForAny(undefined);
+		setPublished(undefined);
 		restart();
 	}, [isLayerMode, registry, workflowId]);
 
@@ -257,6 +263,7 @@ export function useWorkflow(
 		waitingFor,
 		waitingForAll,
 		waitingForAny,
+		published,
 		signal,
 		cancel,
 		reset,

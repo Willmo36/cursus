@@ -39,7 +39,8 @@
 					{ "$ref": "#/$defs/WaitAllCompletedEvent" },
 					{ "$ref": "#/$defs/WorkflowDependencyStartedEvent" },
 					{ "$ref": "#/$defs/WorkflowDependencyCompletedEvent" },
-					{ "$ref": "#/$defs/WorkflowDependencyFailedEvent" },
+					{ "$ref": "#/$defs/WorkflowDependencyPublishedEvent" },
+				{ "$ref": "#/$defs/WorkflowDependencyFailedEvent" },
 					{ "$ref": "#/$defs/WorkflowPublishedEvent" },
 					{ "$ref": "#/$defs/RaceStartedEvent" },
 					{ "$ref": "#/$defs/RaceCompletedEvent" }
@@ -254,6 +255,18 @@
 			"additionalProperties": false,
 			"properties": {
 				"type": { "const": "workflow_dependency_completed" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"result": {},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowDependencyPublishedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "result", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_dependency_published" },
 				"workflowId": { "type": "string" },
 				"seq": { "type": "integer" },
 				"result": {},
