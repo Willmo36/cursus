@@ -45,12 +45,12 @@ export type {
 	WorkflowRef,
 	WorkflowRegistryInterface,
 	WorkflowState,
+	WorkflowEventLog,
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
 export { CancelledError } from "./types";
 export { useWorkflow } from "./use-workflow";
-export type { WorkflowEventLog } from "./use-workflow-events";
 export { useWorkflowEvents } from "./use-workflow-events";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 export { default as eventSchema } from "./event-schema.json";

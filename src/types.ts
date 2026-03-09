@@ -501,3 +501,10 @@ export type WorkflowStorage = {
 	loadVersion?(workflowId: string): Promise<number | undefined>;
 	saveVersion?(workflowId: string, version: number): Promise<void>;
 };
+
+// --- Event log snapshot ---
+
+export type WorkflowEventLog = {
+	id: string;
+	events: WorkflowEvent[];
+};

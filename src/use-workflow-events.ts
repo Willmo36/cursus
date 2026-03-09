@@ -3,12 +3,9 @@
 
 import { useContext, useEffect, useReducer } from "react";
 import { RegistryContext } from "./registry-provider";
-import type { WorkflowEvent } from "./types";
+import type { WorkflowEvent, WorkflowEventLog } from "./types";
 
-export type WorkflowEventLog = {
-	id: string;
-	events: WorkflowEvent[];
-};
+export type { WorkflowEventLog };
 
 function readLogs(registry: {
 	getWorkflowIds(): string[];
