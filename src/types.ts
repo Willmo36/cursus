@@ -287,6 +287,15 @@ export type WorkflowEvent =
 	| WorkflowFailedEvent
 	| WorkflowCancelledEvent;
 
+// --- Trace envelope ---
+
+export type WorkflowTrace = {
+	schemaVersion: number;
+	libraryVersion: string;
+	workflowId: string;
+	events: WorkflowEvent[];
+};
+
 // --- Workflow types ---
 
 export type Workflow<T> = Generator<Command, T, unknown>;

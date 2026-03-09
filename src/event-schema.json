@@ -1,0 +1,320 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://react-workflow.dev/schema/v1/workflow-trace.json",
+	"title": "WorkflowTrace",
+	"description": "Envelope wrapping a workflow's event log with version metadata.",
+	"type": "object",
+	"required": ["schemaVersion", "libraryVersion", "workflowId", "events"],
+	"additionalProperties": false,
+	"properties": {
+		"schemaVersion": {
+			"type": "integer",
+			"description": "Monotonic schema version, bumped when event shapes change."
+		},
+		"libraryVersion": {
+			"type": "string",
+			"description": "npm package version that produced the events."
+		},
+		"workflowId": {
+			"type": "string"
+		},
+		"events": {
+			"type": "array",
+			"items": {
+				"oneOf": [
+					{ "$ref": "#/$defs/WorkflowStartedEvent" },
+					{ "$ref": "#/$defs/WorkflowCompletedEvent" },
+					{ "$ref": "#/$defs/WorkflowFailedEvent" },
+					{ "$ref": "#/$defs/WorkflowCancelledEvent" },
+					{ "$ref": "#/$defs/ActivityScheduledEvent" },
+					{ "$ref": "#/$defs/ActivityCompletedEvent" },
+					{ "$ref": "#/$defs/ActivityFailedEvent" },
+					{ "$ref": "#/$defs/SignalReceivedEvent" },
+					{ "$ref": "#/$defs/TimerStartedEvent" },
+					{ "$ref": "#/$defs/TimerFiredEvent" },
+					{ "$ref": "#/$defs/ChildStartedEvent" },
+					{ "$ref": "#/$defs/ChildCompletedEvent" },
+					{ "$ref": "#/$defs/ChildFailedEvent" },
+					{ "$ref": "#/$defs/WaitAllStartedEvent" },
+					{ "$ref": "#/$defs/WaitAllCompletedEvent" },
+					{ "$ref": "#/$defs/WorkflowDependencyStartedEvent" },
+					{ "$ref": "#/$defs/WorkflowDependencyCompletedEvent" },
+					{ "$ref": "#/$defs/WorkflowDependencyFailedEvent" },
+					{ "$ref": "#/$defs/WorkflowPublishedEvent" },
+					{ "$ref": "#/$defs/RaceStartedEvent" },
+					{ "$ref": "#/$defs/RaceCompletedEvent" }
+				]
+			}
+		}
+	},
+	"$defs": {
+		"WorkflowStartedEvent": {
+			"type": "object",
+			"required": ["type", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_started" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowCompletedEvent": {
+			"type": "object",
+			"required": ["type", "result", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_completed" },
+				"result": {},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowFailedEvent": {
+			"type": "object",
+			"required": ["type", "error", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_failed" },
+				"error": { "type": "string" },
+				"stack": { "type": "string" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowCancelledEvent": {
+			"type": "object",
+			"required": ["type", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_cancelled" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ActivityScheduledEvent": {
+			"type": "object",
+			"required": ["type", "name", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "activity_scheduled" },
+				"name": { "type": "string" },
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ActivityCompletedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "result", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "activity_completed" },
+				"seq": { "type": "integer" },
+				"result": {},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ActivityFailedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "error", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "activity_failed" },
+				"seq": { "type": "integer" },
+				"error": { "type": "string" },
+				"stack": { "type": "string" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"SignalReceivedEvent": {
+			"type": "object",
+			"required": ["type", "signal", "payload", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "signal_received" },
+				"signal": { "type": "string" },
+				"payload": {},
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"TimerStartedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "durationMs", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "timer_started" },
+				"seq": { "type": "integer" },
+				"durationMs": { "type": "number" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"TimerFiredEvent": {
+			"type": "object",
+			"required": ["type", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "timer_fired" },
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ChildStartedEvent": {
+			"type": "object",
+			"required": ["type", "name", "workflowId", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "child_started" },
+				"name": { "type": "string" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ChildCompletedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "result", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "child_completed" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"result": {},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"ChildFailedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "error", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "child_failed" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"error": { "type": "string" },
+				"stack": { "type": "string" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WaitAllStartedEvent": {
+			"type": "object",
+			"required": ["type", "items", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "wait_all_started" },
+				"items": {
+					"type": "array",
+					"items": {
+						"oneOf": [
+							{
+								"type": "object",
+								"required": ["kind", "name"],
+								"additionalProperties": false,
+								"properties": {
+									"kind": { "const": "signal" },
+									"name": { "type": "string" }
+								}
+							},
+							{
+								"type": "object",
+								"required": ["kind", "workflowId"],
+								"additionalProperties": false,
+								"properties": {
+									"kind": { "const": "workflow" },
+									"workflowId": { "type": "string" }
+								}
+							}
+						]
+					}
+				},
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WaitAllCompletedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "results", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "wait_all_completed" },
+				"seq": { "type": "integer" },
+				"results": { "type": "object" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowDependencyStartedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_dependency_started" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowDependencyCompletedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "result", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_dependency_completed" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"result": {},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowDependencyFailedEvent": {
+			"type": "object",
+			"required": ["type", "workflowId", "seq", "error", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_dependency_failed" },
+				"workflowId": { "type": "string" },
+				"seq": { "type": "integer" },
+				"error": { "type": "string" },
+				"stack": { "type": "string" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"WorkflowPublishedEvent": {
+			"type": "object",
+			"required": ["type", "value", "seq", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "workflow_published" },
+				"value": {},
+				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"RaceStartedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "items", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "race_started" },
+				"seq": { "type": "integer" },
+				"items": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": ["type"],
+						"properties": {
+							"type": { "type": "string" }
+						}
+					}
+				},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"RaceCompletedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "winner", "value", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "race_completed" },
+				"seq": { "type": "integer" },
+				"winner": { "type": "integer" },
+				"value": {},
+				"timestamp": { "type": "number" }
+			}
+		}
+	}
+}

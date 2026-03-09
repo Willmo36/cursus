@@ -74,6 +74,35 @@ Every workflow operation produces one or more events:
 | `race_completed` | `seq`, `winner`, `value`, `timestamp` | Race resolved |
 | `workflow_published` | `value`, `seq`, `timestamp` | Workflow published a value |
 
+## Event Versioning
+
+Every workflow's events can be wrapped in a `WorkflowTrace` envelope that includes version metadata. This is the integration point for monitoring tools that need to accept events from multiple library versions.
+
+```ts
+import { WorkflowRegistry, EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "react-workflow";
+
+const trace = registry.getTrace("checkout");
+// {
+//   schemaVersion: 1,
+//   libraryVersion: "0.1.0",
+//   workflowId: "checkout",
+//   events: [ ... ]
+// }
+```
+
+- **`schemaVersion`** — monotonic integer, bumped when event shapes change
+- **`libraryVersion`** — the npm package version that produced the events
+
+A JSON Schema (`eventSchema`) is also exported for validating traces from external sources:
+
+```ts
+import { eventSchema } from "react-workflow";
+import Ajv from "ajv/dist/2020";
+
+const validate = new Ajv().compile(eventSchema);
+const valid = validate(trace);
+```
+
 ## useWorkflowEvents
 
 The `useWorkflowEvents` hook gives you live event logs for all workflows in the current layer. It re-renders when events are appended:

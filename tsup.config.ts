@@ -2,6 +2,7 @@
 // ABOUTME: Produces ESM and CJS outputs with TypeScript declarations.
 
 import { defineConfig } from "tsup";
+import pkg from "./package.json";
 
 export default defineConfig({
 	entry: ["src/index.ts"],
@@ -10,4 +11,7 @@ export default defineConfig({
 	sourcemap: true,
 	clean: true,
 	external: ["react", "react-dom"],
+	define: {
+		__LIBRARY_VERSION__: JSON.stringify(pkg.version),
+	},
 });

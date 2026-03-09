@@ -11,7 +11,9 @@ import type {
 	WorkflowRegistryInterface,
 	WorkflowState,
 	WorkflowStorage,
+	WorkflowTrace,
 } from "./types";
+import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
 type WorkflowEntry = {
 	fn: AnyWorkflowFunction;
@@ -280,6 +282,15 @@ export class WorkflowRegistry<
 		const entry = this.entries.get(id);
 		if (!entry?.interpreter) return [];
 		return entry.interpreter.events;
+	}
+
+	getTrace(id: string): WorkflowTrace {
+		return {
+			schemaVersion: EVENT_SCHEMA_VERSION,
+			libraryVersion: LIBRARY_VERSION,
+			workflowId: id,
+			events: this.getEvents(id),
+		};
 	}
 
 	getWorkflowIds(): string[] {

@@ -11,6 +11,7 @@ import type {
 	WorkflowEventObserver,
 	WorkflowFunction,
 } from "./types";
+import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
 describe("WorkflowRegistry", () => {
 	it("start() runs a registered workflow to completion", async () => {
@@ -1116,6 +1117,51 @@ describe("WorkflowRegistry", () => {
 				.then(() => { resolved = true; });
 			await new Promise((r) => setTimeout(r, 20));
 			expect(resolved).toBe(false);
+		});
+	});
+
+	describe("getTrace", () => {
+		it("returns correct envelope shape", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+
+			const trace = registry.getTrace("greet");
+			expect(trace.schemaVersion).toBe(EVENT_SCHEMA_VERSION);
+			expect(trace.libraryVersion).toBe(LIBRARY_VERSION);
+			expect(trace.workflowId).toBe("greet");
+			expect(Array.isArray(trace.events)).toBe(true);
+		});
+
+		it("includes all events from the workflow", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+
+			const trace = registry.getTrace("greet");
+			expect(trace.events).toEqual(registry.getEvents("greet"));
+			expect(trace.events.length).toBeGreaterThan(0);
+		});
+
+		it("returns empty events array for un-started workflow", () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+
+			const trace = registry.getTrace("greet");
+			expect(trace.events).toEqual([]);
+			expect(trace.workflowId).toBe("greet");
 		});
 	});
 });

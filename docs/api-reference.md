@@ -136,6 +136,7 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | `getInterpreter(id)` | Get the `Interpreter` instance. |
 | `getWorkflowIds()` | List all registered workflow IDs. |
 | `onStateChange(id, callback)` | Subscribe to state changes. Returns unsubscribe function. |
+| `getTrace(id)` | Get a `WorkflowTrace` envelope with version metadata and events. |
 | `onWorkflowsChange(callback)` | Subscribe to workflow additions/removals. Returns unsubscribe function. |
 | `observe(id, interpreter)` | Register an external interpreter (used by inline workflows). |
 | `unobserve(id)` | Remove an observed interpreter. |
@@ -346,6 +347,45 @@ type WorkflowEventObserver = (
 ### WorkflowEvent
 
 Union of all event types. See [Observability > Event Types](./observability.md#event-types) for the full list.
+
+## Event Versioning
+
+### WorkflowTrace
+
+```ts
+type WorkflowTrace = {
+  schemaVersion: number;    // monotonic integer, bumped on schema changes
+  libraryVersion: string;   // npm package version (e.g. "0.1.0")
+  workflowId: string;
+  events: WorkflowEvent[];
+};
+```
+
+Envelope wrapping a workflow's event log with version metadata. Returned by `registry.getTrace(id)`.
+
+### EVENT_SCHEMA_VERSION
+
+```ts
+const EVENT_SCHEMA_VERSION: number; // currently 1
+```
+
+Monotonic integer incremented when event shapes change.
+
+### LIBRARY_VERSION
+
+```ts
+const LIBRARY_VERSION: string;
+```
+
+The npm package version, injected at build time.
+
+### eventSchema
+
+```ts
+import { eventSchema } from "react-workflow";
+```
+
+JSON Schema (draft 2020-12) describing `WorkflowTrace` and all event types. Useful for validating events from external sources.
 
 ## Command Types
 
