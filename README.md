@@ -276,6 +276,12 @@ npm run dev
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design — event sourcing model, replay mechanics, and design constraints.
 
+## Inspiration
+
+- [Temporal](https://temporal.io) — durable execution model and event-sourced replay
+- [redux-saga](https://redux-saga.js.org) — generators as an effect management pattern in React
+- [React Query](https://tanstack.com/query) — declarative async state with automatic cache management
+
 ## License
 
 [MIT](./LICENSE)
