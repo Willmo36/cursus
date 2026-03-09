@@ -1762,6 +1762,330 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("ctx.published()", () => {
+		it("resolves when dependency publishes a value", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn().mockResolvedValue({ user: "max" }),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ session: { user: string } }
+			> = function* (ctx) {
+				const account = yield* ctx.published("session");
+				return `got: ${account}`;
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: [object Object]");
+			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("session", {
+				start: true,
+				caller: undefined,
+			});
+		});
+
+		it("records workflow_dependency_published event", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn().mockResolvedValue("published-data"),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.published("login");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_published",
+					workflowId: "login",
+					seq: 1,
+					result: "published-data",
+				}),
+			);
+		});
+
+		it("replays from workflow_dependency_published event", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				const user = yield* ctx.published("login");
+				return `got: ${user}`;
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_dependency_published",
+					workflowId: "login",
+					seq: 1,
+					result: "cached-pub",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: "got: cached-pub",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: cached-pub");
+			expect(mockRegistry.waitForPublished).not.toHaveBeenCalled();
+		});
+
+		it("throws without a registry", async () => {
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.published("login");
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toContain("WorkflowRegistry");
+		});
+
+		it("passes start: false option to registry", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn().mockResolvedValue("result"),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.published("login", { start: false });
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			await interpreter.run();
+
+			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("login", {
+				start: false,
+				caller: undefined,
+			});
+		});
+	});
+
+	describe("ctx.join()", () => {
+		it("resolves when dependency completes", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn().mockResolvedValue("final-result"),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ task: string }
+			> = function* (ctx) {
+				const result = yield* ctx.join("task");
+				return `joined: ${result}`;
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("joined: final-result");
+			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("task", {
+				start: true,
+				caller: undefined,
+			});
+		});
+
+		it("records workflow_dependency_completed event", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn().mockResolvedValue("join-data"),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.join("login");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_completed",
+					workflowId: "login",
+					seq: 1,
+					result: "join-data",
+				}),
+			);
+		});
+
+		it("replays from workflow_dependency_completed event", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				const user = yield* ctx.join("login");
+				return `got: ${user}`;
+			};
+
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "workflow_dependency_started",
+					workflowId: "login",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_dependency_completed",
+					workflowId: "login",
+					seq: 1,
+					result: "cached-user",
+					timestamp: 3,
+				},
+				{
+					type: "workflow_completed",
+					result: "got: cached-user",
+					timestamp: 4,
+				},
+			]);
+
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: cached-user");
+			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
+		});
+
+		it("throws without a registry", async () => {
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ login: string }
+			> = function* (ctx) {
+				return yield* ctx.join("login");
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(interpreter.error).toContain("WorkflowRegistry");
+		});
+
+		it("records workflow_dependency_failed event on rejection", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi
+					.fn()
+					.mockRejectedValue(new Error("join failed")),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ task: string }
+			> = function* (ctx) {
+				return yield* ctx.join("task");
+			};
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			await interpreter.run();
+
+			expect(interpreter.state).toBe("failed");
+			expect(log.events()).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "task",
+					seq: 1,
+					error: "join failed",
+				}),
+			);
+		});
+	});
+
 	describe("cancellation", () => {
 		it("cancel() aborts in-flight activity and sets cancelled state", async () => {
 			let activityStarted = false;
