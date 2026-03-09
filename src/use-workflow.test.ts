@@ -540,121 +540,6 @@ describe("useWorkflow", () => {
 		});
 	});
 
-	describe("query", () => {
-		it("query returns latest value reactively in inline mode", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				{ submit: string },
-				Record<string, never>,
-				{ count: number }
-			> = function* (ctx) {
-				let count = 0;
-				ctx.query("count", () => count);
-				count++;
-				const data = yield* ctx.waitFor("submit");
-				count++;
-				return `done: ${data}`;
-			};
-
-			const { result } = renderHook(() =>
-				useWorkflow("q-1", workflow, { storage: new MemoryStorage() }),
-			);
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
-			});
-
-			expect(result.current.query("count")).toBe(1);
-
-			act(() => {
-				result.current.signal("submit", "data");
-			});
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-			});
-
-			expect(result.current.query("count")).toBe(2);
-		});
-
-		it("query returns undefined for workflows without queries", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
-				return yield* ctx.activity("greet", async () => "hello");
-			};
-
-			const { result } = renderHook(() =>
-				useWorkflow("q-2", workflow, { storage: new MemoryStorage() }),
-			);
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-			});
-
-			expect(result.current.query("anything")).toBeUndefined();
-		});
-
-		it("reset re-registers queries on new run", async () => {
-			let runCount = 0;
-			const workflow: WorkflowFunction<
-				number,
-				Record<string, unknown>,
-				Record<string, never>,
-				{ run: number }
-			> = function* (ctx) {
-				runCount++;
-				ctx.query("run", () => runCount);
-				return yield* ctx.activity("count", async () => runCount);
-			};
-
-			const storage = new MemoryStorage();
-			const { result } = renderHook(() =>
-				useWorkflow("q-3", workflow, { storage }),
-			);
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.query("run")).toBe(1);
-			});
-
-			await act(async () => {
-				result.current.reset();
-			});
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.query("run")).toBe(2);
-			});
-		});
-
-		it("layer mode exposes query", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				Record<string, never>,
-				{ label: string }
-			> = function* (ctx) {
-				ctx.query("label", () => "from-layer");
-				return yield* ctx.activity("greet", async () => "hello");
-			};
-
-			const storage = new MemoryStorage();
-			const layer = createLayer({ ql: workflow }, storage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			const { result } = renderHook(() => useWorkflow("ql"), {
-				wrapper,
-			});
-
-			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-			});
-
-			expect(result.current.query("label")).toBe("from-layer");
-		});
-	});
-
 	describe("cancellation", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;
@@ -746,7 +631,7 @@ describe("useWorkflow", () => {
 	});
 
 	describe("cross-workflow dependencies", () => {
-		it("inline workflow can use waitForWorkflow with layer workflows", async () => {
+		it("inline workflow can use join with layer workflows", async () => {
 			const loginWorkflow: WorkflowFunction<string> = function* (ctx) {
 				return yield* ctx.activity("login", async () => "user-123");
 			};
@@ -756,7 +641,7 @@ describe("useWorkflow", () => {
 				Record<string, unknown>,
 				{ login: string }
 			> = function* (ctx) {
-				const user = yield* ctx.waitForWorkflow("login");
+				const user = yield* ctx.join("login");
 				return `local got: ${user}`;
 			};
 
@@ -777,7 +662,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("signal then waitForWorkflow then activity completes", async () => {
+		it("signal then join then activity completes", async () => {
 			const profileWorkflow: WorkflowFunction<
 				{ name: string },
 				{ profile: { name: string } }
@@ -792,7 +677,7 @@ describe("useWorkflow", () => {
 				{ profile: { name: string } }
 			> = function* (ctx) {
 				const payment = yield* ctx.waitFor("payment");
-				const profile = yield* ctx.waitForWorkflow("profile");
+				const profile = yield* ctx.join("profile");
 				const order = yield* ctx.activity("place-order", async () => {
 					return `${profile.name}:${payment}`;
 				});

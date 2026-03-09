@@ -596,7 +596,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ B: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("B");
+				return yield* ctx.join("B");
 			};
 
 			const workflowB: WorkflowFunction<
@@ -604,7 +604,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ A: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("A");
+				return yield* ctx.join("A");
 			};
 
 			const storage = new MemoryStorage();
@@ -628,7 +628,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ B: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("B");
+				return yield* ctx.join("B");
 			};
 
 			const workflowB: WorkflowFunction<
@@ -636,7 +636,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ C: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("C");
+				return yield* ctx.join("C");
 			};
 
 			const workflowC: WorkflowFunction<
@@ -644,7 +644,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ A: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("A");
+				return yield* ctx.join("A");
 			};
 
 			const storage = new MemoryStorage();
@@ -673,7 +673,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ target: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("target");
+				return yield* ctx.join("target");
 			};
 
 			const workflowC: WorkflowFunction<
@@ -681,7 +681,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ target: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("target");
+				return yield* ctx.join("target");
 			};
 
 			const storage = new MemoryStorage();
@@ -714,7 +714,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ A: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("A");
+				return yield* ctx.join("A");
 			};
 
 			const storage = new MemoryStorage();
@@ -740,7 +740,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ A: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("A");
+				return yield* ctx.join("A");
 			};
 
 			const workflowC: WorkflowFunction<
@@ -748,7 +748,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ B: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForWorkflow("B");
+				return yield* ctx.join("B");
 			};
 
 			const storage = new MemoryStorage();
@@ -964,7 +964,6 @@ describe("WorkflowRegistry", () => {
 				void,
 				{ login: { user: string } },
 				Record<string, never>,
-				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
 				const { user } = yield* ctx.waitFor("login");
@@ -1002,7 +1001,6 @@ describe("WorkflowRegistry", () => {
 				void,
 				{ login: { user: string } },
 				Record<string, never>,
-				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
 				const { user } = yield* ctx.waitFor("login");
@@ -1038,11 +1036,10 @@ describe("WorkflowRegistry", () => {
 			expect(result).toBe("hello");
 		});
 
-		it("integration: waitForWorkflow gets published value from another workflow", async () => {
+		it("integration: published() gets published value from another workflow", async () => {
 			const sessionWorkflow: WorkflowFunction<
 				void,
 				{ login: { user: string } },
-				Record<string, never>,
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
@@ -1056,7 +1053,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, unknown>,
 				{ session: { user: string } }
 			> = function* (ctx) {
-				const account = yield* ctx.waitForWorkflow("session");
+				const account = yield* ctx.published("session");
 				return `checkout for ${account.user}`;
 			};
 
@@ -1086,7 +1083,6 @@ describe("WorkflowRegistry", () => {
 			const workflow: WorkflowFunction<
 				void,
 				{ login: { user: string } },
-				Record<string, never>,
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
@@ -1124,7 +1120,6 @@ describe("WorkflowRegistry", () => {
 				string,
 				{ login: { user: string } },
 				Record<string, never>,
-				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
 				const { user } = yield* ctx.waitFor("login");
@@ -1158,7 +1153,6 @@ describe("WorkflowRegistry", () => {
 				string,
 				{ login: { user: string } },
 				Record<string, never>,
-				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
 				const { user } = yield* ctx.waitFor("login");
@@ -1188,7 +1182,6 @@ describe("WorkflowRegistry", () => {
 			const workflow: WorkflowFunction<
 				void,
 				{ login: { user: string } },
-				Record<string, never>,
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
@@ -1224,7 +1217,6 @@ describe("WorkflowRegistry", () => {
 				string,
 				{ login: { user: string } },
 				Record<string, never>,
-				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
 				const { user } = yield* ctx.waitFor("login");
@@ -1256,7 +1248,6 @@ describe("WorkflowRegistry", () => {
 			const workflow: WorkflowFunction<
 				void,
 				{ login: { user: string } },
-				Record<string, never>,
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
@@ -1329,7 +1320,6 @@ describe("WorkflowRegistry", () => {
 			const workflow: WorkflowFunction<
 				void,
 				{ login: { user: string } },
-				Record<string, never>,
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {

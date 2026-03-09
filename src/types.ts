@@ -80,13 +80,6 @@ export type WaitForAnyCommand = {
 	seq: number;
 };
 
-export type WaitForWorkflowCommand = {
-	type: "waitForWorkflow";
-	workflowId: string;
-	start: boolean;
-	seq: number;
-};
-
 export type PublishedCommand = {
 	type: "published";
 	workflowId: string;
@@ -121,7 +114,6 @@ export type Command =
 	| SleepCommand
 	| ParallelCommand
 	| ChildCommand
-	| WaitForWorkflowCommand
 	| PublishedCommand
 	| JoinCommand
 	| RaceCommand
@@ -343,17 +335,16 @@ export type WorkflowFunction<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	QueryMap extends Record<string, unknown> = Record<string, never>,
 	PublishType = never,
 > = (
-	ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
+	ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 ) => Workflow<T>;
 
 // Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
 // Uses `any` for SignalMap/WorkflowMap to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
-export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any, any>;
+export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any>;
 
 export type WorkflowState =
 	| "running"
@@ -365,10 +356,6 @@ export type WorkflowState =
 // --- Registry interface (avoids circular imports) ---
 
 export type WorkflowRegistryInterface = {
-	waitFor<T>(
-		workflowId: string,
-		options?: { start?: boolean; caller?: string },
-	): Promise<T>;
 	waitForPublished<T>(
 		workflowId: string,
 		options?: { start?: boolean; caller?: string },
@@ -386,11 +373,10 @@ export type WorkflowRegistryInterface = {
 export type OnHandlers<
 	SignalMap extends Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown>,
-	QueryMap extends Record<string, unknown>,
 	PublishType = never,
 > = {
 	[K in keyof SignalMap & string]?: (
-		ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
+		ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 		payload: SignalMap[K],
 	) => Generator<Command, void, unknown>;
 };
@@ -398,13 +384,8 @@ export type OnHandlers<
 export type WorkflowContext<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	QueryMap extends Record<string, unknown> = Record<string, never>,
 	PublishType = never,
 > = {
-	query: <K extends keyof QueryMap & string>(
-		name: K,
-		handler: () => QueryMap[K],
-	) => void;
 	activity: <T>(
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
@@ -424,7 +405,7 @@ export type WorkflowContext<
 		unknown
 	>;
 	on: <T>(
-		handlers: OnHandlers<SignalMap, WorkflowMap, QueryMap, PublishType>,
+		handlers: OnHandlers<SignalMap, WorkflowMap, PublishType>,
 	) => Generator<Command, T, unknown>;
 	done: <T>(value: T) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
@@ -473,10 +454,6 @@ export type WorkflowContext<
 			unknown
 		>;
 	};
-	waitForWorkflow: <K extends keyof WorkflowMap & string>(
-		workflowId: K,
-		options?: { start?: boolean },
-	) => Generator<Command, WorkflowMap[K], unknown>;
 	published: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
 		options?: { start?: boolean },
@@ -495,7 +472,6 @@ export type WorkflowContext<
 // but without generic constraints that TypeScript can't satisfy at the erased level.
 // WorkflowFunction narrows this to the user-facing WorkflowContext<SignalMap, WorkflowMap>.
 export type InternalWorkflowContext = {
-	query: (name: string, handler: () => unknown) => void;
 	activity: <T>(
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
@@ -531,10 +507,6 @@ export type InternalWorkflowContext = {
 	race: (
 		...branches: Generator<Command, unknown, unknown>[]
 	) => Generator<Command, { winner: number; value: unknown }, unknown>;
-	waitForWorkflow: (
-		workflowId: string,
-		options?: { start?: boolean },
-	) => Generator<Command, unknown, unknown>;
 	published: (
 		workflowId: string,
 		options?: { start?: boolean },

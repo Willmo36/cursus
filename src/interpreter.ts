@@ -61,7 +61,6 @@ export class Interpreter {
 		  }
 		| undefined;
 	private _publishedValue: unknown;
-	private _queries = new Map<string, () => unknown>();
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
 	private _abortController: AbortController | null = null;
@@ -93,9 +92,6 @@ export class Interpreter {
 		// The context methods work with `unknown` internally; generic narrowing
 		// happens at the WorkflowFunction<T, SignalMap, WorkflowMap> level for end users.
 		this.context = {
-			query: (name: string, handler: () => unknown) => {
-				this._queries.set(name, handler);
-			},
 			activity: <T>(name: string, fn: (signal: AbortSignal) => Promise<T>) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
@@ -239,19 +235,6 @@ export class Interpreter {
 					return result as { winner: number; value: unknown };
 				})();
 			},
-			waitForWorkflow: (workflowId: string, options?: { start?: boolean }) => {
-				const seq = ++this.seq;
-				const start = options?.start ?? true;
-				return (function* (): Generator<Command, unknown, unknown> {
-					const result = yield {
-						type: "waitForWorkflow" as const,
-						workflowId,
-						start,
-						seq,
-					};
-					return result;
-				})();
-			},
 			published: (workflowId: string, options?: { start?: boolean }) => {
 				const seq = ++this.seq;
 				const start = options?.start ?? true;
@@ -334,10 +317,6 @@ export class Interpreter {
 
 	get published(): unknown {
 		return this._publishedValue;
-	}
-
-	query(name: string): unknown {
-		return this._queries.get(name)?.();
 	}
 
 	signal(name: string, payload?: unknown): void {
@@ -604,8 +583,6 @@ export class Interpreter {
 				return this.executeParallel(command);
 			case "child":
 				return this.executeChild(command);
-			case "waitForWorkflow":
-				return this.executeWaitForWorkflow(command);
 			case "published":
 				return this.executePublishedCommand(command);
 			case "join":
@@ -823,7 +800,7 @@ export class Interpreter {
 				});
 
 				registry
-					?.waitFor(item.workflowId, { start: true, caller: this._workflowId })
+					?.waitForCompletion(item.workflowId, { start: true, caller: this._workflowId })
 					.then((result) => {
 						if (failed) return;
 						collected.set(key, result);
@@ -977,71 +954,6 @@ export class Interpreter {
 			unsub();
 			this._activeChild = null;
 			this.clearChildState();
-			throw err;
-		}
-	}
-
-	private async executeWaitForWorkflow(
-		command: Extract<Command, { type: "waitForWorkflow" }>,
-	): Promise<unknown> {
-		// Check for replay: completed
-		const completed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_completed",
-		);
-		if (completed) {
-			return (completed as { result: unknown }).result;
-		}
-
-		// Check for replay: failed
-		const failed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_failed",
-		);
-		if (failed) {
-			throw new Error((failed as { error: string }).error);
-		}
-
-		// Live: require registry
-		if (!this.registry) {
-			throw new Error(
-				"waitForWorkflow requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
-		this.log.append({
-			type: "workflow_dependency_started",
-			workflowId: command.workflowId,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
-
-		try {
-			const result = await this.registry.waitFor(command.workflowId, {
-				start: command.start,
-				caller: this._workflowId,
-			});
-
-			this.log.append({
-				type: "workflow_dependency_completed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				result,
-				timestamp: Date.now(),
-			});
-
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			const stack = err instanceof Error ? err.stack : undefined;
-			this.log.append({
-				type: "workflow_dependency_failed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				error: message,
-				stack,
-				timestamp: Date.now(),
-			});
 			throw err;
 		}
 	}
@@ -1341,12 +1253,6 @@ export class Interpreter {
 						}
 						return { index, value: result };
 					});
-				}
-				case "waitForWorkflow": {
-					return this.executeWaitForWorkflow(item).then((value) => ({
-						index,
-						value,
-					}));
 				}
 				case "published": {
 					return this.executePublishedCommand(item).then((value) => ({

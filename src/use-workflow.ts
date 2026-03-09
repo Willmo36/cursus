@@ -31,7 +31,6 @@ type UseWorkflowOptions = {
 type UseWorkflowResult<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-	QueryMap extends Record<string, unknown> = Record<string, never>,
 > = {
 	state: WorkflowState;
 	result: T | undefined;
@@ -43,41 +42,32 @@ type UseWorkflowResult<
 		name: K,
 		payload: SignalMap[K],
 	) => void;
-	query: <K extends keyof QueryMap & string>(
-		name: K,
-	) => QueryMap[K] | undefined;
 	cancel: () => void;
 	reset: () => void;
 };
 
 // Overload 1: consume a workflow from the layer by ID
-export function useWorkflow<
-	T = unknown,
-	QueryMap extends Record<string, unknown> = Record<string, never>,
->(workflowId: string): UseWorkflowResult<T, Record<string, unknown>, QueryMap>;
+export function useWorkflow<T = unknown>(
+	workflowId: string,
+): UseWorkflowResult<T, Record<string, unknown>>;
 
 // Overload 2: run an inline workflow with optional layer deps
 export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	QueryMap extends Record<string, unknown> = Record<string, never>,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap, QueryMap>;
+): UseWorkflowResult<T, SignalMap>;
 
 // Implementation
 export function useWorkflow(
 	workflowId: string,
 	workflowFn?: AnyWorkflowFunction,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<
-	unknown,
-	Record<string, unknown>,
-	Record<string, unknown>
-> {
+): UseWorkflowResult<unknown, Record<string, unknown>> {
 	const registry = useContext(RegistryContext);
 	const isLayerMode = workflowFn === undefined;
 
@@ -232,16 +222,6 @@ export function useWorkflow(
 		[isLayerMode, registry, workflowId],
 	);
 
-	const query = useCallback(
-		(name: string): unknown => {
-			if (isLayerMode && registry) {
-				return registry.getInterpreter(workflowId)?.query(name);
-			}
-			return interpreterRef.current?.query(name);
-		},
-		[isLayerMode, registry, workflowId],
-	);
-
 	const cancel = useCallback(() => {
 		interpreterRef.current?.cancel();
 	}, []);
@@ -278,7 +258,6 @@ export function useWorkflow(
 		waitingForAll,
 		waitingForAny,
 		signal,
-		query,
 		cancel,
 		reset,
 	};

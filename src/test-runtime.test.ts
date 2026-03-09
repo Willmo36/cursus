@@ -109,13 +109,13 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("test@example.com:secret123");
 	});
 
-	it("mocks waitForWorkflow with workflowResults", async () => {
+	it("mocks join with workflowResults", async () => {
 		const wf: WorkflowFunction<
 			string,
 			Record<string, unknown>,
 			{ login: string }
 		> = function* (ctx) {
-			const user = yield* ctx.waitForWorkflow("login");
+			const user = yield* ctx.join("login");
 			return `got: ${user}`;
 		};
 
@@ -134,7 +134,7 @@ describe("createTestRuntime", () => {
 			Record<string, unknown>,
 			{ login: string }
 		> = function* (ctx) {
-			const user = yield* ctx.waitForWorkflow("login");
+			const user = yield* ctx.join("login");
 			const greeting = yield* ctx.activity("greet", async () => "real");
 			const confirm = yield* ctx.waitFor("confirm");
 			return `${user}:${greeting}:${confirm}`;
@@ -147,27 +147,6 @@ describe("createTestRuntime", () => {
 		});
 
 		expect(result).toBe("mock-user:mock-hello:yes");
-	});
-
-	it("workflows calling ctx.query() run without error", async () => {
-		const workflow: WorkflowFunction<
-			string,
-			Record<string, unknown>,
-			Record<string, never>,
-			{ label: string }
-		> = function* (ctx) {
-			ctx.query("label", () => "test");
-			const greeting = yield* ctx.activity("greet", async () => "real");
-			return greeting;
-		};
-
-		const result = await createTestRuntime(workflow, {
-			activities: {
-				greet: () => "mocked hello",
-			},
-		});
-
-		expect(result).toBe("mocked hello");
 	});
 
 	it("handles workflow that catches activity error", async () => {
