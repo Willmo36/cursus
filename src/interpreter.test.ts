@@ -1482,6 +1482,83 @@ describe("Interpreter", () => {
 		});
 	});
 
+	describe("published getter", () => {
+		it("returns undefined before any publish", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const interpreter = new Interpreter(workflow, new EventLog());
+			expect(interpreter.published).toBeUndefined();
+			await interpreter.run();
+			expect(interpreter.published).toBeUndefined();
+		});
+
+		it("returns last published value after executePublish", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn(),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const workflow: WorkflowFunction<
+				string,
+				{ submit: string },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				yield* ctx.publish({ user: "max" });
+				return "done";
+			};
+
+			const interpreter = new Interpreter(
+				workflow,
+				new EventLog(),
+				mockRegistry,
+				"test",
+			);
+			await interpreter.run();
+
+			expect(interpreter.published).toEqual({ user: "max" });
+		});
+
+		it("hydrates from replay (last workflow_published event)", async () => {
+			const log = new EventLog([
+				{ type: "workflow_started", timestamp: 1 },
+				{
+					type: "workflow_published",
+					value: { user: "max" },
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "workflow_completed",
+					result: "done",
+					timestamp: 3,
+				},
+			]);
+
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				yield* ctx.publish({ user: "max" });
+				return "done";
+			};
+
+			const interpreter = new Interpreter(workflow, log);
+			await interpreter.run();
+
+			expect(interpreter.published).toEqual({ user: "max" });
+		});
+	});
+
 	describe("Phase H: waitForWorkflow", () => {
 		it("delegates to registry and returns the result", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {

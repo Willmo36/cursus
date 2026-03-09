@@ -60,6 +60,7 @@ export class Interpreter {
 				resolve: (result: { signal: string; payload: unknown }) => void;
 		  }
 		| undefined;
+	private _publishedValue: unknown;
 	private _queries = new Map<string, () => unknown>();
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
@@ -329,6 +330,10 @@ export class Interpreter {
 
 	get waitingForAny(): string[] | undefined {
 		return this._waitingForAny;
+	}
+
+	get published(): unknown {
+		return this._publishedValue;
 	}
 
 	query(name: string): unknown {
@@ -1180,6 +1185,7 @@ export class Interpreter {
 			"workflow_published",
 		);
 		if (existing) {
+			this._publishedValue = (existing as { value: unknown }).value;
 			return;
 		}
 
@@ -1190,6 +1196,7 @@ export class Interpreter {
 			);
 		}
 
+		this._publishedValue = command.value;
 		this.registry.publish(this._workflowId!, command.value);
 		this.log.append({
 			type: "workflow_published",
@@ -1197,6 +1204,7 @@ export class Interpreter {
 			seq: command.seq,
 			timestamp: Date.now(),
 		});
+		this.notifyChange();
 	}
 
 	private async executeRace(
