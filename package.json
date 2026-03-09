@@ -1,7 +1,7 @@
 {
-	"name": "react-workflow",
+	"name": "cursus",
 	"version": "0.1.0",
-	"description": "Durable workflows for React, inspired by Temporal",
+	"description": "Durable workflows for JavaScript, inspired by Temporal",
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.js",
@@ -16,6 +16,32 @@
 				"types": "./dist/index.d.cts",
 				"default": "./dist/index.cjs"
 			}
+		},
+		"./react": {
+			"import": {
+				"types": "./dist/react.d.ts",
+				"default": "./dist/react.js"
+			},
+			"require": {
+				"types": "./dist/react.d.cts",
+				"default": "./dist/react.cjs"
+			}
+		},
+		"./devtools": {
+			"import": {
+				"types": "./dist/devtools.d.ts",
+				"default": "./dist/devtools.js"
+			},
+			"require": {
+				"types": "./dist/devtools.d.cts",
+				"default": "./dist/devtools.cjs"
+			}
+		}
+	},
+	"typesVersions": {
+		"*": {
+			"react": ["./dist/react.d.ts"],
+			"devtools": ["./dist/devtools.d.ts"]
 		}
 	},
 	"files": [
@@ -32,6 +58,14 @@
 	"peerDependencies": {
 		"react": ">=18.0.0",
 		"react-dom": ">=18.0.0"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": true
+		},
+		"react-dom": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.14",
@@ -50,11 +84,11 @@
 		"vitest": "^4.0.18"
 	},
 	"keywords": [
-		"react",
 		"workflow",
 		"durable",
 		"state-machine",
-		"temporal"
+		"temporal",
+		"react"
 	],
 	"license": "MIT"
 }
