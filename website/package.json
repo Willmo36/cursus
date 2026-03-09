@@ -1,0 +1,21 @@
+{
+	"name": "cursus-docs",
+	"private": true,
+	"scripts": {
+		"start": "docusaurus start",
+		"build": "docusaurus build",
+		"serve": "docusaurus serve",
+		"docs:version": "docusaurus docs:version"
+	},
+	"dependencies": {
+		"@docusaurus/core": "^3",
+		"@docusaurus/preset-classic": "^3",
+		"react": "^18",
+		"react-dom": "^18"
+	},
+	"devDependencies": {
+		"@docusaurus/module-type-aliases": "^3",
+		"@docusaurus/tsconfig": "^3",
+		"typescript": "~5.9.0"
+	}
+}

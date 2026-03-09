@@ -236,6 +236,8 @@ expect(result).toEqual({ displayName: "Alice" });
 
 ## Documentation
 
+**[Read the docs →](https://willmo36.github.io/react-workflow/docs/)**
+
 - [Getting Started](./docs/getting-started.md)
 - [Workflows](./docs/workflows.md) — the `WorkflowContext` API
 - [Layers](./docs/layers.md) — shared workflows and cross-workflow dependencies

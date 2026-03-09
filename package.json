@@ -53,7 +53,10 @@
 		"test:watch": "vitest",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"docs:dev": "cd website && npm start",
+		"docs:build": "cd website && npm run build",
+		"docs:version": "cd website && npm run docs:version --"
 	},
 	"peerDependencies": {
 		"react": ">=18.0.0",

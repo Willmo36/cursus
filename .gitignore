@@ -3,3 +3,6 @@ dist
 *.tsbuildinfo
 examples/*/node_modules
 examples/*/dist
+website/node_modules
+website/build
+website/.docusaurus
