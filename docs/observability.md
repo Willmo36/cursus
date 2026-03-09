@@ -67,7 +67,7 @@ Every workflow operation produces one or more events:
 | `child_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Child workflow throws |
 | `wait_all_started` | `items`, `seq`, `timestamp` | waitForAll begins |
 | `wait_all_completed` | `seq`, `results`, `timestamp` | All items resolved |
-| `workflow_dependency_started` | `workflowId`, `seq`, `timestamp` | waitForWorkflow begins |
+| `workflow_dependency_started` | `workflowId`, `seq`, `timestamp` | join / published begins |
 | `workflow_dependency_completed` | `workflowId`, `seq`, `result`, `timestamp` | Dependency resolved |
 | `workflow_dependency_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Dependency failed |
 | `race_started` | `seq`, `items`, `timestamp` | Race begins |

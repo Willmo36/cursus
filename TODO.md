@@ -14,12 +14,12 @@ Priority: fill gaps in feature coverage and add real-world scenarios.
 ### Missing feature combinations
 
 - [ ] **child + error handling** — What happens when a child workflow fails? How do you recover?
-- [ ] **on/done + waitForWorkflow** — Event-loop style workflow coordinating with other workflows.
+- [ ] **on/done + join** — Event-loop style workflow coordinating with other workflows.
 - [ ] **race + waitFor** — "Cancel if user navigates away" or "first responder wins."
 
 ### Complex scenarios
 
-- [ ] **Approval chain** — Sequential `waitForWorkflow` with different actors (manager → director → finance).
+- [ ] **Approval chain** — Sequential `join` with different actors (manager → director → finance).
 - [ ] **Booking with hold** — Reserve (activity), hold for N minutes (sleep), race timeout vs payment (race + waitFor), release on expiry (activity). Classic saga.
 - [ ] **Onboarding wizard** — Multi-step with `child` workflows per step, back-button support, progress persistence.
 

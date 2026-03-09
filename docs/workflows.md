@@ -9,7 +9,7 @@ A workflow is a generator function that yields commands through the `WorkflowCon
 ```ts
 import type { WorkflowFunction } from "cursus";
 
-const myWorkflow: WorkflowFunction<ResultType, SignalMap, WorkflowMap, QueryMap> = function* (ctx) {
+const myWorkflow: WorkflowFunction<ResultType, SignalMap, WorkflowMap> = function* (ctx) {
   // ...
 };
 ```
@@ -21,7 +21,6 @@ The type parameters are:
 | `ResultType` | required | The workflow's return type |
 | `SignalMap` | `Record<string, unknown>` | Maps signal names to payload types |
 | `WorkflowMap` | `Record<string, never>` | Maps workflow IDs to result types (for cross-workflow deps) |
-| `QueryMap` | `Record<string, never>` | Maps query names to return types |
 | `PublishType` | `never` | The type of value this workflow can publish (uncallable when `never`) |
 
 ## Activities
@@ -177,33 +176,6 @@ const finalCount = yield* ctx.on<number>({
 
 `on` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `ctx.done(value)`, which terminates the loop and returns the value.
 
-## Queries
-
-Queries let the UI read workflow-internal state without signals:
-
-```ts
-const workflow: WorkflowFunction<string, SignalMap, never, { count: number }> =
-  function* (ctx) {
-    let count = 0;
-    ctx.query("count", () => count);
-
-    // count changes as the workflow progresses...
-    count++;
-    const data = yield* ctx.waitFor("submit");
-    count++;
-    return data;
-  };
-```
-
-The UI reads it via the hook:
-
-```tsx
-const { query } = useWorkflow("my-wf", workflow);
-const count = query("count"); // reactive, updates on state changes
-```
-
-Queries are not persisted — they're computed from the live workflow state.
-
 ## Publish
 
 `publish` lets a workflow provide a value to consumers while continuing to run. This is useful for long-lived workflows that produce an intermediate result — like a session workflow that publishes the user account on login but keeps running to handle revocation.
@@ -226,8 +198,8 @@ const sessionWorkflow: WorkflowFunction<
 
 When a workflow publishes:
 
-- All current `waitForWorkflow` callers resolve immediately with the published value
-- Future `waitForWorkflow` calls return the published value without waiting
+- All current `published` callers resolve immediately with the published value
+- Future `published` calls return the published value without waiting
 - The workflow generator continues executing
 
 The 5th type parameter on `WorkflowFunction` controls the publish type. When omitted (defaults to `never`), `ctx.publish` is uncallable — you get a type error if you try to use it.
@@ -236,10 +208,10 @@ On replay, the publish event replays from the event log without calling the regi
 
 ### When to use `return` vs `publish`
 
-- **Does your workflow have a definitive end state?** Use `return`. The workflow completes and consumers get the final value via `waitForWorkflow` or `useWorkflow().result`.
-- **Does your workflow need to provide a value but keep running?** Use `publish`. Consumers get the value immediately via `waitForWorkflow`, and the workflow continues handling signals (upgrades, revocation, live updates, etc.).
-- **Can you publish multiple times?** Yes. Each `yield* ctx.publish(value)` updates the value for future `waitForWorkflow` callers and resolves any currently waiting consumers.
-- **Can a workflow both publish and return?** Yes. `publish` provides an intermediate value while the workflow is alive. `return` ends the workflow. Once a workflow returns, `waitForWorkflow` resolves with the published value (if any) or the completed value.
+- **Does your workflow have a definitive end state?** Use `return`. The workflow completes and consumers get the final value via `join` or `useWorkflow().result`.
+- **Does your workflow need to provide a value but keep running?** Use `publish`. Consumers get the value immediately via `published`, and the workflow continues handling signals (upgrades, revocation, live updates, etc.).
+- **Can you publish multiple times?** Yes. Each `yield* ctx.publish(value)` updates the value for future `published` callers and resolves any currently waiting consumers.
+- **Can a workflow both publish and return?** Yes. `publish` provides an intermediate value while the workflow is alive. `return` ends the workflow. Once a workflow returns, `join` resolves with the completed value.
 
 ## Error Handling
 
@@ -276,6 +248,5 @@ A cancelled workflow enters the `"cancelled"` state. You can catch `CancelledErr
 `WorkflowFunction` is fully generic. TypeScript enforces that:
 
 - `signal("name", payload)` matches your `SignalMap`
-- `waitForWorkflow("id")` matches your `WorkflowMap`
-- `query("name")` matches your `QueryMap`
+- `join("id")` and `published("id")` match your `WorkflowMap`
 - The return type flows through to `useWorkflow().result`

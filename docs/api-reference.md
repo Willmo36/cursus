@@ -12,16 +12,16 @@ Exhaustive reference for all public exports from `cursus`.
 
 ```ts
 // Layer mode — consumes a workflow from WorkflowLayerProvider
-function useWorkflow<T, QueryMap>(
+function useWorkflow<T>(
   workflowId: string,
-): UseWorkflowResult<T, Record<string, unknown>, QueryMap>;
+): UseWorkflowResult<T, Record<string, unknown>>;
 
 // Inline mode — runs a workflow directly
-function useWorkflow<T, SignalMap, WorkflowMap, QueryMap>(
+function useWorkflow<T, SignalMap, WorkflowMap>(
   workflowId: string,
-  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap>,
+  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
   options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap, QueryMap>;
+): UseWorkflowResult<T, SignalMap>;
 ```
 
 **UseWorkflowOptions:**
@@ -43,7 +43,7 @@ function useWorkflow<T, SignalMap, WorkflowMap, QueryMap>(
 | `waitingForAll` | `string[] \| undefined` |
 | `waitingForAny` | `string[] \| undefined` |
 | `signal(name, payload)` | `(name: K, payload: SignalMap[K]) => void` |
-| `query(name)` | `(name: K) => QueryMap[K] \| undefined` |
+| `published` | `T \| undefined` |
 | `cancel()` | `() => void` |
 | `reset()` | `() => void` |
 
@@ -127,7 +127,8 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | Method | Description |
 |--------|-------------|
 | `start(id)` | Start a workflow. Idempotent. |
-| `waitFor<T>(id, options?)` | Wait for a workflow's result (or published value). Auto-starts by default. |
+| `waitForPublished<T>(id, options?)` | Wait for a workflow's published value. Auto-starts by default. |
+| `waitForCompletion<T>(id, options?)` | Wait for a workflow to complete. Auto-starts by default. |
 | `publish(id, value)` | Mark a workflow as published and resolve all waiters. |
 | `reset(id)` | Cancel, clear storage, allow restart. |
 | `signal(id, name, payload?)` | Send a signal to a running workflow. |
@@ -191,8 +192,8 @@ Returns `true` if storage was wiped due to version mismatch. No-op when version 
 ### WorkflowFunction
 
 ```ts
-type WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap, PublishType = never> = (
-  ctx: WorkflowContext<SignalMap, WorkflowMap, QueryMap, PublishType>,
+type WorkflowFunction<T, SignalMap, WorkflowMap, PublishType = never> = (
+  ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 ) => Generator<Command, T, unknown>;
 ```
 
@@ -210,8 +211,8 @@ type WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap, PublishType = never> 
 | `race` | `(...branches) => Generator` | Race branches, first wins |
 | `on` | `(handlers) => Generator` | Signal dispatch loop |
 | `done` | `(value) => Generator` | Exit an `on` loop with a value |
-| `query` | `(name, handler) => void` | Register a query handler |
-| `waitForWorkflow` | `(id, options?) => Generator` | Wait for a workflow dependency |
+| `join` | `(id, options?) => Generator` | Wait for a workflow to complete |
+| `published` | `(id, options?) => Generator` | Wait for a workflow to publish a value |
 | `workflow` | `(id) => WorkflowRef` | Create a typed workflow reference |
 | `publish` | `(value) => Generator` | Resolve waiters without completing (requires `PublishType`) |
 
@@ -241,7 +242,8 @@ Thrown into the generator when a workflow is cancelled.
 
 ```ts
 type WorkflowRegistryInterface = {
-  waitFor<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
+  waitForPublished<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
+  waitForCompletion<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
   start(workflowId: string): Promise<void>;
   publish(workflowId: string, value: unknown): void;
 };
@@ -319,8 +321,8 @@ type ActivityWrapper = <T>(
 ### createTestRuntime
 
 ```ts
-function createTestRuntime<T, SignalMap, WorkflowMap, QueryMap>(
-  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, QueryMap>,
+function createTestRuntime<T, SignalMap, WorkflowMap>(
+  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
   options: TestRuntimeOptions<SignalMap>,
 ): Promise<T>;
 ```
@@ -331,7 +333,7 @@ function createTestRuntime<T, SignalMap, WorkflowMap, QueryMap>(
 |-------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock activity implementations |
 | `signals` | `Array<{ name: K; payload: SignalMap[K] }>` | Pre-queued signals |
-| `workflowResults` | `Record<string, unknown>` | Mock `waitForWorkflow` results |
+| `workflowResults` | `Record<string, unknown>` | Mock `join` / `published` results |
 
 ## Observability
 
@@ -400,7 +402,8 @@ These are the internal command types yielded by workflow generators. Exported fo
 | `SleepCommand` | Durable timer |
 | `ParallelCommand` | Concurrent activities |
 | `ChildCommand` | Child workflow delegation |
-| `WaitForWorkflowCommand` | Cross-workflow dependency |
+| `JoinCommand` | Wait for workflow completion |
+| `PublishedCommand` | Wait for workflow published value |
 | `RaceCommand` | Race branches |
 | `PublishCommand` | Publish a value to waiters |
 | `Command` | Union of all command types |

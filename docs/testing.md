@@ -29,7 +29,7 @@ expect(result).toBe("expected value");
 |--------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock functions keyed by activity name. Unmocked activities run their real implementation. |
 | `signals` | `Array<{ name, payload }>` | Pre-queued signals, delivered automatically when the workflow waits for them. |
-| `workflowResults` | `Record<string, unknown>` | Mock results for `waitForWorkflow` dependencies. |
+| `workflowResults` | `Record<string, unknown>` | Mock results for `join` / `published` dependencies. |
 
 ## Mock Activities
 
@@ -92,11 +92,11 @@ const result = await createTestRuntime(counterWorkflow, {
 
 ## Cross-Workflow Dependencies
 
-Mock `waitForWorkflow` results with `workflowResults`:
+Mock `join` / `published` results with `workflowResults`:
 
 ```ts
 const workflow: WorkflowFunction<string, {}, { login: string }> = function* (ctx) {
-  const user = yield* ctx.waitForWorkflow("login");
+  const user = yield* ctx.join("login");
   return `got: ${user}`;
 };
 

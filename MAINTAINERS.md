@@ -76,7 +76,8 @@ sequenceDiagram
 | `ActivityCommand` | Run an async function | `ctx.activity(name, fn)` |
 | `WaitForCommand` | Block until a named signal arrives | `ctx.waitFor(signal)` |
 | `WaitForAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitForAll(...)` |
-| `WaitForWorkflowCommand` | Block until another workflow completes | `ctx.waitForWorkflow(id)` |
+| `JoinCommand` | Block until another workflow completes | `ctx.join(id)` |
+| `PublishedCommand` | Block until another workflow publishes a value | `ctx.published(id)` |
 | `SleepCommand` | Block for a duration | `ctx.sleep(ms)` |
 | `ParallelCommand` | Run multiple activities concurrently | `ctx.parallel(activities)` |
 | `ChildCommand` | Run a child workflow with its own event log | `ctx.child(name, fn)` |
@@ -156,7 +157,7 @@ graph LR
     SM -->|constrains| waitFor["ctx.waitFor(signal)"]
     SM -->|constrains| waitForAll["ctx.waitForAll(...)"]
     SM -->|constrains| signal["hook.signal(name, payload)"]
-    WM -->|constrains| wfw["ctx.waitForWorkflow(id)"]
+    WM -->|constrains| wfw["ctx.join(id) / ctx.published(id)"]
     WM -->|constrains| wref["ctx.workflow(id)"]
 ```
 
@@ -186,14 +187,16 @@ graph TB
     subgraph "User-facing (generic)"
         WC["WorkflowContext&lt;SignalMap, WorkflowMap&gt;"]
         WC1["waitFor&lt;K&gt;(signal: K) → SignalMap[K]"]
-        WC2["waitForWorkflow&lt;K&gt;(id: K) → WorkflowMap[K]"]
+        WC2["join&lt;K&gt;(id: K) → WorkflowMap[K]"]
+        WC2b["published&lt;K&gt;(id: K) → WorkflowMap[K]"]
         WC3["waitForAll(...) → mapped tuple"]
     end
 
     subgraph "Internal (type-erased)"
         IWC["InternalWorkflowContext"]
         IWC1["waitFor(signal: string) → unknown"]
-        IWC2["waitForWorkflow(id: string) → unknown"]
+        IWC2["join(id: string) → unknown"]
+        IWC2b["published(id: string) → unknown"]
         IWC3["waitForAll(...) → unknown"]
     end
 
@@ -284,8 +287,8 @@ sequenceDiagram
     participant INT_P as Profile Interpreter
     participant PW as Profile Workflow
 
-    CW->>INT_C: yield waitForWorkflow("profile")
-    INT_C->>REG: waitFor("profile", { start: true })
+    CW->>INT_C: yield join("profile")
+    INT_C->>REG: waitForCompletion("profile", { start: true })
     REG->>INT_P: start("profile")
     INT_P->>PW: run()
 

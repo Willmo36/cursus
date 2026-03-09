@@ -15,7 +15,7 @@ Initial release.
 - `child(name, workflowFn)` for nested sub-workflows via `yield*`
 - `race(...branches)` for concurrent branch racing with automatic cleanup
 - `on(handlers)` / `done(value)` for event-loop style signal handling
-- `query(name, handler)` for exposing live workflow state to external reads
+- `publish(value)` for exposing intermediate workflow state to consumers
 - `cancel()` with `AbortSignal` propagation to in-flight activities
 - `withRetry(fn, policy)` HOF for activity retry with fixed/linear/exponential backoff
 - `withCircuitBreaker(fn, policy)` HOF for fail-fast circuit breaking (closed → open → half-open)
@@ -24,7 +24,8 @@ Initial release.
 ### Cross-Workflow Dependencies
 
 - `WorkflowRegistry` for shared workflow instance management
-- `waitForWorkflow(id)` to block on another workflow's result
+- `join(id)` to block on another workflow's completion
+- `published(id)` to block on another workflow's published value
 - `workflow(id)` refs for use in `waitForAll`
 - Circular dependency detection (DFS-based, throws immediately with full cycle path)
 - Fail-fast error propagation in `waitForAll` when a dependency fails

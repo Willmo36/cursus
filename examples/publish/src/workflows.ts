@@ -18,7 +18,6 @@ export const sessionWorkflow: WorkflowFunction<
 	void,
 	SessionSignals,
 	Record<string, never>,
-	Record<string, never>,
 	Account
 > = function* (ctx) {
 	const { user } = yield* ctx.waitFor("login");
@@ -52,7 +51,7 @@ export const checkoutWorkflow: WorkflowFunction<
 	{ pay: { amount: number } },
 	WorkflowMap
 > = function* (ctx) {
-	const account = yield* ctx.waitForWorkflow("session");
+	const account = yield* ctx.published("session");
 
 	const payment = yield* ctx.waitFor("pay");
 

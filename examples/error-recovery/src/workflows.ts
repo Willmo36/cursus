@@ -58,7 +58,7 @@ export const orderWorkflow: WorkflowFunction<
 > = function* (ctx) {
 	const shipping = yield* ctx.waitFor("shipping");
 	try {
-		const receipt = yield* ctx.waitForWorkflow("payment");
+		const receipt = yield* ctx.join("payment");
 		return {
 			status: "confirmed" as const,
 			...shipping,

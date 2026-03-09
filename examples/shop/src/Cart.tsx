@@ -1,14 +1,11 @@
 // ABOUTME: Cart sidebar showing current items with quantity and remove buttons.
-// ABOUTME: Reads cart state from workflow query and signals checkout when ready.
+// ABOUTME: Reads cart state from the workflow's published value and signals checkout when ready.
 import { useWorkflow } from "cursus/react";
 import type { CartItem } from "./types";
 
 export function Cart({ onCheckout }: { onCheckout: () => void }) {
-	const { state, signal, error, query } = useWorkflow<
-		CartItem[],
-		{ items: CartItem[] }
-	>("cart");
-	const items = query("items") ?? [];
+	const { state, signal, error, published } = useWorkflow<CartItem[]>("cart");
+	const items = (published as CartItem[] | undefined) ?? [];
 
 	if (state === "failed") {
 		return (

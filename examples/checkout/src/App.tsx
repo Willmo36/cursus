@@ -1,5 +1,5 @@
 // ABOUTME: Checkout UI with a global profile workflow and a local checkout workflow.
-// ABOUTME: Demonstrates waitForWorkflow: checkout blocks until profile is complete.
+// ABOUTME: Demonstrates cross-workflow deps: checkout blocks until profile is complete.
 import { useState } from "react";
 import { WorkflowDebugPanel } from "cursus/devtools";
 import { useWorkflow } from "cursus/react";

@@ -1,5 +1,5 @@
 // ABOUTME: Environment and user profile workflows demonstrating infrastructure dependencies.
-// ABOUTME: The env workflow parses config; the user workflow consumes it via waitForWorkflow.
+// ABOUTME: The env workflow parses config; the user workflow consumes it via join.
 import type { WorkflowFunction } from "cursus";
 
 // --- Types ---
@@ -48,7 +48,7 @@ export const userWorkflow: WorkflowFunction<
 	UserSignals,
 	UserDeps
 > = function* (ctx) {
-	const env = yield* ctx.waitForWorkflow("env");
+	const env = yield* ctx.join("env");
 
 	const user = yield* ctx.activity("fetch-user", async () => {
 		const url = `${env.baseUrl}/user`;

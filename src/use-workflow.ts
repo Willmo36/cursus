@@ -57,9 +57,10 @@ export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
+	PublishType = never,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
+	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, PublishType>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap>;
 

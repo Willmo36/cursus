@@ -68,7 +68,7 @@ Layer workflows are started automatically on first `useWorkflow` call and shared
 
 ## Cross-Workflow Dependencies
 
-Workflows can wait on other workflows in the same layer using `waitForWorkflow`:
+Workflows can wait on other workflows in the same layer using `join`:
 
 ```ts
 const checkoutWorkflow: WorkflowFunction<
@@ -77,7 +77,7 @@ const checkoutWorkflow: WorkflowFunction<
   { profile: { name: string } }
 > = function* (ctx) {
   const payment = yield* ctx.waitFor("payment");
-  const profile = yield* ctx.waitForWorkflow("profile");
+  const profile = yield* ctx.join("profile");
   return yield* ctx.activity("place-order", async () => {
     return `${profile.name}: ${payment}`;
   });
@@ -86,11 +86,11 @@ const checkoutWorkflow: WorkflowFunction<
 
 The third type parameter (`WorkflowMap`) declares which workflows this one can depend on.
 
-`waitForWorkflow` auto-starts the target workflow if it hasn't been started yet. If it's already completed, the result is returned immediately.
+`join` auto-starts the target workflow if it hasn't been started yet. If it's already completed, the result is returned immediately.
 
-### Publish + waitForWorkflow
+### Publish + published
 
-For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `waitForWorkflow` get the published value immediately:
+For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `published` get the published value immediately:
 
 ```ts
 const sessionWorkflow: WorkflowFunction<
@@ -111,14 +111,14 @@ const checkoutWorkflow: WorkflowFunction<
   Record<string, unknown>,
   { session: { user: string } }
 > = function* (ctx) {
-  const account = yield* ctx.waitForWorkflow("session");
+  const account = yield* ctx.published("session");
   return yield* ctx.activity("place-order", async () => {
     return `order for ${account.user}`;
   });
 };
 ```
 
-Resolution order for `waitForWorkflow`: published → completed → failed → wait.
+Resolution order for `published`: published value → wait. Resolution order for `join`: completed → failed → wait.
 
 ## Workflow References in waitForAll
 
@@ -155,7 +155,7 @@ The registry detects circular dependencies at runtime and fails with a clear err
 Circular dependency detected: A -> B -> A
 ```
 
-This applies to both `waitForWorkflow` and `waitForAll` with workflow references.
+This applies to both `join` / `published` and `waitForAll` with workflow references.
 
 ## Layer Options
 

@@ -35,26 +35,22 @@ type CartSignals = {
 
 export function createCartWorkflow(
 	apiFetch: ApiFetch,
-): WorkflowFunction<
-	CartItem[],
-	CartSignals,
-	Record<string, never>,
-	{ items: CartItem[] }
-> {
+): WorkflowFunction<CartItem[], CartSignals, Record<string, never>, CartItem[]> {
 	return function* (ctx) {
 		let items: CartItem[] = [];
-		ctx.query("items", () => items);
 
-		const res =  yield* ctx.on<CartItem[]>({
+		const res = yield* ctx.on<CartItem[]>({
 			add: function* (ctx, productId: string) {
 				items = yield* ctx.activity("add-to-cart", (signal) =>
 					addToCart(apiFetch, productId, signal),
 				);
+				yield* ctx.publish(items);
 			},
 			remove: function* (ctx, productId: string) {
 				items = yield* ctx.activity("remove-from-cart", (signal) =>
 					removeFromCart(apiFetch, productId, signal),
 				);
+				yield* ctx.publish(items);
 			},
 			checkout: function* (ctx) {
 				yield* ctx.done(items);

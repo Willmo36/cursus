@@ -1,5 +1,5 @@
 // ABOUTME: Main layout for the publish example app.
-// ABOUTME: Session login + checkout flow demonstrating publish and waitForWorkflow.
+// ABOUTME: Session login + checkout flow demonstrating publish and published.
 import { createLayer } from "cursus";
 import { WorkflowDebugPanel } from "cursus/devtools";
 import { WorkflowLayerProvider, useWorkflow } from "cursus/react";
@@ -86,7 +86,7 @@ export function App() {
 				<p>
 					The session workflow publishes the account on login but keeps
 					running. The checkout workflow gets the published value
-					immediately via waitForWorkflow.
+					immediately via ctx.published().
 				</p>
 				<div style={{ display: "grid", gap: 20 }}>
 					<Session />

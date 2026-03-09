@@ -84,15 +84,15 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Timers** — durable `sleep` that survives reloads
 - **Parallel & Race** — concurrent activities and first-to-complete racing
 - **Child workflows** — compose via `yield*` delegation
-- **Cross-workflow dependencies** — `waitForWorkflow` with circular dependency detection
+- **Cross-workflow dependencies** — `join` / `published` with circular dependency detection
 - **Signal loops** — `on`/`done` for long-running interactive workflows
-- **Queries** — read workflow-internal state from the UI
+- **Publish** — expose intermediate workflow state to consumers
 - **Layers** — share workflows across the component tree via React context
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — `withRetry`, `withCircuitBreaker`, composable `wrapActivity`
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
-- **Type-safe** — fully generic `WorkflowFunction` with typed signals, queries, and workflow deps
+- **Type-safe** — fully generic `WorkflowFunction` with typed signals and workflow deps
 
 ## API Overview
 
@@ -109,10 +109,11 @@ Commands available inside a workflow generator via `ctx`:
 | `sleep(ms)` | Durable timer — survives page reload. |
 | `parallel(activities)` | Run multiple activities concurrently. |
 | `child(name, fn)` | Run a nested sub-workflow with its own event log. |
-| `waitForWorkflow(id)` | Block until another registered workflow completes. |
+| `join(id)` | Block until another registered workflow completes. |
+| `published(id)` | Block until another registered workflow publishes a value. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |
 | `on(handlers)` / `done(value)` | Event-loop style signal handling. |
-| `query(name, handler)` | Expose live workflow state for external reads. |
+| `publish(value)` | Publish a value to consumers without completing. |
 
 ### useWorkflow Hook
 
@@ -125,7 +126,7 @@ const {
   waitingForAll,  // signal names, if waiting on waitForAll
   waitingForAny,  // signal names, if waiting on waitForAny
   signal,         // (name, payload) => void — send data into the workflow
-  query,          // (name) => value — read live query state
+  published,      // T | undefined — published value from the workflow
   cancel,         // () => void — cancel with AbortSignal propagation
   reset,          // () => void — clear event log and restart
 } = useWorkflow(id, workflowFn, { storage, version?, onEvent? });
@@ -156,7 +157,7 @@ function App() {
 
 // Inside checkoutWorkflow:
 function* (ctx) {
-  const profile = yield* ctx.waitForWorkflow("profile");
+  const profile = yield* ctx.join("profile");
   // ...
 }
 ```
