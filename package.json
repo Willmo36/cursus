@@ -1,7 +1,7 @@
 {
 	"name": "cursus",
 	"version": "0.1.0",
-	"description": "Durable workflows for JavaScript, inspired by Temporal",
+	"description": "Durable workflows for JavaScript",
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.js",
@@ -90,7 +90,7 @@
 		"workflow",
 		"durable",
 		"state-machine",
-		"temporal",
+		"durable-execution",
 		"react"
 	],
 	"license": "MIT"

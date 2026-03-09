@@ -2,7 +2,7 @@
 
 **Workflows, not reducers.**
 
-Durable workflows for JavaScript, inspired by [Temporal](https://temporal.io). Write multi-step flows as generator functions. State survives page reloads via event-sourcing replay — no manual serialization needed.
+Durable workflows for JavaScript. Write multi-step flows as generator functions. State survives page reloads via event-sourcing replay — no manual serialization needed.
 
 ```
 npm install cursus
@@ -274,7 +274,7 @@ npm run dev
 
 ## Architecture
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design — event sourcing model, replay mechanics, and deviations from Temporal.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design — event sourcing model, replay mechanics, and design constraints.
 
 ## License
 

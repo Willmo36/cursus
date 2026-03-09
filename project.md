@@ -1,6 +1,6 @@
 You are building a new library for React: react-workflow
 This library is an implementation for durable workflows in React.
-Durable Workflows will follow the Temporal model, although you are allowed to deviate from their patterns where you see fit (such as Browser or React aspects)
+Durable Workflows use generator-based event sourcing for browser-first execution
 You will read README for tech stack and keep it up to date with project commands, description and guides and examples
 You will develop a set of runnable examples in /examples. These examples will need to MOCK their external dependencies via simple dependency injection:
 - sso login

@@ -1,6 +1,6 @@
 # react-workflow Maintainer's Guide
 
-A durable workflow engine for React, inspired by Temporal. Workflows are generator functions that yield commands; an interpreter executes them, records every step in an append-only event log, and replays from that log on reload.
+A durable workflow engine for React. Workflows are generator functions that yield commands; an interpreter executes them, records every step in an append-only event log, and replays from that log on reload.
 
 ---
 

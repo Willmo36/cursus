@@ -2,7 +2,7 @@
 
 ## Core Idea
 
-Durable workflows in the browser, inspired by Temporal's execution model. A workflow is a **generator function** that yields "commands" (things it wants to happen). An **interpreter** runs the generator, executes commands, and records results in an **event log**. On page reload, the interpreter **replays** the event log through the generator to restore state — no explicit state serialization needed.
+Durable workflows in the browser. A workflow is a **generator function** that yields "commands" (things it wants to happen). An **interpreter** runs the generator, executes commands, and records results in an **event log**. On page reload, the interpreter **replays** the event log through the generator to restore state — no explicit state serialization needed.
 
 ## Key Concepts
 
@@ -63,7 +63,7 @@ The interpreter drives the generator and manages the event log:
 2. **On replay (page reload):** Steps the generator, but instead of executing commands, returns the recorded results from the event log. When the log is exhausted, switches to live execution.
 3. **On signal:** Appends a signal event, resumes the generator if it was waiting for that signal
 
-This is the key architectural insight from Temporal: **the workflow function is a deterministic projection of the event log**. State is never serialized directly — it's reconstructed by replaying events through the workflow code.
+The key architectural insight: **the workflow function is a deterministic projection of the event log**. State is never serialized directly — it's reconstructed by replaying events through the workflow code.
 
 ### Storage
 
@@ -154,13 +154,13 @@ The test interpreter runs the generator synchronously, injecting results without
 | Email then password wizard | Sequential `waitFor` (email), then `waitFor` (password), `activity` (validate) |
 | Cookie banner | No storage of final result — the `result` is computed from the event log history itself |
 
-## Deviations from Temporal
+## Design Constraints
 
 1. **No server** — everything runs in the browser. Durability comes from browser storage, not a database cluster.
 2. **No task queues** — there's only one "worker" (the current tab/page).
 3. **Timers are best-effort** — if the tab is closed, timers fire on next page load after the duration has elapsed. No service worker complexity.
-4. **Signals = user interactions** — in Temporal, signals come from other services. Here, they primarily come from React UI events.
-5. **Simpler event types** — we don't need workflow tasks, task queues, or the scheduling/dispatch layer.
+4. **Signals = user interactions** — signals primarily come from React UI events.
+5. **Simpler event types** — no workflow tasks, task queues, or scheduling/dispatch layer.
 6. **No continue-as-new** — browser workflows are unlikely to hit event log size limits. If needed, we can add this later.
 
 ## Decisions
