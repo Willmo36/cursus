@@ -1183,6 +1183,189 @@ describe("WorkflowRegistry", () => {
 		});
 	});
 
+	describe("waitForPublished / waitForCompletion", () => {
+		it("waitForPublished() returns published value", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Add a published waiter before publishing
+			let waiterResult: unknown;
+			const waiterPromise = registry
+				.waitForPublished("session", { start: false })
+				.then((r) => {
+					waiterResult = r;
+				});
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(waiterResult).toEqual({ user: "max" });
+		});
+
+		it("waitForCompletion() returns result value, not published value", async () => {
+			const workflow: WorkflowFunction<
+				string,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				return `done for ${user}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Add a completion waiter
+			const completionPromise = registry.waitForCompletion<string>("session", {
+				start: false,
+			});
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			registry.signal("session", "login", { user: "max" });
+			await startPromise;
+
+			const result = await completionPromise;
+			expect(result).toBe("done for max");
+		});
+
+		it("publish resolves only publishedWaiters, not completionWaiters", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				// Keep running
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			let publishedResolved = false;
+			let completionResolved = false;
+
+			registry
+				.waitForPublished("session", { start: false })
+				.then(() => {
+					publishedResolved = true;
+				});
+			registry
+				.waitForCompletion("session", { start: false })
+				.then(() => {
+					completionResolved = true;
+				});
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(publishedResolved).toBe(true);
+			expect(completionResolved).toBe(false);
+		});
+
+		it("completion resolves completionWaiters with result", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+
+			const completionPromise = registry.waitForCompletion<string>("greet");
+			const result = await completionPromise;
+			expect(result).toBe("hello");
+		});
+
+		it("failure rejects both published and completion waiters", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fail", async () => {
+					throw new Error("boom");
+				});
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ fail: workflow }, storage);
+
+			const publishedPromise = registry.waitForPublished("fail");
+			const completionPromise = registry.waitForCompletion("fail");
+
+			await expect(publishedPromise).rejects.toThrow("boom");
+			await expect(completionPromise).rejects.toThrow("boom");
+		});
+
+		it("waitForPublished returns immediately when already published", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ login: { user: string } },
+				Record<string, never>,
+				Record<string, never>,
+				{ user: string }
+			> = function* (ctx) {
+				const { user } = yield* ctx.waitFor("login");
+				yield* ctx.publish({ user });
+				yield* ctx.waitFor("login");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const startPromise = registry.start("session");
+
+			await new Promise((r) => setTimeout(r, 10));
+			registry.signal("session", "login", { user: "max" });
+			await new Promise((r) => setTimeout(r, 10));
+
+			const result = await registry.waitForPublished("session", {
+				start: false,
+			});
+			expect(result).toEqual({ user: "max" });
+		});
+
+		it("waitForCompletion returns immediately when already completed", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			await registry.start("greet");
+
+			const result = await registry.waitForCompletion<string>("greet");
+			expect(result).toBe("hello");
+		});
+	});
+
 	describe("getTrace", () => {
 		it("returns correct envelope shape", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {

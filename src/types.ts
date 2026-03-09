@@ -87,6 +87,20 @@ export type WaitForWorkflowCommand = {
 	seq: number;
 };
 
+export type PublishedCommand = {
+	type: "published";
+	workflowId: string;
+	start: boolean;
+	seq: number;
+};
+
+export type JoinCommand = {
+	type: "join";
+	workflowId: string;
+	start: boolean;
+	seq: number;
+};
+
 export type PublishCommand = {
 	type: "publish";
 	value: unknown;
@@ -108,6 +122,8 @@ export type Command =
 	| ParallelCommand
 	| ChildCommand
 	| WaitForWorkflowCommand
+	| PublishedCommand
+	| JoinCommand
 	| RaceCommand
 	| PublishCommand;
 
@@ -215,6 +231,14 @@ export type WorkflowDependencyCompletedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowDependencyPublishedEvent = {
+	type: "workflow_dependency_published";
+	workflowId: string;
+	seq: number;
+	result: unknown;
+	timestamp: number;
+};
+
 export type WorkflowDependencyFailedEvent = {
 	type: "workflow_dependency_failed";
 	workflowId: string;
@@ -279,6 +303,7 @@ export type WorkflowEvent =
 	| ChildFailedEvent
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyCompletedEvent
+	| WorkflowDependencyPublishedEvent
 	| WorkflowDependencyFailedEvent
 	| WorkflowPublishedEvent
 	| RaceStartedEvent
@@ -295,6 +320,20 @@ export type WorkflowTrace = {
 	workflowId: string;
 	events: WorkflowEvent[];
 };
+
+// --- WorkflowMap constraint helpers ---
+
+export type WorkflowDep = { published?: unknown; result?: unknown };
+
+export type PublishedOf<
+	M extends Record<string, WorkflowDep>,
+	K extends keyof M,
+> = M[K] extends { published: infer P } ? P : never;
+
+export type ResultOf<
+	M extends Record<string, WorkflowDep>,
+	K extends keyof M,
+> = M[K] extends { result: infer R } ? R : never;
 
 // --- Workflow types ---
 
@@ -327,6 +366,14 @@ export type WorkflowState =
 
 export type WorkflowRegistryInterface = {
 	waitFor<T>(
+		workflowId: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T>;
+	waitForPublished<T>(
+		workflowId: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T>;
+	waitForCompletion<T>(
 		workflowId: string,
 		options?: { start?: boolean; caller?: string },
 	): Promise<T>;
@@ -430,6 +477,14 @@ export type WorkflowContext<
 		workflowId: K,
 		options?: { start?: boolean },
 	) => Generator<Command, WorkflowMap[K], unknown>;
+	published: <K extends keyof WorkflowMap & string>(
+		workflowId: K,
+		options?: { start?: boolean },
+	) => Generator<Command, WorkflowMap[K], unknown>;
+	join: <K extends keyof WorkflowMap & string>(
+		workflowId: K,
+		options?: { start?: boolean },
+	) => Generator<Command, WorkflowMap[K], unknown>;
 	workflow: <K extends keyof WorkflowMap & string>(
 		id: K,
 	) => WorkflowRef<WorkflowMap[K]>;
@@ -477,6 +532,14 @@ export type InternalWorkflowContext = {
 		...branches: Generator<Command, unknown, unknown>[]
 	) => Generator<Command, { winner: number; value: unknown }, unknown>;
 	waitForWorkflow: (
+		workflowId: string,
+		options?: { start?: boolean },
+	) => Generator<Command, unknown, unknown>;
+	published: (
+		workflowId: string,
+		options?: { start?: boolean },
+	) => Generator<Command, unknown, unknown>;
+	join: (
 		workflowId: string,
 		options?: { start?: boolean },
 	) => Generator<Command, unknown, unknown>;

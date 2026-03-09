@@ -251,6 +251,32 @@ export class Interpreter {
 					return result;
 				})();
 			},
+			published: (workflowId: string, options?: { start?: boolean }) => {
+				const seq = ++this.seq;
+				const start = options?.start ?? true;
+				return (function* (): Generator<Command, unknown, unknown> {
+					const result = yield {
+						type: "published" as const,
+						workflowId,
+						start,
+						seq,
+					};
+					return result;
+				})();
+			},
+			join: (workflowId: string, options?: { start?: boolean }) => {
+				const seq = ++this.seq;
+				const start = options?.start ?? true;
+				return (function* (): Generator<Command, unknown, unknown> {
+					const result = yield {
+						type: "join" as const,
+						workflowId,
+						start,
+						seq,
+					};
+					return result;
+				})();
+			},
 			workflow: (id: string): WorkflowRef => {
 				return { __brand: "WorkflowRef", workflow: id } as WorkflowRef;
 			},
@@ -575,6 +601,10 @@ export class Interpreter {
 				return this.executeChild(command);
 			case "waitForWorkflow":
 				return this.executeWaitForWorkflow(command);
+			case "published":
+				return this.executePublishedCommand(command);
+			case "join":
+				return this.executeJoinCommand(command);
 			case "race":
 				return this.executeRace(command);
 			case "publish":
@@ -1011,6 +1041,136 @@ export class Interpreter {
 		}
 	}
 
+	private async executePublishedCommand(
+		command: Extract<Command, { type: "published" }>,
+	): Promise<unknown> {
+		// Check for replay
+		const completed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_published",
+		);
+		if (completed) {
+			return (completed as { result: unknown }).result;
+		}
+
+		// Check for replay: failed
+		const failed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_failed",
+		);
+		if (failed) {
+			throw new Error((failed as { error: string }).error);
+		}
+
+		// Live: require registry
+		if (!this.registry) {
+			throw new Error(
+				"published requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
+			);
+		}
+
+		this.log.append({
+			type: "workflow_dependency_started",
+			workflowId: command.workflowId,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		try {
+			const result = await this.registry.waitForPublished(command.workflowId, {
+				start: command.start,
+				caller: this._workflowId,
+			});
+
+			this.log.append({
+				type: "workflow_dependency_published",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				result,
+				timestamp: Date.now(),
+			});
+
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
+			this.log.append({
+				type: "workflow_dependency_failed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				error: message,
+				stack,
+				timestamp: Date.now(),
+			});
+			throw err;
+		}
+	}
+
+	private async executeJoinCommand(
+		command: Extract<Command, { type: "join" }>,
+	): Promise<unknown> {
+		// Check for replay: completed
+		const completed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_completed",
+		);
+		if (completed) {
+			return (completed as { result: unknown }).result;
+		}
+
+		// Check for replay: failed
+		const failed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_failed",
+		);
+		if (failed) {
+			throw new Error((failed as { error: string }).error);
+		}
+
+		// Live: require registry
+		if (!this.registry) {
+			throw new Error(
+				"join requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
+			);
+		}
+
+		this.log.append({
+			type: "workflow_dependency_started",
+			workflowId: command.workflowId,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		try {
+			const result = await this.registry.waitForCompletion(command.workflowId, {
+				start: command.start,
+				caller: this._workflowId,
+			});
+
+			this.log.append({
+				type: "workflow_dependency_completed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				result,
+				timestamp: Date.now(),
+			});
+
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
+			this.log.append({
+				type: "workflow_dependency_failed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				error: message,
+				stack,
+				timestamp: Date.now(),
+			});
+			throw err;
+		}
+	}
+
 	private async executePublish(
 		command: Extract<Command, { type: "publish" }>,
 	): Promise<void> {
@@ -1176,6 +1336,18 @@ export class Interpreter {
 				}
 				case "waitForWorkflow": {
 					return this.executeWaitForWorkflow(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "published": {
+					return this.executePublishedCommand(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "join": {
+					return this.executeJoinCommand(item).then((value) => ({
 						index,
 						value,
 					}));

@@ -49,6 +49,28 @@ export async function createTestRuntime<
 				}
 				return workflowResults[workflowId] as R;
 			},
+			async waitForPublished<R>(
+				workflowId: string,
+				_options?: { start?: boolean; caller?: string },
+			): Promise<R> {
+				if (!(workflowId in workflowResults)) {
+					throw new Error(
+						`No mock result for workflow "${workflowId}" in workflowResults`,
+					);
+				}
+				return workflowResults[workflowId] as R;
+			},
+			async waitForCompletion<R>(
+				workflowId: string,
+				_options?: { start?: boolean; caller?: string },
+			): Promise<R> {
+				if (!(workflowId in workflowResults)) {
+					throw new Error(
+						`No mock result for workflow "${workflowId}" in workflowResults`,
+					);
+				}
+				return workflowResults[workflowId] as R;
+			},
 			async start(): Promise<void> {},
 			publish() {},
 		};

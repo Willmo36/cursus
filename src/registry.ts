@@ -15,6 +15,11 @@ import type {
 } from "./types";
 import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
+type Waiter = {
+	resolve: (value: unknown) => void;
+	reject: (error: Error) => void;
+};
+
 type WorkflowEntry = {
 	fn: AnyWorkflowFunction;
 	interpreter?: Interpreter;
@@ -25,10 +30,9 @@ type WorkflowEntry = {
 	published: boolean;
 	publishedValue?: unknown;
 	observed: boolean;
-	waiters: Array<{
-		resolve: (value: unknown) => void;
-		reject: (error: Error) => void;
-	}>;
+	waiters: Waiter[];
+	publishedWaiters: Waiter[];
+	completionWaiters: Waiter[];
 	listeners: Array<() => void>;
 };
 
@@ -61,6 +65,8 @@ export class WorkflowRegistry<
 				published: false,
 				observed: false,
 				waiters: [],
+				publishedWaiters: [],
+				completionWaiters: [],
 				listeners: [],
 			});
 		}
@@ -211,14 +217,27 @@ export class WorkflowRegistry<
 				);
 			}
 			entry.waiters = [];
+			for (const waiter of entry.completionWaiters) {
+				waiter.resolve(interpreter.result);
+			}
+			entry.completionWaiters = [];
 		} else if (interpreter.state === "failed") {
 			entry.failed = true;
 			entry.error = interpreter.error;
 			this.removeDependency(id);
+			const err = new Error(interpreter.error ?? "Workflow failed");
 			for (const waiter of entry.waiters) {
-				waiter.reject(new Error(interpreter.error ?? "Workflow failed"));
+				waiter.reject(err);
 			}
 			entry.waiters = [];
+			for (const waiter of entry.publishedWaiters) {
+				waiter.reject(err);
+			}
+			entry.publishedWaiters = [];
+			for (const waiter of entry.completionWaiters) {
+				waiter.reject(err);
+			}
+			entry.completionWaiters = [];
 		}
 	}
 
@@ -267,6 +286,74 @@ export class WorkflowRegistry<
 		});
 	}
 
+	async waitForPublished<T>(
+		id: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T> {
+		const entry = this.getEntry(id);
+		const shouldStart = options?.start ?? true;
+		const caller = options?.caller;
+
+		if (entry.published) {
+			return entry.publishedValue as T;
+		}
+
+		if (entry.failed) {
+			throw new Error(entry.error ?? "Workflow failed");
+		}
+
+		if (caller) {
+			this.addDependency(caller, id);
+		}
+
+		if (!entry.interpreter && shouldStart) {
+			await this.start(id);
+			if (entry.published) return entry.publishedValue as T;
+			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
+		}
+
+		return new Promise<T>((resolve, reject) => {
+			entry.publishedWaiters.push({
+				resolve: resolve as (value: unknown) => void,
+				reject,
+			});
+		});
+	}
+
+	async waitForCompletion<T>(
+		id: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T> {
+		const entry = this.getEntry(id);
+		const shouldStart = options?.start ?? true;
+		const caller = options?.caller;
+
+		if (entry.completed) {
+			return entry.result as T;
+		}
+
+		if (entry.failed) {
+			throw new Error(entry.error ?? "Workflow failed");
+		}
+
+		if (caller) {
+			this.addDependency(caller, id);
+		}
+
+		if (!entry.interpreter && shouldStart) {
+			await this.start(id);
+			if (entry.completed) return entry.result as T;
+			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
+		}
+
+		return new Promise<T>((resolve, reject) => {
+			entry.completionWaiters.push({
+				resolve: resolve as (value: unknown) => void,
+				reject,
+			});
+		});
+	}
+
 	publish(id: string, value: unknown): void {
 		const entry = this.getEntry(id);
 		entry.published = true;
@@ -275,6 +362,10 @@ export class WorkflowRegistry<
 			waiter.resolve(value);
 		}
 		entry.waiters = [];
+		for (const waiter of entry.publishedWaiters) {
+			waiter.resolve(value);
+		}
+		entry.publishedWaiters = [];
 	}
 
 	async reset(id: string): Promise<void> {
@@ -288,6 +379,8 @@ export class WorkflowRegistry<
 		entry.publishedValue = undefined;
 		entry.result = undefined;
 		entry.error = undefined;
+		entry.publishedWaiters = [];
+		entry.completionWaiters = [];
 		this.removeDependency(id);
 
 		await this._storage.clear(id);
@@ -349,6 +442,8 @@ export class WorkflowRegistry<
 			published: false,
 			observed: true,
 			waiters: [],
+			publishedWaiters: [],
+			completionWaiters: [],
 			listeners: [],
 		};
 		this.entries.set(id, entry);
