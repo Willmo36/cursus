@@ -22,7 +22,7 @@ type Result = { displayName: string };
 
 const loginWorkflow: WorkflowFunction<Result, Signals> = function* (ctx) {
   // Pause until the user submits credentials
-  const creds = yield* ctx.waitFor("credentials");
+  const creds = yield* ctx.receive("credentials");
 
   // Run a side effect — result is recorded in the event log
   const user = yield* ctx.activity("authenticate", async () => {
@@ -46,13 +46,13 @@ import { useWorkflow } from "cursus/react";
 const storage = new LocalStorage();
 
 function LoginPage() {
-  const { state, result, waitingFor, signal, reset } = useWorkflow(
+  const { state, result, receiving, signal, reset } = useWorkflow(
     "login",
     loginWorkflow,
     { storage },
   );
 
-  if (state === "waiting" && waitingFor === "credentials") {
+  if (state === "waiting" && receiving === "credentials") {
     return <LoginForm onSubmit={(creds) => signal("credentials", creds)} />;
   }
   if (state === "running") return <p>Authenticating...</p>;
@@ -79,13 +79,13 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 ## Features
 
 - **Durable execution** — event-sourced replay survives page reloads
-- **Signals** — `waitFor`, `waitForAll`, `waitForAny` for UI-to-workflow communication
+- **Signals** — `receive`, `waitForAll`, `waitForAny` for UI-to-workflow communication
 - **Activities** — async side effects with automatic replay skipping
 - **Timers** — durable `sleep` that survives reloads
 - **Parallel & Race** — concurrent activities and first-to-complete racing
 - **Child workflows** — compose via `yield*` delegation
 - **Cross-workflow dependencies** — `join` / `published` with circular dependency detection
-- **Signal loops** — `on`/`done` for long-running interactive workflows
+- **Signal loops** — `handle`/`done` for long-running interactive workflows
 - **Publish** — expose intermediate workflow state to consumers
 - **Layers** — share workflows across the component tree via React context
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
@@ -104,7 +104,7 @@ Commands available inside a workflow generator via `ctx`:
 | Command | Description |
 |---------|-------------|
 | `activity(name, fn)` | Execute a side effect (API call, computation). Result is recorded. |
-| `waitFor(signal)` | Pause until a named signal arrives from the UI. |
+| `receive(signal)` | Pause until a named signal arrives from the UI. |
 | `waitForAny(...signals)` | Pause until any of several signals arrives. |
 | `waitForAll(...items)` | Wait for multiple signals and/or workflow results in parallel. |
 | `sleep(ms)` | Durable timer — survives page reload. |
@@ -113,7 +113,7 @@ Commands available inside a workflow generator via `ctx`:
 | `join(id)` | Block until another registered workflow completes. |
 | `published(id)` | Block until another registered workflow publishes a value. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |
-| `on(handlers)` / `done(value)` | Event-loop style signal handling. |
+| `handle(handlers)` / `done(value)` | Event-loop style signal handling. |
 | `publish(value)` | Publish a value to consumers without completing. |
 
 ### useWorkflow Hook
@@ -123,9 +123,9 @@ const {
   state,          // "running" | "waiting" | "completed" | "failed" | "cancelled"
   result,         // T | undefined
   error,          // string | undefined
-  waitingFor,     // current signal name, if waiting on waitFor
-  waitingForAll,  // signal names, if waiting on waitForAll
-  waitingForAny,  // signal names, if waiting on waitForAny
+  receiving,     // current signal name, if waiting on receive
+  receivingAll,  // signal names, if waiting on waitForAll
+  receivingAny,  // signal names, if waiting on waitForAny
   signal,         // (name, payload) => void — send data into the workflow
   published,      // T | undefined — published value from the workflow
   cancel,         // () => void — cancel with AbortSignal propagation
@@ -262,7 +262,7 @@ The `examples/` directory contains runnable Vite apps:
 | `job-application` | Nested child workflows |
 | `checkout` | Cross-workflow dependencies with `waitForAll` |
 | `shop` | Multi-workflow layer with queries and error simulation |
-| `chat-room` | Long-running `on`/`done` loop |
+| `chat-room` | Long-running `handle`/`done` loop |
 | `cookie-banner` | Result derived from event history |
 | `env-config` | Workflow as environment provider |
 | `error-recovery` | `withRetry` and dependency failure handling |

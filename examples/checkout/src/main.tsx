@@ -1,9 +1,10 @@
 // ABOUTME: Entry point for the checkout example app.
 // ABOUTME: Wraps the app in WorkflowLayerProvider with the profile workflow registered.
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+
 import { createLayer } from "cursus";
 import { WorkflowLayerProvider } from "cursus/react";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { storage } from "./storage";
 import { profileWorkflow } from "./workflows";

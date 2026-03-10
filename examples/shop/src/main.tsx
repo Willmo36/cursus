@@ -1,10 +1,10 @@
 // ABOUTME: Entry point for the shop example app.
 // ABOUTME: Sets up error toggle context, creates workflow layer, and mounts the app.
 import "./index.css";
-import { StrictMode, useMemo, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
 import { createLayer } from "cursus";
 import { WorkflowLayerProvider } from "cursus/react";
+import { StrictMode, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { createApiFetch } from "./api";
 import { ErrorToggleCtx } from "./error-toggle";

@@ -40,8 +40,12 @@
 	},
 	"typesVersions": {
 		"*": {
-			"react": ["./dist/react.d.ts"],
-			"devtools": ["./dist/devtools.d.ts"]
+			"react": [
+				"./dist/react.d.ts"
+			],
+			"devtools": [
+				"./dist/devtools.d.ts"
+			]
 		}
 	},
 	"files": [

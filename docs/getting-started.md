@@ -25,7 +25,7 @@ A workflow is a generator function that receives a context object:
 import type { WorkflowFunction } from "cursus";
 
 const greetingWorkflow: WorkflowFunction<string> = function* (ctx) {
-  const name = yield* ctx.waitFor<string>("name");
+  const name = yield* ctx.receive<string>("name");
   const greeting = yield* ctx.activity("greet", async () => {
     return `Hello, ${name}!`;
   });
@@ -50,13 +50,13 @@ import { MemoryStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
 
 function Greeter() {
-  const { state, result, waitingFor, signal } = useWorkflow(
+  const { state, result, receiving, signal } = useWorkflow(
     "greeter",
     greetingWorkflow,
     { storage: new MemoryStorage() },
   );
 
-  if (waitingFor === "name") {
+  if (receiving === "name") {
     return (
       <form onSubmit={(e) => {
         e.preventDefault();
@@ -84,9 +84,9 @@ function Greeter() {
 | `state` | `WorkflowState` | `"running"` \| `"waiting"` \| `"completed"` \| `"failed"` \| `"cancelled"` |
 | `result` | `T \| undefined` | The workflow's return value, once completed |
 | `error` | `string \| undefined` | Error message if the workflow failed |
-| `waitingFor` | `string \| undefined` | The signal name the workflow is blocked on |
-| `waitingForAll` | `string[] \| undefined` | Signal names when using `all` |
-| `waitingForAny` | `string[] \| undefined` | Signal names when using `race` with signals |
+| `receiving` | `string \| undefined` | The signal name the workflow is blocked on |
+| `receivingAll` | `string[] \| undefined` | Signal names when using `all` |
+| `receivingAny` | `string[] \| undefined` | Signal names when using `race` with signals |
 | `signal(name, payload)` | function | Send a signal into the workflow |
 | `query(name)` | function | Read a query value exposed by the workflow |
 | `cancel()` | function | Cancel the running workflow |

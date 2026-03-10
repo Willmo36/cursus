@@ -21,7 +21,7 @@ export const checkoutWorkflow: WorkflowFunction<OrderResult, CheckoutSignals> =
 		});
 
 		// Wait for user to confirm payment
-		const { cardLast4 } = yield* ctx.waitFor("confirm");
+		const { cardLast4 } = yield* ctx.receive("confirm");
 
 		// Process payment
 		const payment = yield* ctx.activity("charge-card", async () => {

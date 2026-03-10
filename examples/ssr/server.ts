@@ -53,7 +53,7 @@ const server = createServer(async (req, res) => {
 				snapshot,
 				product,
 				state: snapshot.state,
-				waitingFor: snapshot.waitingFor,
+				receiving: snapshot.receiving,
 				result: undefined,
 			}),
 		);

@@ -18,9 +18,9 @@ export type WorkflowSnapshot = {
 	result: unknown;
 	error: string | undefined;
 	published: unknown;
-	waitingFor: string | undefined;
-	waitingForAll: string[] | undefined;
-	waitingForAny: string[] | undefined;
+	receiving: string | undefined;
+	receivingAll: string[] | undefined;
+	receivingAny: string[] | undefined;
 };
 
 export async function runWorkflow(
@@ -34,7 +34,7 @@ export async function runWorkflow(
 	const interpreter = new Interpreter(workflowFn, log);
 
 	// Race run() against the interpreter entering a waiting state.
-	// run() blocks forever on waitFor/sleep, so we detect waiting via onStateChange.
+	// run() blocks forever on receive/sleep, so we detect waiting via onStateChange.
 	await new Promise<void>((resolve) => {
 		let resolved = false;
 
@@ -68,8 +68,8 @@ export async function runWorkflow(
 		result: interpreter.result,
 		error: interpreter.error,
 		published: interpreter.published,
-		waitingFor: interpreter.waitingFor,
-		waitingForAll: interpreter.waitingForAll,
-		waitingForAny: interpreter.waitingForAny,
+		receiving: interpreter.receiving,
+		receivingAll: interpreter.receivingAll,
+		receivingAny: interpreter.receivingAny,
 	};
 }

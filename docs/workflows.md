@@ -42,12 +42,12 @@ On replay, the engine returns the stored result without calling the function aga
 
 Signals are how the UI pushes data into the workflow. The workflow pauses until the signal arrives.
 
-### waitFor
+### receive
 
 Wait for a single named signal:
 
 ```ts
-const email = yield* ctx.waitFor<string>("email");
+const email = yield* ctx.receive<string>("email");
 ```
 
 ### all
@@ -55,13 +55,13 @@ const email = yield* ctx.waitFor<string>("email");
 Wait for multiple signals, workflow results, or activities to all complete. Returns a tuple in order:
 
 ```ts
-const [email, password] = yield* ctx.all(ctx.waitFor("email"), ctx.waitFor("password"));
+const [email, password] = yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
 ```
 
 You can mix signals with workflow dependencies (see [Layers](./layers.md)):
 
 ```ts
-const [payment, profile] = yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
+const [payment, profile] = yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 ```
 
 Run multiple activities concurrently:
@@ -97,7 +97,7 @@ Race multiple branches — the first to complete wins, others are discarded. Wor
 
 ```ts
 // Race signals — first signal wins
-const { winner, value } = yield* ctx.race(ctx.waitFor("accept"), ctx.waitFor("reject"));
+const { winner, value } = yield* ctx.race(ctx.receive("accept"), ctx.receive("reject"));
 
 if (winner === 0) {
   // accepted
@@ -133,7 +133,7 @@ A common pattern is racing a signal against a timeout — for example, waiting f
 const approval: WorkflowFunction<"approved" | "escalated", { approve: string }> =
   function* (ctx) {
     const { winner, value } = yield* ctx.race(
-      ctx.waitFor("approve"),
+      ctx.receive("approve"),
       ctx.sleep(24 * 60 * 60 * 1000), // 24 hours
     );
 
@@ -151,25 +151,25 @@ const approval: WorkflowFunction<"approved" | "escalated", { approve: string }> 
 
 The signal and sleep are both durable — if the user refreshes, the remaining timeout resumes from where it left off and any signal already received replays instantly.
 
-## Signal Loops with on/done
+## Signal Loops with handle/done
 
-For workflows that handle multiple signals in a loop (like a shopping cart), use `on` with `done`:
+For workflows that handle multiple signals in a loop (like a shopping cart), use `handle` with `done`:
 
 ```ts
-const finalCount = yield* ctx.on<number>({
+const finalCount = yield* ctx.handle<number>({
   increment: function* () {
     count++;
   },
   decrement: function* () {
     count--;
   },
-  checkout: function* (ctx) {
-    yield* ctx.done(count);
+  checkout: function* (_ctx, _payload, done) {
+    yield* done(count);
   },
 });
 ```
 
-`on` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `ctx.done(value)`, which terminates the loop and returns the value.
+`handle` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `done(value)`, which terminates the loop and returns the value.
 
 ## Publish
 
@@ -183,11 +183,11 @@ const sessionWorkflow: WorkflowFunction<
   Record<string, never>,
   { user: string } // PublishType — 5th type parameter
 > = function* (ctx) {
-  const { user } = yield* ctx.waitFor("login");
+  const { user } = yield* ctx.receive("login");
   yield* ctx.publish({ user });
 
   // Workflow keeps running after publish
-  yield* ctx.waitFor("login"); // wait for re-auth, revocation, etc.
+  yield* ctx.receive("login"); // wait for re-auth, revocation, etc.
 };
 ```
 

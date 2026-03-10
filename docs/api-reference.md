@@ -39,7 +39,7 @@ function useWorkflow<T, SignalMap, WorkflowMap>(
 | `state` | `WorkflowState` |
 | `result` | `T \| undefined` |
 | `error` | `string \| undefined` |
-| `waitingFor` | `string \| undefined` |
+| `receiving` | `string \| undefined` |
 | `waitingForAll` | `string[] \| undefined` |
 | `waitingForAny` | `string[] \| undefined` |
 | `signal(name, payload)` | `(name: K, payload: SignalMap[K]) => void` |
@@ -202,13 +202,13 @@ type WorkflowFunction<T, SignalMap, WorkflowMap, PublishType = never> = (
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `activity` | `(name, fn) => Generator` | Run an async activity |
-| `waitFor` | `(signal) => Generator` | Wait for a named signal |
+| `receive` | `(signal) => Generator` | Wait for a named signal |
 | `all` | `(...generators) => Generator` | Wait for multiple signals/workflows/activities to all complete |
 | `race` | `(...generators) => Generator` | Race branches, first wins — returns `{winner, value}` |
 | `sleep` | `(durationMs) => Generator` | Durable timer |
 | `child` | `(name, workflow) => Generator` | Delegate to a child workflow |
-| `on` | `(handlers) => Generator` | Signal dispatch loop |
-| `done` | `(value) => Generator` | Exit an `on` loop with a value |
+| `handle` | `(handlers) => Generator` | Signal dispatch loop |
+| `done` | `(value) => Generator` | Exit a `handle` loop with a value |
 | `join` | `(id, options?) => Generator` | Wait for a workflow to complete |
 | `published` | `(id, options?) => Generator` | Wait for a workflow to publish a value |
 | `workflow` | `(id) => Generator` | Wait for a workflow to complete (same as `join`) |
@@ -386,7 +386,7 @@ These are the internal command types yielded by workflow generators. Exported fo
 | Type | Description |
 |------|-------------|
 | `ActivityCommand` | Run an async activity |
-| `WaitForCommand` | Wait for a signal |
+| `ReceiveCommand` | Wait for a signal |
 | `AllCommand` | Wait for multiple items to all complete |
 | `SleepCommand` | Durable timer |
 | `ChildCommand` | Child workflow delegation |

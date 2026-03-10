@@ -207,10 +207,10 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase C: signals (waitFor)", () => {
-		it("pauses on waitFor and resumes when signal is received", async () => {
+	describe("Phase C: signals (receive)", () => {
+		it("pauses on receive and resumes when signal is received", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -220,7 +220,7 @@ describe("Interpreter", () => {
 			// Should be waiting after run starts
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("submit");
+				expect(interpreter.receiving).toBe("submit");
 			});
 
 			interpreter.signal("submit", "form-data");
@@ -232,7 +232,7 @@ describe("Interpreter", () => {
 
 		it("replays signal from event log", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -254,10 +254,10 @@ describe("Interpreter", () => {
 			expect(result).toBe("got: saved-data");
 		});
 
-		it("handles multiple sequential waitFor calls", async () => {
+		it("handles multiple sequential receive calls", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const email = yield* ctx.waitFor<string>("email");
-				const password = yield* ctx.waitFor<string>("password");
+				const email = yield* ctx.receive<string>("email");
+				const password = yield* ctx.receive<string>("password");
 				return `${email}:${password}`;
 			};
 
@@ -265,13 +265,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.waitingFor).toBe("email");
+				expect(interpreter.receiving).toBe("email");
 			});
 
 			interpreter.signal("email", "test@example.com");
 
 			await vi.waitFor(() => {
-				expect(interpreter.waitingFor).toBe("password");
+				expect(interpreter.receiving).toBe("password");
 			});
 
 			interpreter.signal("password", "secret");
@@ -359,10 +359,7 @@ describe("Interpreter", () => {
 			const fnB = vi.fn().mockResolvedValue("two");
 
 			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.activity("a", fnA),
-					ctx.activity("b", fnB),
-				);
+				return yield* ctx.all(ctx.activity("a", fnA), ctx.activity("b", fnB));
 			};
 
 			// seq 1 = activity "a", seq 2 = activity "b", seq 3 = all command
@@ -415,10 +412,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("email"),
-					ctx.waitFor("password"),
-				);
+				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -449,7 +443,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("a"), ctx.waitFor("b"));
+				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
 			};
 
 			const log = new EventLog();
@@ -473,7 +467,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_started",
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -489,16 +483,16 @@ describe("Interpreter", () => {
 				[string, number],
 				{ name: string; age: number }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("name"), ctx.waitFor("age"));
+				return yield* ctx.all(ctx.receive("name"), ctx.receive("age"));
 			};
 
-			// seq 1 = waitFor "name", seq 2 = waitFor "age", seq 3 = all command
+			// seq 1 = receive "name", seq 2 = receive "age", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -525,10 +519,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("email"),
-					ctx.waitFor("password"),
-				);
+				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -536,13 +527,13 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAll).toEqual(["email", "password"]);
+				expect(interpreter.receivingAll).toEqual(["email", "password"]);
 			});
 
 			interpreter.signal("email", "a@b.com");
 
 			await vi.waitFor(() => {
-				expect(interpreter.waitingForAll).toEqual(["password"]);
+				expect(interpreter.receivingAll).toEqual(["password"]);
 			});
 		});
 
@@ -559,10 +550,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -570,7 +558,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAll).toEqual(["payment"]);
+				expect(interpreter.receivingAll).toEqual(["payment"]);
 			});
 
 			interpreter.signal("payment", { card: "1234" });
@@ -597,10 +585,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const log = new EventLog();
@@ -618,7 +603,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_started",
-					items: [{ type: "waitFor" }, { type: "join" }],
+					items: [{ type: "receive" }, { type: "join" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -648,10 +633,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -674,19 +656,16 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
-			// seq 1 = waitFor "payment", seq 2 = join "profile", seq 3 = all command
+			// seq 1 = receive "payment", seq 2 = join "profile", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "waitFor" }, { type: "join" }],
+					items: [{ type: "receive" }, { type: "join" }],
 					timestamp: 2,
 				},
 				{
@@ -727,10 +706,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -769,10 +745,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -795,10 +768,7 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const log = new EventLog();
@@ -835,17 +805,14 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("payment"),
-					ctx.workflow("profile"),
-				);
+				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
 			await interpreter.run();
 
 			expect(interpreter.state).toBe("failed");
-			expect(interpreter.waitingForAll).toBeUndefined();
+			expect(interpreter.receivingAll).toBeUndefined();
 		});
 
 		it("workflow can catch all() dependency failure and recover", async () => {
@@ -862,10 +829,7 @@ describe("Interpreter", () => {
 				{ profile: unknown }
 			> = function* (ctx) {
 				try {
-					yield* ctx.all(
-						ctx.waitFor("payment"),
-						ctx.workflow("profile"),
-					);
+					yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -1024,7 +988,7 @@ describe("Interpreter", () => {
 
 		it("returns an unsubscribe function", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -1925,9 +1889,9 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("cancelled");
 		});
 
-		it("cancel() breaks out of waitFor and sets cancelled state", async () => {
+		it("cancel() breaks out of receive and sets cancelled state", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -2004,7 +1968,7 @@ describe("Interpreter", () => {
 
 		it("cancelled workflow logs workflow_cancelled event", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -2077,8 +2041,8 @@ describe("Interpreter", () => {
 				{ add: string; remove: string }
 			> = function* (ctx) {
 				const result = yield* ctx.race(
-					ctx.waitFor("add"),
-					ctx.waitFor("remove"),
+					ctx.receive("add"),
+					ctx.receive("remove"),
 				);
 				return result.winner === 0
 					? `add:${result.value}`
@@ -2104,7 +2068,7 @@ describe("Interpreter", () => {
 				{ winner: number; value: unknown },
 				{ a: string; b: number }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("a"), ctx.waitFor("b"));
+				return yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2125,10 +2089,7 @@ describe("Interpreter", () => {
 				string,
 				{ a: string; b: string; c: string }
 			> = function* (ctx) {
-				const { winner } = yield* ctx.race(
-					ctx.waitFor("a"),
-					ctx.waitFor("b"),
-				);
+				const { winner } = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
 				return winner === 0 ? "a" : "b";
 			};
 
@@ -2149,8 +2110,8 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
 					const { winner } = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
+						ctx.receive("a"),
+						ctx.receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				};
@@ -2160,29 +2121,26 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAny).toEqual(["a", "b"]);
+				expect(interpreter.receivingAny).toEqual(["a", "b"]);
 			});
 		});
 
 		it("replays from event log", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const result = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
-					);
+					const result = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
 					return result.winner === 0
 						? `a:${result.value}`
 						: `b:${result.value}`;
 				};
 
-			// seq 1 = waitFor "a", seq 2 = waitFor "b", seq 3 = race command
+			// seq 1 = receive "a", seq 2 = receive "b", seq 3 = race command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "race_started",
 					seq: 3,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -2208,27 +2166,21 @@ describe("Interpreter", () => {
 		it("multiple sequential calls replay correctly", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const first = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
-					);
-					const second = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
-					);
+					const first = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
+					const second = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
 					const firstName = first.winner === 0 ? "a" : "b";
 					const secondName = second.winner === 0 ? "a" : "b";
 					return `${firstName}-${secondName}`;
 				};
 
-			// First race: seq 1=waitFor "a", seq 2=waitFor "b", seq 3=race
-			// Second race: seq 4=waitFor "a", seq 5=waitFor "b", seq 6=race
+			// First race: seq 1=receive "a", seq 2=receive "b", seq 3=race
+			// Second race: seq 4=receive "a", seq 5=receive "b", seq 6=race
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "race_started",
 					seq: 3,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -2241,7 +2193,7 @@ describe("Interpreter", () => {
 				{
 					type: "race_started",
 					seq: 6,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 4,
 				},
 				{
@@ -2268,8 +2220,8 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
 					const { winner } = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
+						ctx.receive("a"),
+						ctx.receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				};
@@ -2289,7 +2241,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "race_started",
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -2305,8 +2257,8 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
 					const { winner } = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
+						ctx.receive("a"),
+						ctx.receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				};
@@ -2331,10 +2283,10 @@ describe("Interpreter", () => {
 				ctx,
 			) {
 				let message = "";
-				const result = yield* ctx.on<string>({
-					greet: function* (ctx, name: string) {
+				const result = yield* ctx.handle<string>({
+					greet: function* (_ctx, name: string, done) {
 						message = name;
-						yield* ctx.done(message);
+						yield* done(message);
 					},
 				});
 				return result;
@@ -2359,12 +2311,12 @@ describe("Interpreter", () => {
 				{ inc: undefined; finish: undefined }
 			> = function* (ctx) {
 				let count = 0;
-				return yield* ctx.on<number>({
+				return yield* ctx.handle<number>({
 					inc: function* () {
 						count++;
 					},
-					finish: function* (ctx) {
-						yield* ctx.done(count);
+					finish: function* (_ctx, _payload, done) {
+						yield* done(count);
 					},
 				});
 			};
@@ -2396,9 +2348,9 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { stop: string }> = function* (
 				ctx,
 			) {
-				return yield* ctx.on<string>({
-					stop: function* (ctx, value: string) {
-						yield* ctx.done(value);
+				return yield* ctx.handle<string>({
+					stop: function* (_ctx, value: string, done) {
+						yield* done(value);
 					},
 				});
 			};
@@ -2420,10 +2372,10 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { go: undefined }> = function* (
 				ctx,
 			) {
-				return yield* ctx.on<string>({
-					go: function* (ctx) {
+				return yield* ctx.handle<string>({
+					go: function* (ctx, _payload, done) {
 						const result = yield* ctx.activity("fetch", async () => "fetched");
-						yield* ctx.done(result);
+						yield* done(result);
 					},
 				});
 			};
@@ -2448,28 +2400,28 @@ describe("Interpreter", () => {
 				{ inc: undefined; finish: undefined }
 			> = function* (ctx) {
 				let count = 0;
-				return yield* ctx.on<string>({
+				return yield* ctx.handle<string>({
 					inc: function* (ctx) {
 						yield* ctx.activity("count", activityFn);
 						count++;
 					},
-					finish: function* (ctx) {
-						yield* ctx.done(`total:${count}`);
+					finish: function* (_ctx, _payload, done) {
+						yield* done(`total:${count}`);
 					},
 				});
 			};
 
-			// ctx.on() now uses ctx.race(ctx.waitFor(...)) internally.
-			// Seq allocation: waitFor("inc")=1, waitFor("finish")=2, race=3
+			// ctx.handle() uses ctx.race(ctx.receive(...)) internally.
+			// Seq allocation: receive("inc")=1, receive("finish")=2, race=3
 			// After first iteration handler: activity("count")=4
-			// Second iteration: waitFor("inc")=5, waitFor("finish")=6, race=7
+			// Second iteration: receive("inc")=5, receive("finish")=6, race=7
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				// First iteration: race picks "inc" (winner 0)
 				{
 					type: "race_started",
 					seq: 3,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -2496,7 +2448,7 @@ describe("Interpreter", () => {
 				{
 					type: "race_started",
 					seq: 7,
-					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 6,
 				},
 				{
@@ -2524,7 +2476,7 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<string, { go: undefined }> = function* (
 				ctx,
 			) {
-				return yield* ctx.on<string>({
+				return yield* ctx.handle<string>({
 					go: function* () {
 						throw new Error("handler boom");
 					},
@@ -2548,9 +2500,9 @@ describe("Interpreter", () => {
 		it("unmatched signal is skipped (re-waits)", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					return yield* ctx.on<string>({
-						a: function* (ctx, value: string) {
-							yield* ctx.done(value);
+					return yield* ctx.handle<string>({
+						a: function* (_ctx, value: string, done) {
+							yield* done(value);
 						},
 					});
 				};
@@ -2580,7 +2532,7 @@ describe("Interpreter", () => {
 		it("delegates signal to child workflow", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `child got: ${val}`;
 				};
 
@@ -2604,10 +2556,10 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("parent reports child's waitingFor", async () => {
+		it("parent reports child's receiving", async () => {
 			const childWorkflow: WorkflowFunction<string, { info: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("info");
+					const val = yield* ctx.receive("info");
 					return `got: ${val}`;
 				};
 
@@ -2621,7 +2573,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("info");
+				expect(interpreter.receiving).toBe("info");
 			});
 		});
 
@@ -2630,7 +2582,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("a"), ctx.waitFor("b"));
+				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
 			};
 
 			const parentWorkflow: WorkflowFunction<
@@ -2645,7 +2597,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAll).toEqual(["a", "b"]);
+				expect(interpreter.receivingAll).toEqual(["a", "b"]);
 			});
 		});
 
@@ -2653,8 +2605,8 @@ describe("Interpreter", () => {
 			const childWorkflow: WorkflowFunction<string, { x: string; y: string }> =
 				function* (ctx) {
 					const { winner, value } = yield* ctx.race(
-						ctx.waitFor("x"),
-						ctx.waitFor("y"),
+						ctx.receive("x"),
+						ctx.receive("y"),
 					);
 					return winner === 0 ? `x:${value}` : `y:${value}`;
 				};
@@ -2669,7 +2621,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAny).toEqual(["x", "y"]);
+				expect(interpreter.receivingAny).toEqual(["x", "y"]);
 			});
 		});
 
@@ -2677,7 +2629,7 @@ describe("Interpreter", () => {
 			const grandchild: WorkflowFunction<string, { deep: string }> = function* (
 				ctx,
 			) {
-				const val = yield* ctx.waitFor("deep");
+				const val = yield* ctx.receive("deep");
 				return `grandchild: ${val}`;
 			};
 
@@ -2698,7 +2650,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("deep");
+				expect(interpreter.receiving).toBe("deep");
 			});
 
 			interpreter.signal("deep", "value");
@@ -2710,7 +2662,7 @@ describe("Interpreter", () => {
 		it("cancel propagates to active child", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `got: ${val}`;
 				};
 
@@ -2940,7 +2892,7 @@ describe("Interpreter", () => {
 			vi.useRealTimers();
 		});
 
-		it("races activity against waitFor signal", async () => {
+		it("races activity against receive signal", async () => {
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ manual: string }
@@ -2953,7 +2905,7 @@ describe("Interpreter", () => {
 								setTimeout(() => resolve("auto-result"), 5000),
 							),
 					),
-					ctx.waitFor("manual"),
+					ctx.receive("manual"),
 				);
 			};
 
@@ -3022,12 +2974,12 @@ describe("Interpreter", () => {
 			vi.useRealTimers();
 		});
 
-		it("races two waitFor branches — first signal received wins", async () => {
+		it("races two receive branches — first signal received wins", async () => {
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ approve: string; reject: string }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("approve"), ctx.waitFor("reject"));
+				return yield* ctx.race(ctx.receive("approve"), ctx.receive("reject"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3044,7 +2996,7 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("races three waitFor branches — third signal wins", async () => {
+		it("races three receive branches — third signal wins", async () => {
 			const workflow: WorkflowFunction<
 				| { winner: 0; value: string }
 				| { winner: 1; value: string }
@@ -3052,9 +3004,9 @@ describe("Interpreter", () => {
 				{ single: string; optA: string; optB: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
-					ctx.waitFor("single"),
-					ctx.waitFor("optA"),
-					ctx.waitFor("optB"),
+					ctx.receive("single"),
+					ctx.receive("optA"),
+					ctx.receive("optB"),
 				);
 			};
 
@@ -3077,7 +3029,7 @@ describe("Interpreter", () => {
 		it("races activity against child (child waits for signal)", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `child got: ${val}`;
 				};
 
@@ -3169,7 +3121,7 @@ describe("Interpreter", () => {
 		it("cancel cleans up child in race", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `got: ${val}`;
 				};
 
@@ -3201,7 +3153,7 @@ describe("Interpreter", () => {
 				{ winner: 0; value: string } | { winner: 1; value: string },
 				{ approve: string; reject: string }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("approve"), ctx.waitFor("reject"));
+				return yield* ctx.race(ctx.receive("approve"), ctx.receive("reject"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3209,20 +3161,20 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAny).toEqual(
+				expect(interpreter.receivingAny).toEqual(
 					expect.arrayContaining(["approve", "reject"]),
 				);
 			});
 		});
 
-		it("races waitFor against sleep — signal wins", async () => {
+		it("races receive against sleep — signal wins", async () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));
+				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(5000));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3241,14 +3193,14 @@ describe("Interpreter", () => {
 			vi.useRealTimers();
 		});
 
-		it("races waitFor against sleep — timeout wins", async () => {
+		it("races receive against sleep — timeout wins", async () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(100));
+				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(100));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3263,14 +3215,14 @@ describe("Interpreter", () => {
 			vi.useRealTimers();
 		});
 
-		it("races waitFor against sleep — replays from event log", async () => {
+		it("races receive against sleep — replays from event log", async () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string } | { winner: 1; value: void },
 				{ approve: string }
 			> = function* (ctx) {
-				return yield* ctx.race(ctx.waitFor("approve"), ctx.sleep(5000));
+				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(5000));
 			};
 
 			// First run: signal wins
@@ -3299,10 +3251,10 @@ describe("Interpreter", () => {
 	});
 
 	describe("Profunctor: signal routing through combinators", () => {
-		it("on handler calling ctx.child with waitFor receives signal", async () => {
+		it("handle handler calling ctx.child with receive receives signal", async () => {
 			const childWorkflow: WorkflowFunction<string, { input: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("input");
+					const val = yield* ctx.receive("input");
 					return `child: ${val}`;
 				};
 
@@ -3310,10 +3262,10 @@ describe("Interpreter", () => {
 				string,
 				{ go: undefined; input: string }
 			> = function* (ctx) {
-				return yield* ctx.on<string>({
-					go: function* (ctx) {
+				return yield* ctx.handle<string>({
+					go: function* (ctx, _payload, done) {
 						const result = yield* ctx.child("sub", childWorkflow);
-						yield* ctx.done(result);
+						yield* done(result);
 					},
 				});
 			};
@@ -3330,7 +3282,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("input");
+				expect(interpreter.receiving).toBe("input");
 			});
 
 			// Send "input" which should route through to the child
@@ -3340,14 +3292,14 @@ describe("Interpreter", () => {
 			expect(result).toBe("child: hello");
 		});
 
-		it("race with multiple waitFor routes signal to correct branch", async () => {
+		it("race with multiple receive routes signal to correct branch", async () => {
 			const workflow: WorkflowFunction<
 				string,
 				{ approve: string; reject: string }
 			> = function* (ctx) {
 				const { winner, value } = yield* ctx.race(
-					ctx.waitFor("approve"),
-					ctx.waitFor("reject"),
+					ctx.receive("approve"),
+					ctx.receive("reject"),
 				);
 				return winner === 0 ? `approved: ${value}` : `rejected: ${value}`;
 			};
@@ -3368,7 +3320,7 @@ describe("Interpreter", () => {
 		it("test runtime delivers signals into child workflows", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `child: ${val}`;
 				};
 
@@ -3383,7 +3335,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("data");
+				expect(interpreter.receiving).toBe("data");
 			});
 
 			interpreter.signal("data", "hello");
@@ -3395,7 +3347,7 @@ describe("Interpreter", () => {
 		it("nested child in on handler routes signals through full chain", async () => {
 			const grandchild: WorkflowFunction<string, { value: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("value");
+					const val = yield* ctx.receive("value");
 					return `deep: ${val}`;
 				};
 
@@ -3409,10 +3361,10 @@ describe("Interpreter", () => {
 				string,
 				{ start: undefined; value: string }
 			> = function* (ctx) {
-				return yield* ctx.on<string>({
-					start: function* (ctx) {
+				return yield* ctx.handle<string>({
+					start: function* (ctx, _payload, done) {
 						const result = yield* ctx.child("child", child);
-						yield* ctx.done(result);
+						yield* done(result);
 					},
 				});
 			};
@@ -3428,7 +3380,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingFor).toBe("value");
+				expect(interpreter.receiving).toBe("value");
 			});
 
 			interpreter.signal("value", "deep-data");
@@ -3441,8 +3393,8 @@ describe("Interpreter", () => {
 			const childWorkflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
 					const { winner, value } = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
+						ctx.receive("a"),
+						ctx.receive("b"),
 					);
 					return winner === 0 ? `a:${value}` : `b:${value}`;
 				};
@@ -3457,7 +3409,7 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAny).toEqual(["a", "b"]);
+				expect(interpreter.receivingAny).toEqual(["a", "b"]);
 			});
 
 			interpreter.signal("b", "bee");
@@ -3473,7 +3425,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("a"), ctx.waitFor("b"));
+				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3516,7 +3468,7 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<[string, string], { name: string }> =
 				function* (ctx) {
 					return yield* ctx.all(
-						ctx.waitFor("name"),
+						ctx.receive("name"),
 						ctx.activity("greet", async () => "hello"),
 					);
 				};
@@ -3604,7 +3556,7 @@ describe("Interpreter", () => {
 			const workflow: WorkflowFunction<[string, string], { sig: string }> =
 				function* (ctx) {
 					return yield* ctx.all(
-						ctx.waitFor("sig"),
+						ctx.receive("sig"),
 						ctx.activity(
 							"slow",
 							() =>
@@ -3642,7 +3594,7 @@ describe("Interpreter", () => {
 				{ payment: string },
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("payment"), ctx.join("profile"));
+				return yield* ctx.all(ctx.receive("payment"), ctx.join("profile"));
 			};
 
 			const interpreter = new Interpreter(
@@ -3663,15 +3615,15 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("signals reach the correct waitFor branch", async () => {
+		it("signals reach the correct receive branch", async () => {
 			const workflow: WorkflowFunction<
 				[string, string, string],
 				{ a: string; b: string; c: string }
 			> = function* (ctx) {
 				return yield* ctx.all(
-					ctx.waitFor("a"),
-					ctx.waitFor("b"),
-					ctx.waitFor("c"),
+					ctx.receive("a"),
+					ctx.receive("b"),
+					ctx.receive("c"),
 				);
 			};
 
@@ -3706,7 +3658,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ x: string; y: string }
 			> = function* (ctx) {
-				return yield* ctx.all(ctx.waitFor("x"), ctx.waitFor("y"));
+				return yield* ctx.all(ctx.receive("x"), ctx.receive("y"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -3714,13 +3666,13 @@ describe("Interpreter", () => {
 
 			await vi.waitFor(() => {
 				expect(interpreter.state).toBe("waiting");
-				expect(interpreter.waitingForAll).toEqual(["x", "y"]);
+				expect(interpreter.receivingAll).toEqual(["x", "y"]);
 			});
 
 			interpreter.signal("x", "val-x");
 
 			await vi.waitFor(() => {
-				expect(interpreter.waitingForAll).toEqual(["y"]);
+				expect(interpreter.receivingAll).toEqual(["y"]);
 			});
 		});
 

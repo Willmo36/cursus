@@ -1,13 +1,14 @@
 // ABOUTME: UI for the race example.
 // ABOUTME: Shows fetch-with-timeout and approval-with-escalation race patterns.
-import { useEffect, useState } from "react";
+
 import { WorkflowDebugPanel } from "cursus/devtools";
 import { useWorkflow } from "cursus/react";
+import { useEffect, useState } from "react";
 import { storage } from "./storage";
 import {
 	type ApprovalResult,
-	type FetchResult,
 	approvalWorkflow,
+	type FetchResult,
 	fetchWorkflow,
 } from "./workflows";
 
@@ -24,19 +25,24 @@ export function App() {
 			>
 				<h1>Race: Fetch with Timeout</h1>
 				<p style={{ color: "#666", marginBottom: 24 }}>
-					Races a simulated API call (1.5–3.5s) against a 3s sleep
-					timeout. Refresh to re-run — the random delay means it
-					sometimes succeeds and sometimes times out.
+					Races a simulated API call (1.5–3.5s) against a 3s sleep timeout.
+					Refresh to re-run — the random delay means it sometimes succeeds and
+					sometimes times out.
 				</p>
 				<FetchFlow />
 
-				<hr style={{ margin: "40px 0", border: "none", borderTop: "1px solid #ddd" }} />
+				<hr
+					style={{
+						margin: "40px 0",
+						border: "none",
+						borderTop: "1px solid #ddd",
+					}}
+				/>
 
 				<h1>Race: Approval with Escalation</h1>
 				<p style={{ color: "#666", marginBottom: 24 }}>
-					Races a <code>waitFor("approve")</code> signal against a 10s
-					sleep. Click "Approve" before the timer runs out, or let it
-					escalate.
+					Races a <code>waitFor("approve")</code> signal against a 10s sleep.
+					Click "Approve" before the timer runs out, or let it escalate.
 				</p>
 				<ApprovalFlow />
 			</div>
@@ -52,11 +58,9 @@ export function App() {
 }
 
 function FetchFlow() {
-	const { state, result } = useWorkflow<FetchResult>(
-		"fetch",
-		fetchWorkflow,
-		{ storage },
-	);
+	const { state, result } = useWorkflow<FetchResult>("fetch", fetchWorkflow, {
+		storage,
+	});
 
 	if (state === "running") {
 		return (
@@ -84,9 +88,7 @@ function FetchFlow() {
 						borderRadius: 8,
 					}}
 				>
-					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>
-						Fetch Won
-					</h2>
+					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>Fetch Won</h2>
 					<p style={{ margin: 0 }}>
 						<strong>Data:</strong> {result.data}
 					</p>
@@ -97,9 +99,8 @@ function FetchFlow() {
 							fontSize: 14,
 						}}
 					>
-						The activity resolved before the 3s timeout. Check the
-						debug panel for <code>race_completed</code> with{" "}
-						<code>winner: 0</code>.
+						The activity resolved before the 3s timeout. Check the debug panel
+						for <code>race_completed</code> with <code>winner: 0</code>.
 					</p>
 				</div>
 			);
@@ -113,9 +114,7 @@ function FetchFlow() {
 					borderRadius: 8,
 				}}
 			>
-				<h2 style={{ margin: "0 0 8px", color: "#e65100" }}>
-					Timeout Won
-				</h2>
+				<h2 style={{ margin: "0 0 8px", color: "#e65100" }}>Timeout Won</h2>
 				<p style={{ margin: 0 }}>
 					The API took too long — sleep fired after 3s.
 				</p>
@@ -176,8 +175,7 @@ function ApprovalFlow() {
 				}}
 			>
 				<p style={{ margin: "0 0 12px", color: "#1565c0" }}>
-					Waiting for approval... escalates in{" "}
-					<strong>{seconds}s</strong>
+					Waiting for approval... escalates in <strong>{seconds}s</strong>
 				</p>
 				<button
 					type="button"
@@ -208,9 +206,7 @@ function ApprovalFlow() {
 						borderRadius: 8,
 					}}
 				>
-					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>
-						Approved
-					</h2>
+					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>Approved</h2>
 					<p style={{ margin: 0 }}>
 						Approved by <strong>{result.by}</strong>.
 					</p>
@@ -226,9 +222,7 @@ function ApprovalFlow() {
 					borderRadius: 8,
 				}}
 			>
-				<h2 style={{ margin: "0 0 8px", color: "#e65100" }}>
-					Escalated
-				</h2>
+				<h2 style={{ margin: "0 0 8px", color: "#e65100" }}>Escalated</h2>
 				<p style={{ margin: 0 }}>
 					No approval within 10s — escalated to next level.
 				</p>

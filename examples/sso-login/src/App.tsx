@@ -7,7 +7,7 @@ import { ssoWorkflow } from "./workflow";
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, waitingFor, signal, reset } = useWorkflow(
+	const { state, result, receiving, signal, reset } = useWorkflow(
 		"sso",
 		ssoWorkflow,
 		{ storage },
@@ -23,7 +23,7 @@ export function App() {
 				<StatusMessage text="Connecting to provider..." />
 			)}
 
-			{state === "waiting" && waitingFor === "sso-callback" && (
+			{state === "waiting" && receiving === "sso-callback" && (
 				<div>
 					<p>Waiting for SSO provider response...</p>
 					<p style={{ fontSize: 13, color: "#666" }}>

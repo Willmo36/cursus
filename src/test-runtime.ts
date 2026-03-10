@@ -97,7 +97,9 @@ export async function createTestRuntime<
 						>,
 					);
 					// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
-				return yield* (workflow as AnyWorkflowFunction)(wrappedChildCtx as any);
+					return yield* (workflow as AnyWorkflowFunction)(
+						wrappedChildCtx as any,
+					);
 				};
 				return ctx.child(name, wrappedChild);
 			},
@@ -118,10 +120,10 @@ export async function createTestRuntime<
 	interpreter.onStateChange(() => {
 		if (interpreter.state !== "waiting" || signalQueue.length === 0) return;
 
-		// Single waitFor: match by name
-		if (interpreter.waitingFor) {
+		// Single receive: match by name
+		if (interpreter.receiving) {
 			const idx = signalQueue.findIndex(
-				(s) => s.name === interpreter.waitingFor,
+				(s) => s.name === interpreter.receiving,
 			);
 			if (idx !== -1) {
 				const [signal] = signalQueue.splice(idx, 1);
@@ -131,7 +133,7 @@ export async function createTestRuntime<
 		}
 
 		// race with signals: send first matching signal from queue
-		const waitingAny = interpreter.waitingForAny;
+		const waitingAny = interpreter.receivingAny;
 		if (waitingAny) {
 			const idx = signalQueue.findIndex((s) => waitingAny.includes(s.name));
 			if (idx !== -1) {
@@ -142,7 +144,7 @@ export async function createTestRuntime<
 		}
 
 		// all with signals: send any matching signals from the queue
-		const waitingAll = interpreter.waitingForAll;
+		const waitingAll = interpreter.receivingAll;
 		if (waitingAll) {
 			for (const needed of waitingAll) {
 				const idx = signalQueue.findIndex((s) => s.name === needed);

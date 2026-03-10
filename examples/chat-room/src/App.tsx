@@ -1,8 +1,9 @@
 // ABOUTME: Chat room UI with username entry, message list, and close button.
 // ABOUTME: Hydrates past messages from localStorage events on reload.
-import { useEffect, useMemo, useState } from "react";
+
 import { LocalStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
+import { useEffect, useMemo, useState } from "react";
 import type { ChatMessage } from "./workflow";
 import { chatWorkflow } from "./workflow";
 
@@ -10,7 +11,7 @@ const storage = new LocalStorage();
 const WORKFLOW_ID = "chat-room";
 
 export function App() {
-	const { state, result, waitingFor, signal, reset } = useWorkflow(
+	const { state, result, receiving, signal, reset } = useWorkflow(
 		WORKFLOW_ID,
 		chatWorkflow,
 		{ storage },
@@ -20,10 +21,12 @@ export function App() {
 	const [text, setText] = useState("");
 	const hydrated = useHydratedMessages();
 
-	const isActive = state === "waiting" && waitingFor === "chat-event";
+	const isActive = state === "waiting" && receiving === "chat-event";
 
 	return (
-		<div style={{ maxWidth: 500, margin: "40px auto", fontFamily: "system-ui" }}>
+		<div
+			style={{ maxWidth: 500, margin: "40px auto", fontFamily: "system-ui" }}
+		>
 			<h1>Chat Room</h1>
 
 			{!joined && state !== "completed" && (
@@ -140,10 +143,7 @@ function useHydratedMessages(): ChatMessage[] {
 		storage.load(WORKFLOW_ID).then((log) => {
 			const messages: ChatMessage[] = [];
 			for (const event of log) {
-				if (
-					event.type === "signal_received" &&
-					event.signal === "chat-event"
-				) {
+				if (event.type === "signal_received" && event.signal === "chat-event") {
 					const payload = event.payload as
 						| { type: "message"; username: string; text: string }
 						| { type: "close" };

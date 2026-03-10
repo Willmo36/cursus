@@ -23,7 +23,7 @@ describe("createTestRuntime", () => {
 
 	it("runs a workflow with pre-queued signals", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const data = yield* ctx.waitFor<string>("submit");
+			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
 		};
 
@@ -37,7 +37,7 @@ describe("createTestRuntime", () => {
 	it("handles multiple activities and signals together", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
 			const user = yield* ctx.activity("fetchUser", async () => "real-user");
-			const input = yield* ctx.waitFor<string>("confirm");
+			const input = yield* ctx.receive<string>("confirm");
 			const saved = yield* ctx.activity("save", async () => "real-save");
 			return `${user}:${input}:${saved}`;
 		};
@@ -79,7 +79,7 @@ describe("createTestRuntime", () => {
 			[string, string],
 			{ email: string; password: string }
 		> = function* (ctx) {
-			return yield* ctx.all(ctx.waitFor("email"), ctx.waitFor("password"));
+			return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
 		};
 
 		const result = await createTestRuntime(workflow, {
@@ -94,8 +94,8 @@ describe("createTestRuntime", () => {
 
 	it("supports multiple sequential signals", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const email = yield* ctx.waitFor<string>("email");
-			const password = yield* ctx.waitFor<string>("password");
+			const email = yield* ctx.receive<string>("email");
+			const password = yield* ctx.receive<string>("password");
 			return `${email}:${password}`;
 		};
 
@@ -136,7 +136,7 @@ describe("createTestRuntime", () => {
 		> = function* (ctx) {
 			const user = yield* ctx.join("login");
 			const greeting = yield* ctx.activity("greet", async () => "real");
-			const confirm = yield* ctx.waitFor("confirm");
+			const confirm = yield* ctx.receive("confirm");
 			return `${user}:${greeting}:${confirm}`;
 		};
 
@@ -177,7 +177,7 @@ describe("createTestRuntime", () => {
 			Record<string, unknown>,
 			{ profile: unknown }
 		> = function* (ctx) {
-			return yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
+			return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 		};
 
 		const result = await createTestRuntime(wf, {
@@ -192,8 +192,8 @@ describe("createTestRuntime", () => {
 		const workflow: WorkflowFunction<string, { a: string; b: string }> =
 			function* (ctx) {
 				const { winner, value } = yield* ctx.race(
-					ctx.waitFor("a"),
-					ctx.waitFor("b"),
+					ctx.receive("a"),
+					ctx.receive("b"),
 				);
 				return winner === 0 ? `a:${value}` : `b:${value}`;
 			};
@@ -211,12 +211,12 @@ describe("createTestRuntime", () => {
 			{ inc: undefined; finish: undefined }
 		> = function* (ctx) {
 			let count = 0;
-			return yield* ctx.on<number>({
+			return yield* ctx.handle<number>({
 				inc: function* () {
 					count++;
 				},
-				finish: function* (ctx) {
-					yield* ctx.done(count);
+				finish: function* (_ctx, _payload, done) {
+					yield* done(count);
 				},
 			});
 		};
@@ -290,7 +290,7 @@ describe("createTestRuntime", () => {
 		it("pre-queued signals work with child workflows", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					const greeting = yield* ctx.activity("greet", async () => "real");
 					return `${greeting}: ${val}`;
 				};

@@ -139,10 +139,7 @@ function shopApi(): Plugin {
 					req.on("data", (chunk) => (body += chunk));
 					req.on("end", () => {
 						const { email, password } = JSON.parse(body);
-						if (
-							email === "user@shop.com" &&
-							password === "password123"
-						) {
+						if (email === "user@shop.com" && password === "password123") {
 							res.end(
 								JSON.stringify({
 									id: "u1",

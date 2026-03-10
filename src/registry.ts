@@ -36,9 +36,8 @@ type WorkflowEntry = {
 	listeners: Array<() => void>;
 };
 
-export class WorkflowRegistry<
-	K extends string = string,
-> implements WorkflowRegistryInterface
+export class WorkflowRegistry<K extends string = string>
+	implements WorkflowRegistryInterface
 {
 	private entries: Map<string, WorkflowEntry>;
 	private _storage: WorkflowStorage;
@@ -57,7 +56,10 @@ export class WorkflowRegistry<
 		this.observers = observers ?? [];
 		this.versions = versions;
 		this.entries = new Map();
-		for (const [id, fn] of Object.entries(workflows) as [string, AnyWorkflowFunction][]) {
+		for (const [id, fn] of Object.entries(workflows) as [
+			string,
+			AnyWorkflowFunction,
+		][]) {
 			this.entries.set(id, {
 				fn,
 				completed: false,

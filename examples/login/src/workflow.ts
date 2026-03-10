@@ -20,7 +20,7 @@ type UserProfile = {
 export const loginWorkflow: WorkflowFunction<UserProfile, LoginSignals> =
 	function* (ctx) {
 		for (;;) {
-			const creds = yield* ctx.waitFor("credentials");
+			const creds = yield* ctx.receive("credentials");
 
 			const authenticated = yield* ctx.activity("authenticate", async () => {
 				await new Promise((r) => setTimeout(r, 800));

@@ -59,7 +59,7 @@ sequenceDiagram
     EXT-->>INT: result
     INT->>LOG: append(activity_completed)
     INT->>WF: gen.next(result)
-    WF-->>INT: yield WaitForCommand
+    WF-->>INT: yield ReceiveCommand
     INT->>LOG: (waiting...)
     Note over INT: state = "waiting"
     EXT->>INT: signal("submit", data)
@@ -74,7 +74,7 @@ sequenceDiagram
 | Command | What it does | Context method |
 |---------|-------------|----------------|
 | `ActivityCommand` | Run an async function | `ctx.activity(name, fn)` |
-| `WaitForCommand` | Block until a named signal arrives | `ctx.waitFor(signal)` |
+| `ReceiveCommand` | Block until a named signal arrives | `ctx.receive(signal)` |
 | `WaitForAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitForAll(...)` |
 | `JoinCommand` | Block until another workflow completes | `ctx.join(id)` |
 | `PublishedCommand` | Block until another workflow publishes a value | `ctx.published(id)` |
@@ -108,7 +108,7 @@ Each command gets a monotonically increasing **sequence number** (`seq`). Before
 
 ```
 seq=1: activity "fetch-user" → log has activity_completed(seq=1) → return stored result
-seq=2: waitFor "confirm"    → log has signal_received(seq=2)    → return stored payload
+seq=2: receive "confirm"    → log has signal_received(seq=2)    → return stored payload
 seq=3: activity "send-email" → no matching event                → execute live
 ```
 
@@ -154,7 +154,7 @@ graph LR
     WF --- SM
     WF --- WM
 
-    SM -->|constrains| waitFor["ctx.waitFor(signal)"]
+    SM -->|constrains| receive["ctx.receive(signal)"]
     SM -->|constrains| waitForAll["ctx.waitForAll(...)"]
     SM -->|constrains| signal["hook.signal(name, payload)"]
     WM -->|constrains| wfw["ctx.join(id) / ctx.published(id)"]
@@ -186,7 +186,7 @@ const checkoutWorkflow: WorkflowFunction<
 graph TB
     subgraph "User-facing (generic)"
         WC["WorkflowContext&lt;SignalMap, WorkflowMap&gt;"]
-        WC1["waitFor&lt;K&gt;(signal: K) → SignalMap[K]"]
+        WC1["receive&lt;K&gt;(signal: K) → SignalMap[K]"]
         WC2["join&lt;K&gt;(id: K) → WorkflowMap[K]"]
         WC2b["published&lt;K&gt;(id: K) → WorkflowMap[K]"]
         WC3["waitForAll(...) → mapped tuple"]
@@ -194,7 +194,7 @@ graph TB
 
     subgraph "Internal (type-erased)"
         IWC["InternalWorkflowContext"]
-        IWC1["waitFor(signal: string) → unknown"]
+        IWC1["receive(signal: string) → unknown"]
         IWC2["join(id: string) → unknown"]
         IWC2b["published(id: string) → unknown"]
         IWC3["waitForAll(...) → unknown"]
@@ -349,7 +349,7 @@ flowchart TD
 
     LAYER_MODE --> RESULT
     INLINE_MODE --> RESULT
-    RESULT["{ state, result, error, waitingFor, signal, reset }"]
+    RESULT["{ state, result, error, receiving, signal, reset }"]
 ```
 
 ### Provider Structure

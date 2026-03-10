@@ -1,8 +1,9 @@
 // ABOUTME: Checkout UI with a global profile workflow and a local checkout workflow.
 // ABOUTME: Demonstrates cross-workflow deps: checkout blocks until profile is complete.
-import { useState } from "react";
+
 import { WorkflowDebugPanel } from "cursus/devtools";
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import { storage } from "./storage";
 import type { UserProfile } from "./workflows";
 import { checkoutWorkflow } from "./workflows";
@@ -41,7 +42,7 @@ export function App() {
 }
 
 function ProfileForm() {
-	const { state, result, waitingFor, signal, reset } =
+	const { state, result, receiving, signal, reset } =
 		useWorkflow<UserProfile>("profile");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
@@ -63,7 +64,7 @@ function ProfileForm() {
 		return <StatusMessage text="Validating profile..." />;
 	}
 
-	if (state === "waiting" && waitingFor === "profile") {
+	if (state === "waiting" && receiving === "profile") {
 		return (
 			<div>
 				<h2>Your details</h2>
@@ -105,7 +106,7 @@ function ProfileForm() {
 }
 
 function CheckoutForm() {
-	const { state, result, waitingForAll, signal } = useWorkflow(
+	const { state, result, receivingAll, signal } = useWorkflow(
 		"checkout",
 		checkoutWorkflow,
 	);
@@ -132,7 +133,7 @@ function CheckoutForm() {
 		return <StatusMessage text="Waiting for profile..." />;
 	}
 
-	if (state === "waiting" && waitingForAll?.includes("payment")) {
+	if (state === "waiting" && receivingAll?.includes("payment")) {
 		return (
 			<div>
 				<h2>Payment</h2>

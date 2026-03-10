@@ -1,9 +1,10 @@
 // ABOUTME: Entry point for the error recovery example.
 // ABOUTME: Registers the payment workflow in a layer so the order workflow can depend on it.
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+
 import { createLayer } from "cursus";
 import { WorkflowLayerProvider } from "cursus/react";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { storage } from "./storage";
 import { paymentWorkflow } from "./workflows";

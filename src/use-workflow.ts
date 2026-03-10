@@ -37,9 +37,9 @@ type UseWorkflowResult<
 	state: WorkflowState;
 	result: T | undefined;
 	error: string | undefined;
-	waitingFor: (keyof SignalMap & string) | undefined;
-	waitingForAll: string[] | undefined;
-	waitingForAny: string[] | undefined;
+	receiving: (keyof SignalMap & string) | undefined;
+	receivingAll: string[] | undefined;
+	receivingAny: string[] | undefined;
 	published: unknown;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
@@ -83,14 +83,14 @@ export function useWorkflow(
 	);
 	const [result, setResult] = useState<unknown>(snapshot?.result);
 	const [error, setError] = useState<string | undefined>(snapshot?.error);
-	const [waitingFor, setWaitingFor] = useState<string | undefined>(
-		snapshot?.waitingFor,
+	const [receiving, setReceiving] = useState<string | undefined>(
+		snapshot?.receiving,
 	);
-	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
-		snapshot?.waitingForAll,
+	const [receivingAll, setReceivingAll] = useState<string[] | undefined>(
+		snapshot?.receivingAll,
 	);
-	const [waitingForAny, setWaitingForAny] = useState<string[] | undefined>(
-		snapshot?.waitingForAny,
+	const [receivingAny, setReceivingAny] = useState<string[] | undefined>(
+		snapshot?.receivingAny,
 	);
 	const [published, setPublished] = useState<unknown>(snapshot?.published);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
@@ -116,9 +116,9 @@ export function useWorkflow(
 				setState(interpreter.state);
 				setResult(interpreter.result);
 				setError(interpreter.error);
-				setWaitingFor(interpreter.waitingFor);
-				setWaitingForAll(interpreter.waitingForAll);
-				setWaitingForAny(interpreter.waitingForAny);
+				setReceiving(interpreter.receiving);
+				setReceivingAll(interpreter.receivingAll);
+				setReceivingAny(interpreter.receivingAny);
 				setPublished(interpreter.published);
 			}
 
@@ -201,9 +201,9 @@ export function useWorkflow(
 				setState(interpreter.state);
 				setResult(interpreter.result);
 				setError(interpreter.error);
-				setWaitingFor(interpreter.waitingFor);
-				setWaitingForAll(interpreter.waitingForAll);
-				setWaitingForAny(interpreter.waitingForAny);
+				setReceiving(interpreter.receiving);
+				setReceivingAll(interpreter.receivingAll);
+				setReceivingAny(interpreter.receivingAny);
 				setPublished(interpreter.published);
 				persistEvents();
 			}
@@ -264,9 +264,9 @@ export function useWorkflow(
 			setState("running");
 			setResult(undefined);
 			setError(undefined);
-			setWaitingFor(undefined);
-			setWaitingForAll(undefined);
-			setWaitingForAny(undefined);
+			setReceiving(undefined);
+			setReceivingAll(undefined);
+			setReceivingAny(undefined);
 			setPublished(undefined);
 			await registry.start(workflowId);
 			return;
@@ -277,9 +277,9 @@ export function useWorkflow(
 		setState("running");
 		setResult(undefined);
 		setError(undefined);
-		setWaitingFor(undefined);
-		setWaitingForAll(undefined);
-		setWaitingForAny(undefined);
+		setReceiving(undefined);
+		setReceivingAll(undefined);
+		setReceivingAny(undefined);
 		setPublished(undefined);
 		restart();
 	}, [isLayerMode, registry, workflowId]);
@@ -288,9 +288,9 @@ export function useWorkflow(
 		state,
 		result,
 		error,
-		waitingFor,
-		waitingForAll,
-		waitingForAny,
+		receiving,
+		receivingAll,
+		receivingAny,
 		published,
 		signal,
 		cancel,

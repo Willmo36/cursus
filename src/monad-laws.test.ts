@@ -94,7 +94,7 @@ describe("Monad laws", () => {
 		it("child workflow behaves same as inline (right identity via delegation)", async () => {
 			const childWorkflow: WorkflowFunction<string, { data: string }> =
 				function* (ctx) {
-					const val = yield* ctx.waitFor("data");
+					const val = yield* ctx.receive("data");
 					return `got: ${val}`;
 				};
 
@@ -109,7 +109,7 @@ describe("Monad laws", () => {
 			const inline: WorkflowFunction<string, { data: string }> = function* (
 				ctx,
 			) {
-				const val = yield* ctx.waitFor("data");
+				const val = yield* ctx.receive("data");
 				return `got: ${val}`;
 			};
 

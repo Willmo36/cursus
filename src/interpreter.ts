@@ -34,14 +34,14 @@ export class Interpreter {
 	private _state: WorkflowState = "running";
 	private _result: unknown;
 	private _error: string | undefined;
-	private _waitingFor: string | undefined;
-	private pendingSignal:
+	private _receiving: string | undefined;
+	private pendingReceive:
 		| {
 				resolve: (payload: unknown) => void;
 		  }
 		| undefined;
-	private _waitingForAll: string[] | undefined;
-	private _waitingForAny: string[] | undefined;
+	private _receivingAll: string[] | undefined;
+	private _receivingAny: string[] | undefined;
 	private _publishedValue: unknown;
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
@@ -85,38 +85,44 @@ export class Interpreter {
 					return result as T;
 				})();
 			},
-			waitFor: (signalName: string) => {
+			receive: (signalName: string) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
-						type: "waitFor" as const,
+						type: "receive" as const,
 						signal: signalName,
 						seq,
 					};
 					return result;
 				})();
 			},
-			on: <T>(
+			handle: <T>(
 				handlers: Record<
 					string,
 					(
 						ctx: InternalWorkflowContext,
 						payload: unknown,
+						done: (value: unknown) => Generator<Command, never, unknown>,
 					) => Generator<Command, void, unknown>
 				>,
 			): Generator<Command, T, unknown> => {
 				const ctx = this.context;
 				const handlerNames = Object.keys(handlers);
+				const doneFn = (value: unknown): Generator<Command, never, unknown> => {
+					return (function* (): Generator<Command, never, unknown> {
+						throw new DoneSignal(value);
+					})();
+				};
 				return (function* (): Generator<Command, T, unknown> {
 					for (;;) {
 						const result = yield* ctx.race(
-							...handlerNames.map((n) => ctx.waitFor(n)),
+							...handlerNames.map((n) => ctx.receive(n)),
 						);
 						const signal = handlerNames[result.winner];
 						const handler = handlers[signal];
 						if (!handler) continue;
 						try {
-							yield* handler(ctx, result.value);
+							yield* handler(ctx, result.value, doneFn);
 						} catch (err) {
 							if (err instanceof DoneSignal) {
 								return err.value as T;
@@ -124,11 +130,6 @@ export class Interpreter {
 							throw err;
 						}
 					}
-				})();
-			},
-			done: (value: unknown): Generator<Command, never, unknown> => {
-				return (function* (): Generator<Command, never, unknown> {
-					throw new DoneSignal(value);
 				})();
 			},
 			sleep: (durationMs: number) => {
@@ -256,16 +257,16 @@ export class Interpreter {
 		return this._error;
 	}
 
-	get waitingFor(): string | undefined {
-		return this._waitingFor;
+	get receiving(): string | undefined {
+		return this._receiving;
 	}
 
-	get waitingForAll(): string[] | undefined {
-		return this._waitingForAll;
+	get receivingAll(): string[] | undefined {
+		return this._receivingAll;
 	}
 
-	get waitingForAny(): string[] | undefined {
-		return this._waitingForAny;
+	get receivingAny(): string[] | undefined {
+		return this._receivingAny;
 	}
 
 	get published(): unknown {
@@ -274,7 +275,7 @@ export class Interpreter {
 
 	signal(name: string, payload?: unknown): void {
 		// Race signal branches take priority — a race may have both a bare
-		// waitFor branch and a child branch, and the bare waitFor needs
+		// receive branch and a child branch, and the bare receive needs
 		// to be reachable without being swallowed by _activeChild.
 		if (this._raceWaiters) {
 			const waiter = this._raceWaiters.find((w) => w.signal === name);
@@ -290,7 +291,7 @@ export class Interpreter {
 			if (idx !== -1) {
 				const waiter = this._allWaiters[idx];
 				this._allWaiters.splice(idx, 1);
-				this._waitingForAll = this._allWaiters.map((w) => w.signal);
+				this._receivingAll = this._allWaiters.map((w) => w.signal);
 				waiter.resolve(payload);
 				return;
 			}
@@ -303,8 +304,8 @@ export class Interpreter {
 
 		if (this._state !== "waiting") return;
 
-		// Single waitFor path
-		if (this._waitingFor === name) {
+		// Single receive path
+		if (this._receiving === name) {
 			this.log.append({
 				type: "signal_received",
 				signal: name,
@@ -313,13 +314,12 @@ export class Interpreter {
 				timestamp: Date.now(),
 			});
 			this._state = "running";
-			this._waitingFor = undefined;
+			this._receiving = undefined;
 			this.notifyChange();
-			this.pendingSignal?.resolve(payload);
-			this.pendingSignal = undefined;
+			this.pendingReceive?.resolve(payload);
+			this.pendingReceive = undefined;
 			return;
 		}
-
 	}
 
 	cancel(): void {
@@ -342,7 +342,7 @@ export class Interpreter {
 		this._abortController?.abort();
 		this._abortController = null;
 
-		// Reject pending waitFor/sleep
+		// Reject pending receive/sleep
 		this._pendingReject?.(new CancelledError());
 		this._pendingReject = null;
 
@@ -360,10 +360,10 @@ export class Interpreter {
 		// Clean up all branches
 		this._allWaiters = null;
 
-		this._waitingFor = undefined;
-		this._waitingForAll = undefined;
-		this._waitingForAny = undefined;
-		this.pendingSignal = undefined;
+		this._receiving = undefined;
+		this._receivingAll = undefined;
+		this._receivingAny = undefined;
+		this.pendingReceive = undefined;
 		this.notifyChange();
 	}
 
@@ -373,9 +373,9 @@ export class Interpreter {
 
 		if (child.state === "waiting") {
 			this._state = "waiting";
-			this._waitingFor = child.waitingFor;
-			this._waitingForAll = child.waitingForAll;
-			this._waitingForAny = child.waitingForAny;
+			this._receiving = child.receiving;
+			this._receivingAll = child.receivingAll;
+			this._receivingAny = child.receivingAny;
 			this.notifyChange();
 		} else {
 			this.clearChildState();
@@ -391,13 +391,13 @@ export class Interpreter {
 		) {
 			this._state = "running";
 		}
-		this._waitingFor = undefined;
-		this._waitingForAll = undefined;
-		this._waitingForAny = undefined;
+		this._receiving = undefined;
+		this._receivingAll = undefined;
+		this._receivingAny = undefined;
 	}
 
 	private findWaitingSeq(): number {
-		// The seq of the current waitFor command is the current seq counter
+		// The seq of the current receive command is the current seq counter
 		return this.seq;
 	}
 
@@ -496,8 +496,8 @@ export class Interpreter {
 		switch (command.type) {
 			case "activity":
 				return this.executeActivity(command);
-			case "waitFor":
-				return this.executeWaitFor(command);
+			case "receive":
+				return this.executeReceive(command);
 			case "sleep":
 				return this.executeSleep(command);
 			case "child":
@@ -578,8 +578,8 @@ export class Interpreter {
 		}
 	}
 
-	private async executeWaitFor(
-		command: Extract<Command, { type: "waitFor" }>,
+	private async executeReceive(
+		command: Extract<Command, { type: "receive" }>,
 	): Promise<unknown> {
 		// Check for replay
 		const received = this.log.findCompleted(command.seq, "signal_received");
@@ -589,12 +589,12 @@ export class Interpreter {
 
 		// Live: pause until signal() is called
 		this._state = "waiting";
-		this._waitingFor = command.signal;
+		this._receiving = command.signal;
 
 		return new Promise((resolve, reject) => {
-			this.pendingSignal = { resolve };
+			this.pendingReceive = { resolve };
 			this._pendingReject = reject;
-			// Notify after pendingSignal is set so signal() can resolve the promise
+			// Notify after pendingReceive is set so signal() can resolve the promise
 			this.notifyChange();
 		});
 	}
@@ -907,7 +907,7 @@ export class Interpreter {
 				state.childUnsub?.();
 			}
 			this._allWaiters = null;
-			this._waitingForAll = undefined;
+			this._receivingAll = undefined;
 		};
 
 		const branchPromises = command.items.map((item, index) => {
@@ -927,7 +927,7 @@ export class Interpreter {
 						}, item.durationMs);
 					});
 				}
-				case "waitFor": {
+				case "receive": {
 					return new Promise<{ index: number; value: unknown }>((resolve) => {
 						allWaiters.push({
 							signal: item.signal,
@@ -1012,7 +1012,7 @@ export class Interpreter {
 		if (allWaiters.length > 0) {
 			this._allWaiters = allWaiters;
 			this._state = "waiting";
-			this._waitingForAll = allWaiters.map((w) => w.signal);
+			this._receivingAll = allWaiters.map((w) => w.signal);
 			this.notifyChange();
 		}
 
@@ -1029,7 +1029,7 @@ export class Interpreter {
 
 			this._pendingReject = null;
 			this._allWaiters = null;
-			this._waitingForAll = undefined;
+			this._receivingAll = undefined;
 			this._state = "running";
 
 			// Sort by index to preserve declaration order
@@ -1091,9 +1091,9 @@ export class Interpreter {
 				state.childUnsub?.();
 			}
 			this._raceWaiters = null;
-			this._waitingFor = undefined;
-			this.pendingSignal = undefined;
-			this._waitingForAny = undefined;
+			this._receiving = undefined;
+			this.pendingReceive = undefined;
+			this._receivingAny = undefined;
 			this._raceCleanup = null;
 		};
 
@@ -1115,13 +1115,13 @@ export class Interpreter {
 						}, item.durationMs);
 					});
 				}
-				case "waitFor": {
+				case "receive": {
 					return new Promise<{ index: number; value: unknown }>((resolve) => {
 						raceWaiters.push({
 							signal: item.signal,
 							resolve: (payload: unknown) => {
 								// Immediately clear race waiters to prevent stale
-								// resolution when ctx.on() loops and a signal arrives
+								// resolution when ctx.handle() loops and a signal arrives
 								// before the next race is set up.
 								this._raceWaiters = null;
 								this._state = "running";
@@ -1210,7 +1210,7 @@ export class Interpreter {
 		if (raceWaiters.length > 0) {
 			this._raceWaiters = raceWaiters;
 			this._state = "waiting";
-			this._waitingForAny = raceWaiters.map((w) => w.signal);
+			this._receivingAny = raceWaiters.map((w) => w.signal);
 			this.notifyChange();
 		}
 
@@ -1234,9 +1234,9 @@ export class Interpreter {
 		}
 
 		this._raceWaiters = null;
-		this._waitingFor = undefined;
-		this.pendingSignal = undefined;
-		this._waitingForAny = undefined;
+		this._receiving = undefined;
+		this.pendingReceive = undefined;
+		this._receivingAny = undefined;
 		if (this._activeChild) {
 			this._activeChild = null;
 			this.clearChildState();

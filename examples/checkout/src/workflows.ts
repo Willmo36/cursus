@@ -15,7 +15,7 @@ type ProfileSignals = {
 
 export const profileWorkflow: WorkflowFunction<UserProfile, ProfileSignals> =
 	function* (ctx) {
-		const profile = yield* ctx.waitFor("profile");
+		const profile = yield* ctx.receive("profile");
 
 		yield* ctx.activity("validate-email", async () => {
 			await new Promise((r) => setTimeout(r, 500));
@@ -52,7 +52,7 @@ export const checkoutWorkflow: WorkflowFunction<
 	CheckoutDeps
 > = function* (ctx) {
 	const [payment, profile] = yield* ctx.all(
-		ctx.waitFor("payment"),
+		ctx.receive("payment"),
 		ctx.workflow("profile"),
 	);
 

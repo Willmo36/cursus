@@ -11,7 +11,7 @@ Durable workflows in the browser. A workflow is a **generator function** that yi
 ```ts
 function* checkout(ctx: WorkflowContext): Workflow<OrderResult> {
   const cart = yield* ctx.activity("fetchCart", fetchCart);
-  const payment = yield* ctx.waitFor("payment-submitted");
+  const payment = yield* ctx.receive("payment-submitted");
   const order = yield* ctx.activity("charge", () => chargeCard(payment));
   return { orderId: order.id };
 }
@@ -31,7 +31,7 @@ Commands are the yield values — declarative descriptions of side effects:
 | Command | Purpose |
 |---------|---------|
 | `activity(name, fn)` | Execute a side-effecting function (API call, storage, etc.) |
-| `waitFor(signal)` | Pause until an external signal arrives (user input, event) |
+| `receive(signal)` | Pause until an external signal arrives (user input, event) |
 | `sleep(ms)` | Durable timer — survives page reload |
 | `child(name, workflowFn)` | Start a nested/child workflow |
 | `query()` | Expose current workflow state for external reads |
@@ -147,11 +147,11 @@ The test interpreter runs the generator synchronously, injecting results without
 
 | Example | Workflow Features Used |
 |---------|----------------------|
-| SSO login | `activity` (redirect/token exchange), `waitFor` (callback) |
-| Login before proceeding | `waitFor` (credentials), `activity` (auth call), conditional branching |
+| SSO login | `activity` (redirect/token exchange), `receive` (callback) |
+| Login before proceeding | `receive` (credentials), `activity` (auth call), conditional branching |
 | Multipage job application | `child` (nested workflows per page), `signal` (browser back = signal) |
-| Chat room | Long-running workflow with repeated `waitFor` (messages), `signal` (join/leave/message) |
-| Email then password wizard | Sequential `waitFor` (email), then `waitFor` (password), `activity` (validate) |
+| Chat room | Long-running workflow with repeated `receive` (messages), `signal` (join/leave/message) |
+| Email then password wizard | Sequential `receive` (email), then `receive` (password), `activity` (validate) |
 | Cookie banner | No storage of final result — the `result` is computed from the event log history itself |
 
 ## Design Constraints
@@ -165,7 +165,7 @@ The test interpreter runs the generator synchronously, injecting results without
 
 ## Decisions
 
-1. **`waitFor` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
+1. **`receive` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
 
 2. **Parallel activities supported.** `yield* ctx.parallel([...])` for concurrent activities (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
@@ -188,7 +188,7 @@ This is why workflows compose: `yield*` is associative, and the interpreter can 
 - **Covariant (result):** If workflow A returns `T`, a parent can `yield* ctx.child("a", A)` and receive `T`. Results flow out naturally.
 - **Contravariant (signals):** If workflow A accepts signal `"submit"`, the parent must be able to route `"submit"` into A. Signals must flow in.
 
-`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `waitFor`.
+`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `receive`.
 
 ### Monad Laws
 
@@ -197,7 +197,7 @@ For pure computation (activities, sleep), the monad laws hold:
 - **Left identity:** `yield* ctx.activity("x", f)` behaves the same whether wrapped in a child or inlined.
 - **Associativity:** `yield* a; yield* b; yield* c` groups the same regardless of nesting.
 
-**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `waitFor`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
+**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `receive`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
 
 ### Design Principle
 

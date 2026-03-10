@@ -1,7 +1,8 @@
 // ABOUTME: Product grid that loads products via a catalog workflow.
 // ABOUTME: Shows loading, error with retry, and product cards with add-to-cart buttons.
-import { useMemo } from "react";
+
 import { useWorkflow } from "cursus/react";
+import { useMemo } from "react";
 import { useErrorToggle } from "./error-toggle";
 import { storage } from "./storage";
 import type { Product } from "./types";
@@ -28,9 +29,7 @@ export function ProductList() {
 	if (state === "failed") {
 		return (
 			<div className="p-4 bg-red-50 rounded-lg">
-				<p className="text-red-700 mb-3">
-					Failed to load products: {error}
-				</p>
+				<p className="text-red-700 mb-3">Failed to load products: {error}</p>
 				<button
 					type="button"
 					onClick={reset}
@@ -63,7 +62,10 @@ export function ProductList() {
 function ProductCard({
 	product,
 	onAdd,
-}: { product: Product; onAdd: () => void }) {
+}: {
+	product: Product;
+	onAdd: () => void;
+}) {
 	return (
 		<div className="border border-gray-300 rounded-lg p-3 flex flex-col">
 			<img

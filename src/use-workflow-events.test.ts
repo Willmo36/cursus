@@ -69,7 +69,7 @@ describe("useWorkflowEvents", () => {
 
 	it("updates events when a signal is sent to a waiting workflow", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const data = yield* ctx.waitFor<string>("submit");
+			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
 		};
 
@@ -151,7 +151,7 @@ describe("useWorkflowEvents", () => {
 
 	it("shows all events for a local workflow that completes with signals", async () => {
 		const localWorkflow: WorkflowFunction<string> = function* (ctx) {
-			const data = yield* ctx.waitFor<string>("submit");
+			const data = yield* ctx.receive<string>("submit");
 			return yield* ctx.activity("process", async () => `processed: ${data}`);
 		};
 

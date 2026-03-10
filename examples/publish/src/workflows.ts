@@ -20,28 +20,28 @@ export const sessionWorkflow: WorkflowFunction<
 	Record<string, never>,
 	Account
 > = function* (ctx) {
-	const { user } = yield* ctx.waitFor("login");
+	const { user } = yield* ctx.receive("login");
 
-	const account: Account = yield* ctx.activity(
-		"authenticate",
-		async () => ({ user, tier: "free" }),
-	);
+	const account: Account = yield* ctx.activity("authenticate", async () => ({
+		user,
+		tier: "free",
+	}));
 
 	yield* ctx.publish(account);
 
 	// Session stays alive — handle upgrades and revocation
-	yield* ctx.on<void>({
+	yield* ctx.handle<void>({
 		upgrade: function* (ctx, { tier }) {
 			yield* ctx.activity("apply-upgrade", async () => {
 				// In a real app, this would call an API
 			});
 			yield* ctx.publish({ ...account, tier });
 		},
-		revoke: function* (ctx) {
+		revoke: function* (ctx, _payload, done) {
 			yield* ctx.activity("revoke-session", async () => {
 				// Clean up session server-side
 			});
-			yield* ctx.done(undefined);
+			yield* done(undefined);
 		},
 	});
 };
@@ -53,11 +53,12 @@ export const checkoutWorkflow: WorkflowFunction<
 > = function* (ctx) {
 	const account = yield* ctx.published("session");
 
-	const payment = yield* ctx.waitFor("pay");
+	const payment = yield* ctx.receive("pay");
 
 	const confirmation = yield* ctx.activity(
 		"process-payment",
-		async () => `Order confirmed for ${account.user} (${account.tier}): $${payment.amount}`,
+		async () =>
+			`Order confirmed for ${account.user} (${account.tier}): $${payment.amount}`,
 	);
 
 	return confirmation;

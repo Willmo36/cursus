@@ -49,7 +49,7 @@ describe("useWorkflow", () => {
 
 		it("provides signal function that pushes data into workflow", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -59,7 +59,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("waiting");
-				expect(result.current.waitingFor).toBe("submit");
+				expect(result.current.receiving).toBe("submit");
 			});
 
 			act(() => {
@@ -76,8 +76,8 @@ describe("useWorkflow", () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
 					const { winner } = yield* ctx.race(
-						ctx.waitFor("a"),
-						ctx.waitFor("b"),
+						ctx.receive("a"),
+						ctx.receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				};
@@ -90,7 +90,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("waiting");
-				expect(result.current.waitingForAny).toEqual(["a", "b"]);
+				expect(result.current.receivingAny).toEqual(["a", "b"]);
 			});
 
 			act(() => {
@@ -99,7 +99,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("completed");
-				expect(result.current.waitingForAny).toBeUndefined();
+				expect(result.current.receivingAny).toBeUndefined();
 			});
 		});
 
@@ -163,8 +163,8 @@ describe("useWorkflow", () => {
 
 		it("exposes what signal the workflow is waiting for", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const email = yield* ctx.waitFor<string>("email");
-				const password = yield* ctx.waitFor<string>("password");
+				const email = yield* ctx.receive<string>("email");
+				const password = yield* ctx.receive<string>("password");
 				return `${email}:${password}`;
 			};
 
@@ -174,7 +174,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("waiting");
-				expect(result.current.waitingFor).toBe("email");
+				expect(result.current.receiving).toBe("email");
 			});
 		});
 
@@ -183,10 +183,7 @@ describe("useWorkflow", () => {
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.all(
-					ctx.waitFor("email"),
-					ctx.waitFor("password"),
-				);
+				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
 			};
 
 			const { result } = renderHook(() =>
@@ -357,8 +354,8 @@ describe("useWorkflow", () => {
 
 		it("persists events incrementally so intermediate state survives remount", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const email = yield* ctx.waitFor<string>("email");
-				const password = yield* ctx.waitFor<string>("password");
+				const email = yield* ctx.receive<string>("email");
+				const password = yield* ctx.receive<string>("password");
 				return `${email}:${password}`;
 			};
 
@@ -369,7 +366,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.waitingFor).toBe("email");
+				expect(result1.current.receiving).toBe("email");
 			});
 
 			act(() => {
@@ -377,7 +374,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result1.current.waitingFor).toBe("password");
+				expect(result1.current.receiving).toBe("password");
 			});
 
 			unmount();
@@ -391,7 +388,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result2.current.state).toBe("waiting");
-				expect(result2.current.waitingFor).toBe("password");
+				expect(result2.current.receiving).toBe("password");
 			});
 		});
 	});
@@ -440,7 +437,7 @@ describe("useWorkflow", () => {
 
 		it("sends signals to the layer workflow", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -456,7 +453,7 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.state).toBe("waiting");
-				expect(result.current.waitingFor).toBe("submit");
+				expect(result.current.receiving).toBe("submit");
 			});
 
 			act(() => {
@@ -471,8 +468,8 @@ describe("useWorkflow", () => {
 
 		it("state reactively updates as layer workflow progresses", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const a = yield* ctx.waitFor<string>("step1");
-				const b = yield* ctx.waitFor<string>("step2");
+				const a = yield* ctx.receive<string>("step1");
+				const b = yield* ctx.receive<string>("step2");
 				return `${a}:${b}`;
 			};
 
@@ -487,7 +484,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.waitingFor).toBe("step1");
+				expect(result.current.receiving).toBe("step1");
 			});
 
 			act(() => {
@@ -495,7 +492,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.waitingFor).toBe("step2");
+				expect(result.current.receiving).toBe("step2");
 			});
 
 			act(() => {
@@ -555,9 +552,9 @@ describe("useWorkflow", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const { result } = renderHook(() =>
@@ -584,7 +581,7 @@ describe("useWorkflow", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				yield* ctx.activity("after", async () => {
 					activityResolved = true;
 					return "done";
@@ -611,7 +608,7 @@ describe("useWorkflow", () => {
 
 		it("cancel() function is exposed and works", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -636,7 +633,7 @@ describe("useWorkflow", () => {
 			let runCount = 0;
 			const workflow: WorkflowFunction<string> = function* (ctx) {
 				runCount++;
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `run${runCount}: ${data}`;
 			};
 
@@ -707,7 +704,7 @@ describe("useWorkflow", () => {
 				{ name: string },
 				{ profile: { name: string } }
 			> = function* (ctx) {
-				const profile = yield* ctx.waitFor("profile");
+				const profile = yield* ctx.receive("profile");
 				return profile;
 			};
 
@@ -716,7 +713,7 @@ describe("useWorkflow", () => {
 				Record<string, unknown>,
 				{ profile: { name: string } }
 			> = function* (ctx) {
-				const payment = yield* ctx.waitFor("payment");
+				const payment = yield* ctx.receive("payment");
 				const profile = yield* ctx.join("profile");
 				const order = yield* ctx.activity("place-order", async () => {
 					return `${profile.name}:${payment}`;
@@ -740,12 +737,12 @@ describe("useWorkflow", () => {
 
 			await waitFor(() => {
 				expect(result.current.profile.state).toBe("waiting");
-				expect(result.current.profile.waitingFor).toBe("profile");
+				expect(result.current.profile.receiving).toBe("profile");
 			});
 
 			await waitFor(() => {
 				expect(result.current.checkout.state).toBe("waiting");
-				expect(result.current.checkout.waitingFor).toBe("payment");
+				expect(result.current.checkout.receiving).toBe("payment");
 			});
 
 			act(() => {
@@ -771,7 +768,7 @@ describe("useWorkflow", () => {
 				{ name: string },
 				{ profile: { name: string } }
 			> = function* (ctx) {
-				const profile = yield* ctx.waitFor("profile");
+				const profile = yield* ctx.receive("profile");
 				return profile;
 			};
 
@@ -781,7 +778,7 @@ describe("useWorkflow", () => {
 				{ profile: { name: string } }
 			> = function* (ctx) {
 				const [payment, profile] = yield* ctx.all(
-					ctx.waitFor("payment"),
+					ctx.receive("payment"),
 					ctx.workflow("profile"),
 				);
 				const order = yield* ctx.activity("place-order", async () => {
@@ -811,7 +808,7 @@ describe("useWorkflow", () => {
 
 			// Wait for profile to be waiting for signal
 			await waitFor(() => {
-				expect(result.current.profile.waitingFor).toBe("profile");
+				expect(result.current.profile.receiving).toBe("profile");
 			});
 
 			// Wait for checkout to be waiting (all)
@@ -1012,7 +1009,7 @@ describe("useWorkflow", () => {
 
 		it("seeds events and continues execution for partial snapshot", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const name = yield* ctx.waitFor("name");
+				const name = yield* ctx.receive("name");
 				return `hello ${name}`;
 			};
 

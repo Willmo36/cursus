@@ -27,8 +27,8 @@ export type ActivityCommand = {
 	seq: number;
 };
 
-export type WaitForCommand = {
-	type: "waitFor";
+export type ReceiveCommand = {
+	type: "receive";
 	signal: string;
 	seq: number;
 };
@@ -80,7 +80,7 @@ export type AllCommand = {
 
 export type Command =
 	| ActivityCommand
-	| WaitForCommand
+	| ReceiveCommand
 	| SleepCommand
 	| ChildCommand
 	| PublishedCommand
@@ -306,9 +306,7 @@ export type WorkflowFunction<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 	PublishType = never,
-> = (
-	ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
-) => Workflow<T>;
+> = (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Workflow<T>;
 
 // Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
 // Uses `any` for SignalMap/WorkflowMap to bypass contravariance — safe because the registry
@@ -340,7 +338,7 @@ export type WorkflowRegistryInterface = {
 
 // --- Context (provided to workflow generators) ---
 
-export type OnHandlers<
+export type SignalHandlers<
 	SignalMap extends Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown>,
 	PublishType = never,
@@ -348,6 +346,7 @@ export type OnHandlers<
 	[K in keyof SignalMap & string]?: (
 		ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 		payload: SignalMap[K],
+		done: <T>(value: T) => Generator<Command, never, unknown>,
 	) => Generator<Command, void, unknown>;
 };
 
@@ -360,13 +359,12 @@ export type WorkflowContext<
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
 	) => Generator<Command, T, unknown>;
-	waitFor: <K extends keyof SignalMap & string>(
+	receive: <K extends keyof SignalMap & string>(
 		signal: K,
 	) => Generator<Command, SignalMap[K], unknown>;
-	on: <T>(
-		handlers: OnHandlers<SignalMap, WorkflowMap, PublishType>,
+	handle: <T>(
+		handlers: SignalHandlers<SignalMap, WorkflowMap, PublishType>,
 	) => Generator<Command, T, unknown>;
-	done: <T>(value: T) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
@@ -388,11 +386,9 @@ export type WorkflowContext<
 			c: Generator<Command, C, unknown>,
 			d: Generator<Command, D, unknown>,
 		): Generator<Command, [A, B, C, D], unknown>;
-		(...branches: Generator<Command, unknown, unknown>[]): Generator<
-			Command,
-			unknown[],
-			unknown
-		>;
+		(
+			...branches: Generator<Command, unknown, unknown>[]
+		): Generator<Command, unknown[], unknown>;
 	};
 	race: {
 		<A, B>(
@@ -410,11 +406,9 @@ export type WorkflowContext<
 			c: Generator<Command, C, unknown>,
 			d: Generator<Command, D, unknown>,
 		): Generator<Command, RaceResult<[A, B, C, D]>, unknown>;
-		(...branches: Generator<Command, unknown, unknown>[]): Generator<
-			Command,
-			{ winner: number; value: unknown },
-			unknown
-		>;
+		(
+			...branches: Generator<Command, unknown, unknown>[]
+		): Generator<Command, { winner: number; value: unknown }, unknown>;
 	};
 	published: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
@@ -438,17 +432,17 @@ export type InternalWorkflowContext = {
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
 	) => Generator<Command, T, unknown>;
-	waitFor: (signal: string) => Generator<Command, unknown, unknown>;
-	on: <T>(
+	receive: (signal: string) => Generator<Command, unknown, unknown>;
+	handle: <T>(
 		handlers: Record<
 			string,
 			(
 				ctx: InternalWorkflowContext,
 				payload: unknown,
+				done: (value: unknown) => Generator<Command, never, unknown>,
 			) => Generator<Command, void, unknown>
 		>,
 	) => Generator<Command, T, unknown>;
-	done: (value: unknown) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
 	child: <T, CS extends Record<string, unknown>>(
 		name: string,

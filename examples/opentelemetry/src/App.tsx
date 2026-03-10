@@ -13,8 +13,7 @@ export function App() {
 		>
 			<h1>OpenTelemetry Tracing</h1>
 			<p style={{ color: "#666" }}>
-				Open the browser console to see OTel spans as each workflow event
-				fires.
+				Open the browser console to see OTel spans as each workflow event fires.
 			</p>
 			<hr
 				style={{
@@ -29,7 +28,7 @@ export function App() {
 }
 
 function Checkout() {
-	const { state, result, error, waitingFor, signal } = useWorkflow(
+	const { state, result, error, receiving, signal } = useWorkflow(
 		"checkout",
 		checkoutWorkflow,
 		{
@@ -64,7 +63,7 @@ function Checkout() {
 		);
 	}
 
-	if (state === "waiting" && waitingFor === "confirm") {
+	if (state === "waiting" && receiving === "confirm") {
 		return (
 			<div style={{ background: "#fff3e0", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>Confirm Payment</h2>

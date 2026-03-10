@@ -21,7 +21,7 @@ export const chatWorkflow: WorkflowFunction<ChatMessage[], ChatSignals> =
 		const messages: ChatMessage[] = [];
 
 		for (;;) {
-			const event = yield* ctx.waitFor("chat-event");
+			const event = yield* ctx.receive("chat-event");
 
 			if (event.type === "close") {
 				return messages;

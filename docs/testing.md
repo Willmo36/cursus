@@ -49,10 +49,10 @@ const result = await createTestRuntime(workflow, {
 Signals are automatically delivered when the workflow enters a waiting state. They're matched by name and consumed in order:
 
 ```ts
-// Sequential waitFor calls
+// Sequential receive calls
 const workflow: WorkflowFunction<string> = function* (ctx) {
-  const email = yield* ctx.waitFor<string>("email");
-  const password = yield* ctx.waitFor<string>("password");
+  const email = yield* ctx.receive<string>("email");
+  const password = yield* ctx.receive<string>("password");
   return `${email}:${password}`;
 };
 
@@ -64,7 +64,7 @@ const result = await createTestRuntime(workflow, {
 });
 ```
 
-Signals also work with `all`, `race`, and `on`/`done` loops:
+Signals also work with `all`, `race`, and `handle`/`done` loops:
 
 ```ts
 // all — waits for all signals
@@ -80,7 +80,7 @@ const result = await createTestRuntime(raceWorkflow, {
   signals: [{ name: "reject", payload: "no" }],
 });
 
-// on/done loop
+// handle/done loop
 const result = await createTestRuntime(counterWorkflow, {
   signals: [
     { name: "inc", payload: undefined },

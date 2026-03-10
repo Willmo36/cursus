@@ -37,7 +37,7 @@ export const productWorkflow: WorkflowFunction<
 
 	yield* ctx.publish(product);
 
-	const review = yield* ctx.waitFor("review");
+	const review = yield* ctx.receive("review");
 
 	return { product, review };
 };

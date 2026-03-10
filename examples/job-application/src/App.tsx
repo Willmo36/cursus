@@ -1,8 +1,9 @@
 // ABOUTME: Multi-page job application form with step indicator.
 // ABOUTME: Collects personal info, education, submits, and shows confirmation.
-import { useState } from "react";
+
 import { LocalStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import { applicationWorkflow } from "./workflow";
 
 const storage = new LocalStorage();
@@ -10,38 +11,32 @@ const storage = new LocalStorage();
 const STEPS = ["Personal Info", "Education", "Submit"];
 
 export function App() {
-	const { state, result, waitingFor, signal, reset } = useWorkflow(
+	const { state, result, receiving, signal, reset } = useWorkflow(
 		"job-application",
 		applicationWorkflow,
 		{ storage },
 	);
 
 	const currentStep =
-		waitingFor === "personal-info"
-			? 0
-			: waitingFor === "education"
-				? 1
-				: 2;
+		receiving === "personal-info" ? 0 : receiving === "education" ? 1 : 2;
 
 	return (
-		<div style={{ maxWidth: 500, margin: "40px auto", fontFamily: "system-ui" }}>
+		<div
+			style={{ maxWidth: 500, margin: "40px auto", fontFamily: "system-ui" }}
+		>
 			<h1>Job Application</h1>
 
 			{state !== "completed" && <StepIndicator current={currentStep} />}
 
-			{state === "waiting" && waitingFor === "personal-info" && (
+			{state === "waiting" && receiving === "personal-info" && (
 				<PersonalInfoStep
-					onSubmit={(name, email) =>
-						signal("personal-info", { name, email })
-					}
+					onSubmit={(name, email) => signal("personal-info", { name, email })}
 				/>
 			)}
 
-			{state === "waiting" && waitingFor === "education" && (
+			{state === "waiting" && receiving === "education" && (
 				<EducationStep
-					onSubmit={(school, degree) =>
-						signal("education", { school, degree })
-					}
+					onSubmit={(school, degree) => signal("education", { school, degree })}
 				/>
 			)}
 
@@ -114,7 +109,9 @@ function StepIndicator({ current }: { current: number }) {
 
 function PersonalInfoStep({
 	onSubmit,
-}: { onSubmit: (name: string, email: string) => void }) {
+}: {
+	onSubmit: (name: string, email: string) => void;
+}) {
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 
@@ -153,7 +150,9 @@ function PersonalInfoStep({
 
 function EducationStep({
 	onSubmit,
-}: { onSubmit: (school: string, degree: string) => void }) {
+}: {
+	onSubmit: (school: string, degree: string) => void;
+}) {
 	const [school, setSchool] = useState("");
 	const [degree, setDegree] = useState("");
 

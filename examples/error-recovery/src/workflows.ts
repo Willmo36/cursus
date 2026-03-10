@@ -27,7 +27,7 @@ const charge = withRetry<Receipt>(
 
 export const paymentWorkflow: WorkflowFunction<Receipt, PaymentSignals> =
 	function* (ctx) {
-		const card = yield* ctx.waitFor("card");
+		const card = yield* ctx.receive("card");
 		const receipt = yield* ctx.activity("charge", charge);
 		return receipt;
 	};
@@ -48,7 +48,13 @@ type OrderDeps = {
 };
 
 export type OrderResult =
-	| { status: "confirmed"; name: string; address: string; last4: string; amount: string }
+	| {
+			status: "confirmed";
+			name: string;
+			address: string;
+			last4: string;
+			amount: string;
+	  }
 	| { status: "payment-failed"; name: string; address: string; error: string };
 
 export const orderWorkflow: WorkflowFunction<
@@ -56,7 +62,7 @@ export const orderWorkflow: WorkflowFunction<
 	OrderSignals,
 	OrderDeps
 > = function* (ctx) {
-	const shipping = yield* ctx.waitFor("shipping");
+	const shipping = yield* ctx.receive("shipping");
 	try {
 		const receipt = yield* ctx.join("payment");
 		return {

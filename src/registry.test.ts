@@ -1,5 +1,5 @@
 // ABOUTME: Tests for the WorkflowRegistry that manages shared workflow instances.
-// ABOUTME: Covers start, waitFor, signal, persistence, and failure handling.
+// ABOUTME: Covers start, receive, signal, persistence, and failure handling.
 
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
@@ -215,7 +215,7 @@ describe("WorkflowRegistry", () => {
 
 	it("signal() delegates to the interpreter", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const data = yield* ctx.waitFor<string>("submit");
+			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
 		};
 
@@ -336,7 +336,7 @@ describe("WorkflowRegistry", () => {
 
 		it("re-observe() replaces interpreter for previously observed entries", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -372,7 +372,7 @@ describe("WorkflowRegistry", () => {
 
 		it("observe() wires interpreter state changes to entry listeners", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -527,7 +527,7 @@ describe("WorkflowRegistry", () => {
 
 		it("reset() cancels a waiting workflow", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -548,7 +548,7 @@ describe("WorkflowRegistry", () => {
 
 		it("reset() notifies state change listeners", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
-				const data = yield* ctx.waitFor<string>("submit");
+				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
 			};
 
@@ -804,7 +804,7 @@ describe("WorkflowRegistry", () => {
 				{ greet: workflow },
 				storage,
 				undefined,
-				{ greet: 1, },
+				{ greet: 1 },
 			);
 			await registry.start("greet");
 
@@ -930,7 +930,7 @@ describe("WorkflowRegistry", () => {
 
 	it("onStateChange returns unsubscribe function", async () => {
 		const workflow: WorkflowFunction<string> = function* (ctx) {
-			const data = yield* ctx.waitFor<string>("submit");
+			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
 		};
 
@@ -966,10 +966,10 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				// Keep running — don't return yet
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();
@@ -982,9 +982,11 @@ describe("WorkflowRegistry", () => {
 
 			// Add a waiter before publishing
 			let waiterResult: unknown;
-			const waiterPromise = registry.waitFor("session", { start: false }).then((r) => {
-				waiterResult = r;
-			});
+			const waiterPromise = registry
+				.waitFor("session", { start: false })
+				.then((r) => {
+					waiterResult = r;
+				});
 
 			await new Promise((r) => setTimeout(r, 10));
 
@@ -1003,9 +1005,9 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();
@@ -1043,9 +1045,9 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const checkoutWorkflow: WorkflowFunction<
@@ -1086,9 +1088,9 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();
@@ -1108,9 +1110,9 @@ describe("WorkflowRegistry", () => {
 
 			// After reset, waitFor should not resolve immediately
 			let resolved = false;
-			registry
-				.waitFor("session", { start: false })
-				.then(() => { resolved = true; });
+			registry.waitFor("session", { start: false }).then(() => {
+				resolved = true;
+			});
 			await new Promise((r) => setTimeout(r, 20));
 			expect(resolved).toBe(false);
 		});
@@ -1122,7 +1124,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
 			};
@@ -1155,7 +1157,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
 			};
@@ -1185,9 +1187,9 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();
@@ -1219,7 +1221,7 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
 			};
@@ -1251,10 +1253,10 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				// Keep running
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();
@@ -1266,16 +1268,12 @@ describe("WorkflowRegistry", () => {
 			let publishedResolved = false;
 			let completionResolved = false;
 
-			registry
-				.waitForPublished("session", { start: false })
-				.then(() => {
-					publishedResolved = true;
-				});
-			registry
-				.waitForCompletion("session", { start: false })
-				.then(() => {
-					completionResolved = true;
-				});
+			registry.waitForPublished("session", { start: false }).then(() => {
+				publishedResolved = true;
+			});
+			registry.waitForCompletion("session", { start: false }).then(() => {
+				completionResolved = true;
+			});
 
 			await new Promise((r) => setTimeout(r, 10));
 
@@ -1323,9 +1321,9 @@ describe("WorkflowRegistry", () => {
 				Record<string, never>,
 				{ user: string }
 			> = function* (ctx) {
-				const { user } = yield* ctx.waitFor("login");
+				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
-				yield* ctx.waitFor("login");
+				yield* ctx.receive("login");
 			};
 
 			const storage = new MemoryStorage();

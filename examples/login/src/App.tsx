@@ -1,24 +1,27 @@
 // ABOUTME: Login form UI driven by the login workflow.
 // ABOUTME: Shows a login form with error feedback on failure, and a greeting on success.
-import { useState } from "react";
+
 import { LocalStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import { loginWorkflow } from "./workflow";
 
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, waitingFor, signal, reset } = useWorkflow(
+	const { state, result, receiving, signal, reset } = useWorkflow(
 		"login",
 		loginWorkflow,
 		{ storage },
 	);
 
 	return (
-		<div style={{ maxWidth: 400, margin: "40px auto", fontFamily: "system-ui" }}>
+		<div
+			style={{ maxWidth: 400, margin: "40px auto", fontFamily: "system-ui" }}
+		>
 			<h1>Login</h1>
 
-			{state === "waiting" && waitingFor === "credentials" && (
+			{state === "waiting" && receiving === "credentials" && (
 				<LoginForm
 					onSubmit={(username, password) =>
 						signal("credentials", { username, password })
@@ -43,7 +46,9 @@ export function App() {
 
 function LoginForm({
 	onSubmit,
-}: { onSubmit: (username: string, password: string) => void }) {
+}: {
+	onSubmit: (username: string, password: string) => void;
+}) {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [showError, setShowError] = useState(false);

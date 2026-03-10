@@ -27,8 +27,8 @@ export const applicationWorkflow: WorkflowFunction<
 	Application,
 	ApplicationSignals
 > = function* (ctx) {
-	const personalInfo = yield* ctx.waitFor("personal-info");
-	const education = yield* ctx.waitFor("education");
+	const personalInfo = yield* ctx.receive("personal-info");
+	const education = yield* ctx.receive("education");
 
 	const confirmationId = yield* ctx.activity("submit", async () => {
 		await new Promise((r) => setTimeout(r, 1500));

@@ -1,8 +1,9 @@
 // ABOUTME: UI for the error recovery example.
 // ABOUTME: Payment form feeds the layer workflow; order flow shows the caught failure.
-import { useState } from "react";
+
 import { WorkflowDebugPanel } from "cursus/devtools";
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import { storage } from "./storage";
 import { orderWorkflow } from "./workflows";
 
@@ -44,7 +45,7 @@ export function App() {
 }
 
 function PaymentForm() {
-	const { state, waitingFor, signal } = useWorkflow<unknown>("payment");
+	const { state, receiving, signal } = useWorkflow<unknown>("payment");
 	const [card, setCard] = useState("");
 
 	if (state === "completed") {
@@ -69,7 +70,7 @@ function PaymentForm() {
 		return <StatusMessage text="Processing payment..." />;
 	}
 
-	if (state === "waiting" && waitingFor === "card") {
+	if (state === "waiting" && receiving === "card") {
 		return (
 			<div>
 				<h2>Payment</h2>
@@ -108,7 +109,7 @@ function PaymentForm() {
 }
 
 function OrderFlow() {
-	const { state, result, waitingFor, signal } = useWorkflow(
+	const { state, result, receiving, signal } = useWorkflow(
 		"order",
 		orderWorkflow,
 	);
@@ -119,7 +120,7 @@ function OrderFlow() {
 		return <StatusMessage text="Starting order..." />;
 	}
 
-	if (state === "waiting" && waitingFor === "shipping") {
+	if (state === "waiting" && receiving === "shipping") {
 		return (
 			<div>
 				<h2>Shipping</h2>
@@ -167,9 +168,7 @@ function OrderFlow() {
 	if (state === "completed" && result) {
 		if (result.status === "confirmed") {
 			return (
-				<div
-					style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}
-				>
+				<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 					<h2 style={{ margin: "0 0 8px" }}>Order Confirmed</h2>
 					<p>
 						<strong>Ship to:</strong> {result.name}, {result.address}
@@ -185,9 +184,7 @@ function OrderFlow() {
 		}
 
 		return (
-			<div
-				style={{ background: "#fff3e0", padding: 16, borderRadius: 8 }}
-			>
+			<div style={{ background: "#fff3e0", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ margin: "0 0 8px", color: "#e65100" }}>
 					Order Could Not Be Completed
 				</h2>
@@ -198,8 +195,8 @@ function OrderFlow() {
 					<strong>Payment error:</strong> {result.error}
 				</p>
 				<p style={{ color: "#666", fontSize: 14 }}>
-					The order workflow caught the payment dependency failure and
-					completed gracefully. Check the debug panel to see the{" "}
+					The order workflow caught the payment dependency failure and completed
+					gracefully. Check the debug panel to see the{" "}
 					<code>workflow_dependency_failed</code> event.
 				</p>
 			</div>

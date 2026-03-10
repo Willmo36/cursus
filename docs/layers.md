@@ -50,9 +50,9 @@ Use `useWorkflow` with just an ID (no workflow function) to consume a layer work
 
 ```tsx
 function ProfilePage() {
-  const { state, result, waitingFor, signal } = useWorkflow<{ name: string }>("profile");
+  const { state, result, receiving, signal } = useWorkflow<{ name: string }>("profile");
 
-  if (waitingFor === "profile") {
+  if (receiving === "profile") {
     return <ProfileForm onSubmit={(data) => signal("profile", data)} />;
   }
 
@@ -76,7 +76,7 @@ const checkoutWorkflow: WorkflowFunction<
   { payment: string },
   { profile: { name: string } }
 > = function* (ctx) {
-  const payment = yield* ctx.waitFor("payment");
+  const payment = yield* ctx.receive("payment");
   const profile = yield* ctx.join("profile");
   return yield* ctx.activity("place-order", async () => {
     return `${profile.name}: ${payment}`;
@@ -100,10 +100,10 @@ const sessionWorkflow: WorkflowFunction<
   Record<string, never>,
   { user: string }
 > = function* (ctx) {
-  const { user } = yield* ctx.waitFor("login");
+  const { user } = yield* ctx.receive("login");
   yield* ctx.publish({ user });
   // keeps running — handles revocation, tier changes, etc.
-  yield* ctx.waitFor("login");
+  yield* ctx.receive("login");
 };
 
 const checkoutWorkflow: WorkflowFunction<
@@ -125,7 +125,7 @@ Resolution order for `published`: published value → wait. Resolution order for
 You can mix signals and workflow dependencies in `all`:
 
 ```ts
-const [payment, profile] = yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
+const [payment, profile] = yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
 ```
 
 `ctx.workflow("id")` returns a generator that resolves through the registry, just like `ctx.join("id")`.

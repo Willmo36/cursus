@@ -10,7 +10,10 @@ async function fetchData(signal: AbortSignal): Promise<string> {
 	// Simulate a slow API call (2s with some randomness)
 	const delay = 1500 + Math.random() * 2000;
 	return new Promise<string>((resolve, reject) => {
-		const timer = setTimeout(() => resolve(`Response (${Math.round(delay)}ms)`), delay);
+		const timer = setTimeout(
+			() => resolve(`Response (${Math.round(delay)}ms)`),
+			delay,
+		);
 		signal.addEventListener(
 			"abort",
 			() => {
@@ -41,10 +44,7 @@ export const approvalWorkflow: WorkflowFunction<
 	ApprovalResult,
 	{ approve: string }
 > = function* (ctx) {
-	const result = yield* ctx.race(
-		ctx.waitFor("approve"),
-		ctx.sleep(10_000),
-	);
+	const result = yield* ctx.race(ctx.receive("approve"), ctx.sleep(10_000));
 	if (result.winner === 0) {
 		return { status: "approved" as const, by: result.value };
 	}

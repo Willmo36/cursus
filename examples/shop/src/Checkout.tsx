@@ -1,14 +1,15 @@
 // ABOUTME: Checkout flow with login form and order confirmation.
 // ABOUTME: Sends login credentials as a signal to the checkout workflow.
-import { useState } from "react";
+
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import type { Order } from "./types";
 
 export function Checkout({ onBack }: { onBack: () => void }) {
-	const { state, result, error, signal, waitingForAll } =
+	const { state, result, error, signal, receivingAll } =
 		useWorkflow<Order>("checkout");
 
-	const needsLogin = waitingForAll?.includes("login");
+	const needsLogin = receivingAll?.includes("login");
 
 	if (state === "completed" && result) {
 		return (
@@ -19,15 +20,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 						<strong>Order ID:</strong> {result.orderId}
 					</p>
 					<p>
-						<strong>Customer:</strong> {result.user.name} (
-						{result.user.email})
+						<strong>Customer:</strong> {result.user.name} ({result.user.email})
 					</p>
 					<h3 className="font-semibold">Items</h3>
 					{result.items.map((item) => (
-						<div
-							key={item.productId}
-							className="text-sm mb-1"
-						>
+						<div key={item.productId} className="text-sm mb-1">
 							{item.name} x {item.quantity} — $
 							{(item.price * item.quantity).toFixed(2)}
 						</div>
@@ -47,11 +44,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 				<div className="p-4 bg-red-50 rounded-lg">
 					<p className="text-red-700">{error}</p>
 				</div>
-				<button
-					type="button"
-					onClick={onBack}
-					className="mt-4 cursor-pointer"
-				>
+				<button type="button" onClick={onBack} className="mt-4 cursor-pointer">
 					Back to shop
 				</button>
 			</div>
@@ -69,9 +62,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 					&larr; Back to shop
 				</button>
 				<LoginForm
-					onLogin={(email, password) =>
-						signal("login", { email, password })
-					}
+					onLogin={(email, password) => signal("login", { email, password })}
 				/>
 				<p className="text-xs text-gray-400 mt-3">
 					Use: user@shop.com / password123
@@ -89,7 +80,9 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
 function LoginForm({
 	onLogin,
-}: { onLogin: (email: string, password: string) => void }) {
+}: {
+	onLogin: (email: string, password: string) => void;
+}) {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 

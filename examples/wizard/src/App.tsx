@@ -1,8 +1,9 @@
 // ABOUTME: Signup wizard UI driven by the signup workflow using all().
 // ABOUTME: Shows email and password inputs together, collects both before creating account.
-import { useState } from "react";
+
 import { LocalStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
+import { useState } from "react";
 import { signupWorkflow } from "./workflow";
 
 const storage = new LocalStorage();

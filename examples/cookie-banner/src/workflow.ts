@@ -21,7 +21,7 @@ export const cookieWorkflow: WorkflowFunction<
 	CookiePreferences,
 	CookieSignals
 > = function* (ctx) {
-	const choice = yield* ctx.waitFor("cookie-choice");
+	const choice = yield* ctx.receive("cookie-choice");
 
 	switch (choice.type) {
 		case "accept-all":

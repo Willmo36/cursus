@@ -2,7 +2,7 @@
 // ABOUTME: Session login + checkout flow demonstrating publish and published.
 import { createLayer } from "cursus";
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { WorkflowLayerProvider, useWorkflow } from "cursus/react";
+import { useWorkflow, WorkflowLayerProvider } from "cursus/react";
 import { storage } from "./storage";
 import { checkoutWorkflow, sessionWorkflow } from "./workflows";
 
@@ -12,16 +12,14 @@ const layer = createLayer(
 );
 
 function Session() {
-	const { state, waitingFor, signal } = useWorkflow("session");
+	const { state, receiving, signal } = useWorkflow("session");
 
-	if (waitingFor === "login") {
+	if (receiving === "login") {
 		return (
 			<div>
 				<h2>Login</h2>
 				<button
-					onClick={() =>
-						signal("login", { user: "max", password: "secret" })
-					}
+					onClick={() => signal("login", { user: "max", password: "secret" })}
 				>
 					Log in as Max
 				</button>
@@ -48,7 +46,7 @@ function Session() {
 }
 
 function Checkout() {
-	const { state, result, waitingFor, signal } = useWorkflow<string>("checkout");
+	const { state, result, receiving, signal } = useWorkflow<string>("checkout");
 
 	if (state === "completed") {
 		return (
@@ -59,13 +57,11 @@ function Checkout() {
 		);
 	}
 
-	if (waitingFor === "pay") {
+	if (receiving === "pay") {
 		return (
 			<div>
 				<h2>Checkout</h2>
-				<button onClick={() => signal("pay", { amount: 99 })}>
-					Pay $99
-				</button>
+				<button onClick={() => signal("pay", { amount: 99 })}>Pay $99</button>
 			</div>
 		);
 	}
@@ -81,12 +77,19 @@ function Checkout() {
 export function App() {
 	return (
 		<WorkflowLayerProvider layer={layer}>
-			<div style={{ maxWidth: 600, margin: "0 auto", padding: 20, fontFamily: "sans-serif" }}>
+			<div
+				style={{
+					maxWidth: 600,
+					margin: "0 auto",
+					padding: 20,
+					fontFamily: "sans-serif",
+				}}
+			>
 				<h1>Publish Example</h1>
 				<p>
-					The session workflow publishes the account on login but keeps
-					running. The checkout workflow gets the published value
-					immediately via ctx.published().
+					The session workflow publishes the account on login but keeps running.
+					The checkout workflow gets the published value immediately via
+					ctx.published().
 				</p>
 				<div style={{ display: "grid", gap: 20 }}>
 					<Session />

@@ -10,7 +10,7 @@ type ProductPageProps = {
 	snapshot: WorkflowSnapshot;
 	product: Product | undefined;
 	state: string;
-	waitingFor: string | undefined;
+	receiving: string | undefined;
 	result: ProductResult | undefined;
 	onSignal?: (name: string, payload: string) => void;
 	onReset?: () => void;
@@ -20,7 +20,7 @@ export function ProductPage({
 	snapshot,
 	product,
 	state,
-	waitingFor,
+	receiving,
 	result,
 	onSignal,
 	onReset,
@@ -53,7 +53,7 @@ export function ProductPage({
 				</div>
 			)}
 
-			{state === "waiting" && waitingFor === "review" && (
+			{state === "waiting" && receiving === "review" && (
 				<ReviewForm onSubmit={(review) => onSignal?.("review", review)} />
 			)}
 

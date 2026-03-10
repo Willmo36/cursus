@@ -20,7 +20,7 @@ export const ssoWorkflow: WorkflowFunction<SsoSession, SsoSignals> = function* (
 		return "https://provider.example.com/authorize?client_id=demo&state=abc123";
 	});
 
-	const callbackCode = yield* ctx.waitFor("sso-callback");
+	const callbackCode = yield* ctx.receive("sso-callback");
 
 	const session = yield* ctx.activity("exchange-token", async () => {
 		await new Promise((r) => setTimeout(r, 1200));
