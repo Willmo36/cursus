@@ -1,5 +1,5 @@
 // ABOUTME: Two-step signup workflow collecting email and password, then creating an account.
-// ABOUTME: Demonstrates waitForAll to collect both fields in any order.
+// ABOUTME: Demonstrates all() to collect both fields in any order.
 import type { WorkflowFunction } from "cursus";
 
 type SignupSignals = {

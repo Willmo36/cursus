@@ -1,5 +1,5 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
-// ABOUTME: The checkout workflow uses waitForAll to wait for the profile workflow.
+// ABOUTME: The checkout workflow uses all() to wait for payment and the profile workflow.
 import type { WorkflowFunction } from "cursus";
 
 // --- Profile workflow (registered globally) ---
