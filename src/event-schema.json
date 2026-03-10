@@ -42,6 +42,8 @@
 					{ "$ref": "#/$defs/WorkflowDependencyPublishedEvent" },
 				{ "$ref": "#/$defs/WorkflowDependencyFailedEvent" },
 					{ "$ref": "#/$defs/WorkflowPublishedEvent" },
+					{ "$ref": "#/$defs/AllStartedEvent" },
+					{ "$ref": "#/$defs/AllCompletedEvent" },
 					{ "$ref": "#/$defs/RaceStartedEvent" },
 					{ "$ref": "#/$defs/RaceCompletedEvent" }
 				]
@@ -294,6 +296,37 @@
 				"type": { "const": "workflow_published" },
 				"value": {},
 				"seq": { "type": "integer" },
+				"timestamp": { "type": "number" }
+			}
+		},
+		"AllStartedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "items", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "all_started" },
+				"seq": { "type": "integer" },
+				"items": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": ["type"],
+						"properties": {
+							"type": { "type": "string" }
+						}
+					}
+				},
+				"timestamp": { "type": "number" }
+			}
+		},
+		"AllCompletedEvent": {
+			"type": "object",
+			"required": ["type", "seq", "results", "timestamp"],
+			"additionalProperties": false,
+			"properties": {
+				"type": { "const": "all_completed" },
+				"seq": { "type": "integer" },
+				"results": { "type": "array" },
 				"timestamp": { "type": "number" }
 			}
 		},

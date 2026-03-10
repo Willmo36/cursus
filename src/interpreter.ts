@@ -4,6 +4,7 @@
 import { EventLog } from "./event-log";
 import {
 	type ActivityScheduledEvent,
+	type AllCompletedEvent,
 	type AnyWorkflowFunction,
 	CancelledError,
 	type Command,
@@ -68,6 +69,10 @@ export class Interpreter {
 	private _sleepTimer: ReturnType<typeof setTimeout> | null = null;
 	private _raceCleanup: (() => void) | null = null;
 	private _raceWaiters: Array<{
+		signal: string;
+		resolve: (payload: unknown) => void;
+	}> | null = null;
+	private _allWaiters: Array<{
 		signal: string;
 		resolve: (payload: unknown) => void;
 	}> | null = null;
@@ -215,6 +220,22 @@ export class Interpreter {
 					return result;
 				})();
 			},
+			all: (...branches: Generator<Command, unknown, unknown>[]) => {
+				const seq = ++this.seq;
+				const items: Command[] = branches.map((gen) => {
+					const result = gen.next();
+					if (result.done) throw new Error("All branch yielded no command");
+					return result.value as Command;
+				});
+				return (function* (): Generator<Command, unknown[], unknown> {
+					const result = yield {
+						type: "all" as const,
+						items,
+						seq,
+					};
+					return result as unknown[];
+				})();
+			},
 			race: (...branches: Generator<Command, unknown, unknown>[]) => {
 				const seq = ++this.seq;
 				const items: Command[] = branches.map((gen) => {
@@ -331,6 +352,18 @@ export class Interpreter {
 			}
 		}
 
+		// All signal branches — resolve one matching waiter (doesn't complete the whole block)
+		if (this._allWaiters) {
+			const idx = this._allWaiters.findIndex((w) => w.signal === name);
+			if (idx !== -1) {
+				const waiter = this._allWaiters[idx];
+				this._allWaiters.splice(idx, 1);
+				this._waitingForAll = this._allWaiters.map((w) => w.signal);
+				waiter.resolve(payload);
+				return;
+			}
+		}
+
 		if (this._activeChild) {
 			this._activeChild.signal(name, payload);
 			return;
@@ -431,6 +464,9 @@ export class Interpreter {
 		this._raceCleanup?.();
 		this._raceCleanup = null;
 		this._raceWaiters = null;
+
+		// Clean up all branches
+		this._allWaiters = null;
 
 		this._waitingFor = undefined;
 		this._waitingForAll = undefined;
@@ -589,6 +625,8 @@ export class Interpreter {
 				return this.executeJoinCommand(command);
 			case "race":
 				return this.executeRace(command);
+			case "all":
+				return this.executeAll(command);
 			case "publish":
 				return this.executePublish(command);
 			default: {
@@ -800,7 +838,10 @@ export class Interpreter {
 				});
 
 				registry
-					?.waitForCompletion(item.workflowId, { start: true, caller: this._workflowId })
+					?.waitForCompletion(item.workflowId, {
+						start: true,
+						caller: this._workflowId,
+					})
 					.then((result) => {
 						if (failed) return;
 						collected.set(key, result);
@@ -1092,10 +1133,7 @@ export class Interpreter {
 		command: Extract<Command, { type: "publish" }>,
 	): Promise<void> {
 		// Replay path
-		const existing = this.log.findCompleted(
-			command.seq,
-			"workflow_published",
-		);
+		const existing = this.log.findCompleted(command.seq, "workflow_published");
 		if (existing) {
 			this._publishedValue = (existing as { value: unknown }).value;
 			return;
@@ -1110,6 +1148,216 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 		this.notifyChange();
+	}
+
+	private async executeAll(
+		command: Extract<Command, { type: "all" }>,
+	): Promise<unknown[]> {
+		// Replay path
+		const completed = this.log.findCompleted(command.seq, "all_completed");
+		if (completed) {
+			return (completed as AllCompletedEvent).results;
+		}
+
+		// Live execution
+		this.log.append({
+			type: "all_started",
+			seq: command.seq,
+			items: command.items.map((item) => ({ type: item.type })),
+			timestamp: Date.now(),
+		});
+
+		type BranchState = {
+			controller?: AbortController;
+			timer?: ReturnType<typeof setTimeout>;
+			childInterpreter?: Interpreter;
+			childUnsub?: () => void;
+		};
+
+		const branchStates: BranchState[] = command.items.map(() => ({}));
+		const allWaiters: Array<{
+			signal: string;
+			resolve: (payload: unknown) => void;
+		}> = [];
+
+		const cleanupAll = () => {
+			for (const state of branchStates) {
+				state.controller?.abort();
+				if (state.timer != null) clearTimeout(state.timer);
+				state.childInterpreter?.cancel();
+				state.childUnsub?.();
+			}
+			this._allWaiters = null;
+			this._waitingForAll = undefined;
+		};
+
+		const branchPromises = command.items.map((item, index) => {
+			const state = branchStates[index];
+
+			switch (item.type) {
+				case "activity": {
+					return this.executeActivity(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "sleep": {
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						state.timer = setTimeout(() => {
+							resolve({ index, value: undefined });
+						}, item.durationMs);
+					});
+				}
+				case "waitFor": {
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						allWaiters.push({
+							signal: item.signal,
+							resolve: (payload: unknown) => {
+								resolve({ index, value: payload });
+							},
+						});
+					});
+				}
+				case "published": {
+					return this.executePublishedCommand(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "join": {
+					return this.executeJoinCommand(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "child": {
+					const childName = item.name;
+					const childOnAppend =
+						this.observers.length > 0
+							? (event: WorkflowEvent) => {
+									for (const obs of this.observers) {
+										obs(childName, event);
+									}
+								}
+							: undefined;
+					const childLog = new EventLog([], childOnAppend);
+					const childInterpreter = new Interpreter(
+						item.workflow,
+						childLog,
+						undefined,
+						undefined,
+						this.observers,
+					);
+					state.childInterpreter = childInterpreter;
+
+					const unsub = childInterpreter.onStateChange(() =>
+						this.syncChildState(),
+					);
+					state.childUnsub = unsub;
+
+					return childInterpreter.run().then((result) => {
+						unsub();
+						if (childInterpreter.state === "failed") {
+							throw new Error(
+								childInterpreter.error ?? "Child workflow failed",
+							);
+						}
+						return { index, value: result };
+					});
+				}
+				case "race": {
+					return this.executeRace(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "all": {
+					return this.executeAll(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "parallel": {
+					return this.executeParallel(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "waitForAll": {
+					return this.executeWaitForAll(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "waitForAny": {
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						for (const sig of item.signals) {
+							allWaiters.push({
+								signal: sig,
+								resolve: (payload: unknown) => {
+									resolve({
+										index,
+										value: { signal: sig, payload },
+									});
+								},
+							});
+						}
+					});
+				}
+				case "publish": {
+					throw new Error("publish cannot be used inside an all branch");
+				}
+				default: {
+					const _exhaustive: never = item;
+					throw new Error(
+						`Unsupported command type in all: ${(_exhaustive as Command).type}`,
+					);
+				}
+			}
+		});
+
+		// Expose signal-based all branches for signal routing
+		if (allWaiters.length > 0) {
+			this._allWaiters = allWaiters;
+			this._state = "waiting";
+			this._waitingForAll = allWaiters.map((w) => w.signal);
+			this.notifyChange();
+		}
+
+		// Also race against cancellation
+		const cancelPromise = new Promise<never>((_, reject) => {
+			this._pendingReject = reject;
+		});
+
+		try {
+			const results = await Promise.race([
+				Promise.all(branchPromises),
+				cancelPromise,
+			]);
+
+			this._pendingReject = null;
+			this._allWaiters = null;
+			this._waitingForAll = undefined;
+			this._state = "running";
+
+			// Sort by index to preserve declaration order
+			const ordered = (results as Array<{ index: number; value: unknown }>)
+				.sort((a, b) => a.index - b.index)
+				.map((r) => r.value);
+
+			this.log.append({
+				type: "all_completed",
+				seq: command.seq,
+				results: ordered,
+				timestamp: Date.now(),
+			});
+
+			return ordered;
+		} catch (err) {
+			this._pendingReject = null;
+			cleanupAll();
+			throw err;
+		}
 	}
 
 	private async executeRace(
@@ -1271,10 +1519,14 @@ export class Interpreter {
 						value,
 					}));
 				}
+				case "all": {
+					return this.executeAll(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
 				case "publish": {
-					throw new Error(
-						"publish cannot be used inside a race branch",
-					);
+					throw new Error("publish cannot be used inside a race branch");
 				}
 				default: {
 					const _exhaustive: never = item;

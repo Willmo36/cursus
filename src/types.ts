@@ -106,6 +106,12 @@ export type RaceCommand = {
 	seq: number;
 };
 
+export type AllCommand = {
+	type: "all";
+	items: Command[];
+	seq: number;
+};
+
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
@@ -117,6 +123,7 @@ export type Command =
 	| PublishedCommand
 	| JoinCommand
 	| RaceCommand
+	| AllCommand
 	| PublishCommand;
 
 // --- Events (recorded in the event log) ---
@@ -247,6 +254,20 @@ export type WorkflowPublishedEvent = {
 	timestamp: number;
 };
 
+export type AllStartedEvent = {
+	type: "all_started";
+	seq: number;
+	items: Array<{ type: string }>;
+	timestamp: number;
+};
+
+export type AllCompletedEvent = {
+	type: "all_completed";
+	seq: number;
+	results: unknown[];
+	timestamp: number;
+};
+
 export type RaceStartedEvent = {
 	type: "race_started";
 	seq: number;
@@ -298,6 +319,8 @@ export type WorkflowEvent =
 	| WorkflowDependencyPublishedEvent
 	| WorkflowDependencyFailedEvent
 	| WorkflowPublishedEvent
+	| AllStartedEvent
+	| AllCompletedEvent
 	| RaceStartedEvent
 	| RaceCompletedEvent
 	| WorkflowCompletedEvent
@@ -432,6 +455,28 @@ export type WorkflowContext<
 		},
 		unknown
 	>;
+	all: {
+		<A, B>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+		): Generator<Command, [A, B], unknown>;
+		<A, B, C>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+			c: Generator<Command, C, unknown>,
+		): Generator<Command, [A, B, C], unknown>;
+		<A, B, C, D>(
+			a: Generator<Command, A, unknown>,
+			b: Generator<Command, B, unknown>,
+			c: Generator<Command, C, unknown>,
+			d: Generator<Command, D, unknown>,
+		): Generator<Command, [A, B, C, D], unknown>;
+		(...branches: Generator<Command, unknown, unknown>[]): Generator<
+			Command,
+			unknown[],
+			unknown
+		>;
+	};
 	race: {
 		<A, B>(
 			a: Generator<Command, A, unknown>,
@@ -504,6 +549,9 @@ export type InternalWorkflowContext = {
 	waitForAll: (
 		...args: (string | WorkflowRef)[]
 	) => Generator<Command, unknown, unknown>;
+	all: (
+		...branches: Generator<Command, unknown, unknown>[]
+	) => Generator<Command, unknown[], unknown>;
 	race: (
 		...branches: Generator<Command, unknown, unknown>[]
 	) => Generator<Command, { winner: number; value: unknown }, unknown>;

@@ -48,6 +48,7 @@ const SPAN_PAIRS: Record<string, string> = {
 	timer_started: "timer_fired",
 	child_started: "child_completed",
 	wait_all_started: "wait_all_completed",
+	all_started: "all_completed",
 };
 
 const SPAN_START_TYPES = new Set(Object.keys(SPAN_PAIRS));
@@ -63,7 +64,8 @@ function isSpanEnd(type: string): boolean {
 		type === "activity_completed" ||
 		type === "timer_fired" ||
 		type === "child_completed" ||
-		type === "wait_all_completed"
+		type === "wait_all_completed" ||
+		type === "all_completed"
 	);
 }
 
@@ -205,6 +207,8 @@ export function formatDetails(event: WorkflowEvent): string {
 				.map((i) => (i.kind === "signal" ? i.name : `workflow:${i.workflowId}`))
 				.join(", ");
 		case "wait_all_completed":
+			return truncate(JSON.stringify(event.results));
+		case "all_completed":
 			return truncate(JSON.stringify(event.results));
 		default:
 			return "";

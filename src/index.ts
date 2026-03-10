@@ -22,6 +22,9 @@ export { checkVersion, LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {
 	ActivityCommand,
+	AllCommand,
+	AllCompletedEvent,
+	AllStartedEvent,
 	AnyWorkflowFunction,
 	ChildCommand,
 	Command,
