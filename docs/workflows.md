@@ -50,33 +50,27 @@ Wait for a single named signal:
 const email = yield* ctx.waitFor<string>("email");
 ```
 
-### waitForAll
+### all
 
-Wait for multiple signals (and/or workflow results) to all arrive. Returns a tuple in order:
+Wait for multiple signals, workflow results, or activities to all complete. Returns a tuple in order:
 
 ```ts
-const [email, password] = yield* ctx.waitForAll("email", "password");
+const [email, password] = yield* ctx.all(ctx.waitFor("email"), ctx.waitFor("password"));
 ```
 
-You can mix signals with workflow references (see [Layers](./layers.md)):
+You can mix signals with workflow dependencies (see [Layers](./layers.md)):
 
 ```ts
-const [payment, profile] = yield* ctx.waitForAll(
-  "payment",
-  ctx.workflow("profile"),
+const [payment, profile] = yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
+```
+
+Run multiple activities concurrently:
+
+```ts
+const [users, posts] = yield* ctx.all(
+  ctx.activity("fetch-users", async () => fetchUsers()),
+  ctx.activity("fetch-posts", async () => fetchPosts()),
 );
-```
-
-### waitForAny
-
-Wait for the first of several signals. Returns which signal fired:
-
-```ts
-const { signal, payload } = yield* ctx.waitForAny("accept", "reject");
-
-if (signal === "accept") {
-  // ...
-}
 ```
 
 ## Sleep
@@ -85,17 +79,6 @@ Pause the workflow for a duration. Durable — survives page reloads:
 
 ```ts
 yield* ctx.sleep(5000); // 5 seconds
-```
-
-## Parallel
-
-Run multiple activities concurrently. All must complete:
-
-```ts
-const [users, posts] = yield* ctx.parallel([
-  { name: "fetch-users", fn: async () => fetchUsers() },
-  { name: "fetch-posts", fn: async () => fetchPosts() },
-]);
 ```
 
 ## Child Workflows
@@ -110,9 +93,21 @@ Activity mocks propagate into children during testing.
 
 ## Race
 
-Race multiple branches — the first to complete wins, others are discarded:
+Race multiple branches — the first to complete wins, others are discarded. Works with signals, activities, sleeps, or any combination:
 
 ```ts
+// Race signals — first signal wins
+const { winner, value } = yield* ctx.race(ctx.waitFor("accept"), ctx.waitFor("reject"));
+
+if (winner === 0) {
+  // accepted
+} else {
+  // rejected
+}
+```
+
+```ts
+// Race an activity against a timeout
 const { winner, value } = yield* ctx.race(
   ctx.activity("fetch", async (signal) => {
     const res = await fetch("/api/slow", { signal });

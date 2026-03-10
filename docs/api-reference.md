@@ -203,17 +203,15 @@ type WorkflowFunction<T, SignalMap, WorkflowMap, PublishType = never> = (
 |--------|-----------|-------------|
 | `activity` | `(name, fn) => Generator` | Run an async activity |
 | `waitFor` | `(signal) => Generator` | Wait for a named signal |
-| `waitForAll` | `(...items) => Generator` | Wait for multiple signals/workflows |
-| `waitForAny` | `(...signals) => Generator` | Wait for first of several signals |
+| `all` | `(...generators) => Generator` | Wait for multiple signals/workflows/activities to all complete |
+| `race` | `(...generators) => Generator` | Race branches, first wins — returns `{winner, value}` |
 | `sleep` | `(durationMs) => Generator` | Durable timer |
-| `parallel` | `(activities) => Generator` | Run activities concurrently |
 | `child` | `(name, workflow) => Generator` | Delegate to a child workflow |
-| `race` | `(...branches) => Generator` | Race branches, first wins |
 | `on` | `(handlers) => Generator` | Signal dispatch loop |
 | `done` | `(value) => Generator` | Exit an `on` loop with a value |
 | `join` | `(id, options?) => Generator` | Wait for a workflow to complete |
 | `published` | `(id, options?) => Generator` | Wait for a workflow to publish a value |
-| `workflow` | `(id) => WorkflowRef` | Create a typed workflow reference |
+| `workflow` | `(id) => Generator` | Wait for a workflow to complete (same as `join`) |
 | `publish` | `(value) => Generator` | Resolve waiters without completing (requires `PublishType`) |
 
 ### WorkflowState
@@ -221,14 +219,6 @@ type WorkflowFunction<T, SignalMap, WorkflowMap, PublishType = never> = (
 ```ts
 type WorkflowState = "running" | "waiting" | "completed" | "failed" | "cancelled";
 ```
-
-### WorkflowRef
-
-```ts
-type WorkflowRef<T> = { __brand: "WorkflowRef"; __phantom?: T; workflow: string };
-```
-
-Typed reference to a workflow, used with `waitForAll`.
 
 ### CancelledError
 
@@ -397,10 +387,8 @@ These are the internal command types yielded by workflow generators. Exported fo
 |------|-------------|
 | `ActivityCommand` | Run an async activity |
 | `WaitForCommand` | Wait for a signal |
-| `WaitForAllCommand` | Wait for multiple items |
-| `WaitForAnyCommand` | Wait for first signal |
+| `AllCommand` | Wait for multiple items to all complete |
 | `SleepCommand` | Durable timer |
-| `ParallelCommand` | Concurrent activities |
 | `ChildCommand` | Child workflow delegation |
 | `JoinCommand` | Wait for workflow completion |
 | `PublishedCommand` | Wait for workflow published value |

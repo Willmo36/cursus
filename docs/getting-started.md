@@ -85,8 +85,8 @@ function Greeter() {
 | `result` | `T \| undefined` | The workflow's return value, once completed |
 | `error` | `string \| undefined` | Error message if the workflow failed |
 | `waitingFor` | `string \| undefined` | The signal name the workflow is blocked on |
-| `waitingForAll` | `string[] \| undefined` | Signal names when using `waitForAll` |
-| `waitingForAny` | `string[] \| undefined` | Signal names when using `waitForAny` |
+| `waitingForAll` | `string[] \| undefined` | Signal names when using `all` |
+| `waitingForAny` | `string[] \| undefined` | Signal names when using `race` with signals |
 | `signal(name, payload)` | function | Send a signal into the workflow |
 | `query(name)` | function | Read a query value exposed by the workflow |
 | `cancel()` | function | Cancel the running workflow |

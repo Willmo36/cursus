@@ -120,18 +120,15 @@ const checkoutWorkflow: WorkflowFunction<
 
 Resolution order for `published`: published value → wait. Resolution order for `join`: completed → failed → wait.
 
-## Workflow References in waitForAll
+## Mixing Signals and Workflows in all
 
-You can mix signals and workflow dependencies in `waitForAll`:
+You can mix signals and workflow dependencies in `all`:
 
 ```ts
-const [payment, profile] = yield* ctx.waitForAll(
-  "payment",
-  ctx.workflow("profile"),
-);
+const [payment, profile] = yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
 ```
 
-`ctx.workflow("id")` creates a typed reference that `waitForAll` resolves through the registry.
+`ctx.workflow("id")` returns a generator that resolves through the registry, just like `ctx.join("id")`.
 
 ## Inline Workflows Alongside Layers
 
@@ -155,7 +152,7 @@ The registry detects circular dependencies at runtime and fails with a clear err
 Circular dependency detected: A -> B -> A
 ```
 
-This applies to both `join` / `published` and `waitForAll` with workflow references.
+This applies to both `join` / `published` and `all` with workflow generators.
 
 ## Layer Options
 

@@ -64,19 +64,19 @@ const result = await createTestRuntime(workflow, {
 });
 ```
 
-Signals also work with `waitForAll`, `waitForAny`, and `on`/`done` loops:
+Signals also work with `all`, `race`, and `on`/`done` loops:
 
 ```ts
-// waitForAll
-const result = await createTestRuntime(waitForAllWorkflow, {
+// all — waits for all signals
+const result = await createTestRuntime(allWorkflow, {
   signals: [
     { name: "email", payload: "a@b.com" },
     { name: "password", payload: "secret" },
   ],
 });
 
-// waitForAny — first matching signal is delivered
-const result = await createTestRuntime(waitForAnyWorkflow, {
+// race — first matching signal is delivered
+const result = await createTestRuntime(raceWorkflow, {
   signals: [{ name: "reject", payload: "no" }],
 });
 
