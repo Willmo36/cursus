@@ -437,22 +437,24 @@ export type WorkflowContext<
 	) => Generator<Command, WorkflowMap[K], unknown>;
 	publish: (value: PublishType) => Generator<Command, void, unknown>;
 	subscribe: {
-		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K]>(
+		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K], T = never>(
 			workflowId: K,
 			options: { start?: boolean; where: (value: WorkflowMap[K]) => value is S },
 			body: (
 				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 				value: S,
+				done: <D>(value: D) => Generator<Command, never, unknown>,
 			) => Generator<Command, void, unknown>,
-		): Generator<Command, never, unknown>;
-		<K extends keyof WorkflowMap & string>(
+		): Generator<Command, T, unknown>;
+		<K extends keyof WorkflowMap & string, T = never>(
 			workflowId: K,
 			options: { start?: boolean; where?: (value: WorkflowMap[K]) => boolean },
 			body: (
 				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 				value: WorkflowMap[K],
+				done: <D>(value: D) => Generator<Command, never, unknown>,
 			) => Generator<Command, void, unknown>,
-		): Generator<Command, never, unknown>;
+		): Generator<Command, T, unknown>;
 	};
 };
 
@@ -496,14 +498,15 @@ export type InternalWorkflowContext = {
 	) => Generator<Command, unknown, unknown>;
 	workflow: (id: string) => Generator<Command, unknown, unknown>;
 	publish: (value: unknown) => Generator<Command, void, unknown>;
-	subscribe: (
+	subscribe: <T>(
 		workflowId: string,
 		options: { start?: boolean; where?: (value: unknown) => boolean },
 		body: (
 			ctx: InternalWorkflowContext,
 			value: unknown,
+			done: (value: unknown) => Generator<Command, never, unknown>,
 		) => Generator<Command, void, unknown>,
-	) => Generator<Command, never, unknown>;
+	) => Generator<Command, T, unknown>;
 };
 
 // --- Observers ---

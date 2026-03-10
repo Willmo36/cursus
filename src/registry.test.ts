@@ -1535,9 +1535,8 @@ describe("WorkflowRegistry", () => {
 			expect(fetchCalls).toEqual([1, 2]);
 		});
 
-		it("cancels in-flight work when dependency publishes again (takeLatest)", async () => {
-			let activityStarted = 0;
-			let activityFinished = 0;
+		it("runs body to completion before waiting for next publish", async () => {
+			const bodyCalls: number[] = [];
 
 			const sourceWorkflow: WorkflowFunction<
 				void,
@@ -1548,9 +1547,7 @@ describe("WorkflowRegistry", () => {
 				yield* ctx.publish(1);
 				yield* ctx.handle<void>({
 					bump: function* (_ctx, _payload) {
-						yield* ctx.publish(
-							((yield* ctx.activity("getCount", async () => 0)) as number) + 1,
-						);
+						yield* ctx.publish(2);
 					},
 				});
 			};
@@ -1562,16 +1559,11 @@ describe("WorkflowRegistry", () => {
 				string
 			> = function* (ctx) {
 				yield* ctx.subscribe("source", {}, function* (ctx, value) {
-					activityStarted++;
 					const result = yield* ctx.activity(
-						"slowFetch",
-						async (signal) => {
-							await new Promise((r) => setTimeout(r, 200));
-							if (signal.aborted) return "aborted";
-							activityFinished++;
-							return `done-${value}`;
-						},
+						"fetch",
+						async () => `result-${value}`,
 					);
+					bodyCalls.push(value as number);
 					yield* ctx.publish(result);
 				});
 			};
@@ -1587,16 +1579,14 @@ describe("WorkflowRegistry", () => {
 			registry.start("reactive");
 			await new Promise((r) => setTimeout(r, 50));
 
-			// First callback started but still in-flight (200ms activity)
-			expect(activityStarted).toBe(1);
+			// First body completed with value 1
+			expect(bodyCalls).toEqual([1]);
 
-			// Bump source — should cancel the in-flight activity
+			// Bump to value 2 — should trigger second body
 			registry.signal("source", "bump", undefined);
-			await new Promise((r) => setTimeout(r, 300));
+			await new Promise((r) => setTimeout(r, 50));
 
-			// The first activity should have been cancelled, second should complete
-			expect(activityStarted).toBe(2);
-			expect(activityFinished).toBe(1);
+			expect(bodyCalls).toEqual([1, 2]);
 		});
 
 		it("subscribe with where filters values", async () => {
@@ -1651,6 +1641,58 @@ describe("WorkflowRegistry", () => {
 			await new Promise((r) => setTimeout(r, 50));
 
 			expect(receivedUsers).toEqual(["max"]);
+		});
+
+		it("done() exits the subscribe loop and returns a value", async () => {
+			const sourceWorkflow: WorkflowFunction<
+				void,
+				{ bump: undefined },
+				Record<string, never>,
+				number
+			> = function* (ctx) {
+				yield* ctx.publish(1);
+				yield* ctx.handle<void>({
+					bump: function* (_ctx, _payload) {
+						yield* ctx.publish(2);
+					},
+				});
+			};
+
+			const consumerWorkflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ source: number }
+			> = function* (ctx) {
+				const result = yield* ctx.subscribe(
+					"source",
+					{},
+					function* (_ctx, value, done) {
+						if (value === 2) {
+							yield* done("stopped at 2");
+						}
+					},
+				);
+				return `result: ${result}`;
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ source: sourceWorkflow, consumer: consumerWorkflow },
+				storage,
+			);
+
+			registry.start("source");
+			await new Promise((r) => setTimeout(r, 10));
+			const consumerPromise = registry.start("consumer");
+			await new Promise((r) => setTimeout(r, 10));
+
+			// First publish (value=1) — body runs but doesn't call done
+			// Bump to value=2 — body calls done("stopped at 2")
+			registry.signal("source", "bump", undefined);
+			await consumerPromise;
+
+			const result = await registry.waitForCompletion<string>("consumer");
+			expect(result).toBe("result: stopped at 2");
 		});
 	});
 

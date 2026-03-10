@@ -228,44 +228,43 @@ export class Interpreter {
 					yield { type: "publish" as const, value, seq };
 				})();
 			},
-			subscribe: (
+			subscribe: <T>(
 				workflowId: string,
 				options: { start?: boolean; where?: (value: unknown) => boolean },
 				body: (
 					ctx: InternalWorkflowContext,
 					value: unknown,
+					done: (value: unknown) => Generator<Command, never, unknown>,
 				) => Generator<Command, void, unknown>,
-			): Generator<Command, never, unknown> => {
+			): Generator<Command, T, unknown> => {
 				const ctx = this.context;
 				const start = options?.start;
 				const where = options?.where;
 				const getPublishSeq = () =>
 					this.registry?.getPublishSeq(workflowId) ?? 0;
-				return (function* (): Generator<Command, never, unknown> {
+				const doneFn = (value: unknown): Generator<Command, never, unknown> => {
+					return (function* (): Generator<Command, never, unknown> {
+						throw new DoneSignal(value);
+					})();
+				};
+				return (function* (): Generator<Command, T, unknown> {
 					// First iteration: get current or first matching value
 					let value = yield* ctx.published(workflowId, { start, where });
 					for (;;) {
-						// Snapshot cursor before racing
-						const seqBefore = getPublishSeq();
-						const result = yield* ctx.race(
-							body(ctx, value),
-							ctx.published(workflowId, {
-								start,
-								where,
-								afterSeq: seqBefore,
-							}),
-						);
-						if (result.winner === 0) {
-							// Body completed — wait for next publish
-							value = yield* ctx.published(workflowId, {
-								start,
-								where,
-								afterSeq: getPublishSeq(),
-							});
-						} else {
-							// New publish won the race — use its value
-							value = result.value;
+						try {
+							yield* body(ctx, value, doneFn);
+						} catch (err) {
+							if (err instanceof DoneSignal) {
+								return err.value as T;
+							}
+							throw err;
 						}
+						// Body completed — wait for next publish
+						value = yield* ctx.published(workflowId, {
+							start,
+							where,
+							afterSeq: getPublishSeq(),
+						});
 					}
 				})();
 			},
