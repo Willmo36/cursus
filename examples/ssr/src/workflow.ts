@@ -18,7 +18,12 @@ export type ProductSignals = {
 	review: string;
 };
 
-export const productWorkflow: WorkflowFunction<ProductResult, ProductSignals> =
+export const productWorkflow: WorkflowFunction<
+	ProductResult,
+	ProductSignals,
+	Record<string, never>,
+	Product
+> =
 	function* (ctx) {
 		const product = yield* ctx.activity("fetch-product", async () => {
 			// Simulate API call
