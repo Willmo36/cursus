@@ -1496,7 +1496,7 @@ describe("WorkflowRegistry", () => {
 			};
 
 			const pointsWorkflow: WorkflowFunction<
-				never,
+				void,
 				Record<string, unknown>,
 				{ account: { name: string } },
 				number
@@ -1556,7 +1556,7 @@ describe("WorkflowRegistry", () => {
 			};
 
 			const reactiveWorkflow: WorkflowFunction<
-				never,
+				void,
 				Record<string, unknown>,
 				{ source: number },
 				string
@@ -1616,7 +1616,7 @@ describe("WorkflowRegistry", () => {
 			};
 
 			const consumerWorkflow: WorkflowFunction<
-				never,
+				void,
 				Record<string, unknown>,
 				{ user: UserState }
 			> = function* (ctx) {

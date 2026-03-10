@@ -61,6 +61,7 @@ export async function createTestRuntime<
 			},
 			async start(): Promise<void> {},
 			publish() {},
+			getPublishSeq() { return 0; },
 		};
 	}
 
