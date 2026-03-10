@@ -267,6 +267,7 @@ The `examples/` directory contains runnable Vite apps:
 | `env-config` | Workflow as environment provider |
 | `error-recovery` | `withRetry` and dependency failure handling |
 | `race` | Fetch-with-timeout via `race` |
+| `ssr` | Server-side execution with snapshot hydration |
 | `opentelemetry` | Event observer integration |
 
 ```
