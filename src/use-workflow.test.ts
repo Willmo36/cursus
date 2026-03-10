@@ -7,6 +7,8 @@ import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
+import type { WorkflowSnapshot } from "./run-workflow";
+import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent, WorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
@@ -957,6 +959,124 @@ describe("useWorkflow", () => {
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe("snapshot hydration (SSR)", () => {
+		it("initializes with snapshot state and result instead of defaults", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", async () => "hello");
+			};
+
+			const snapshot = await runWorkflow("snap-1", workflow);
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-1", workflow, {
+					storage: new MemoryStorage(),
+					snapshot,
+				}),
+			);
+
+			// Initial render should use snapshot values, not defaults
+			expect(result.current.state).toBe("completed");
+			expect(result.current.result).toBe("hello");
+		});
+
+		it("does not start interpreter for completed snapshot", async () => {
+			const activityFn = vi.fn().mockResolvedValue("hello");
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("greet", activityFn);
+			};
+
+			const snapshot = await runWorkflow("snap-2", workflow);
+			activityFn.mockClear();
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-2", workflow, {
+					storage: new MemoryStorage(),
+					snapshot,
+				}),
+			);
+
+			// Should remain completed without re-running the activity
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+			});
+
+			expect(activityFn).not.toHaveBeenCalled();
+		});
+
+		it("seeds events and continues execution for partial snapshot", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				const name = yield* ctx.waitFor("name");
+				return `hello ${name}`;
+			};
+
+			// Run on "server" — blocks on signal, returns waiting snapshot
+			const snapshot = await runWorkflow("snap-3", workflow);
+			expect(snapshot.state).toBe("waiting");
+
+			// Hydrate on "client" — seeds events, interpreter should resume from waiting
+			const { result } = renderHook(() =>
+				useWorkflow("snap-3", workflow, {
+					storage: new MemoryStorage(),
+					snapshot,
+				}),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("waiting");
+			});
+
+			// Send signal — workflow should complete
+			act(() => {
+				result.current.signal("name", "Max");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state).toBe("completed");
+				expect(result.current.result).toBe("hello Max");
+			});
+		});
+
+		it("initializes published value from snapshot", async () => {
+			const workflow: WorkflowFunction<string, Record<string, unknown>, Record<string, never>, string> = function* (ctx) {
+				yield* ctx.publish("progress");
+				return yield* ctx.activity("work", async () => "done");
+			};
+
+			const snapshot = await runWorkflow("snap-4", workflow);
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-4", workflow, {
+					storage: new MemoryStorage(),
+					snapshot,
+				}),
+			);
+
+			expect(result.current.published).toBe("progress");
+			expect(result.current.state).toBe("completed");
+			expect(result.current.result).toBe("done");
+		});
+
+		it("initializes error from failed snapshot", async () => {
+			const workflow: WorkflowFunction<string> = function* (ctx) {
+				return yield* ctx.activity("fail", async () => {
+					throw new Error("boom");
+				});
+			};
+
+			const snapshot = await runWorkflow("snap-5", workflow);
+
+			const { result } = renderHook(() =>
+				useWorkflow("snap-5", workflow, {
+					storage: new MemoryStorage(),
+					snapshot,
+				}),
+			);
+
+			expect(result.current.state).toBe("failed");
+			expect(result.current.error).toBe("boom");
 		});
 	});
 

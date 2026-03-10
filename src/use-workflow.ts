@@ -13,6 +13,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { RegistryContext } from "./registry-provider";
 import { checkVersion, MemoryStorage } from "./storage";
+import type { WorkflowSnapshot } from "./run-workflow";
 import type {
 	AnyWorkflowFunction,
 	WorkflowEvent,
@@ -26,6 +27,7 @@ type UseWorkflowOptions = {
 	storage?: WorkflowStorage;
 	onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
 	version?: number;
+	snapshot?: WorkflowSnapshot;
 };
 
 type UseWorkflowResult<
@@ -75,9 +77,12 @@ export function useWorkflow(
 
 	// For inline workflows: explicit storage > registry storage > ephemeral fallback
 	const storage = options?.storage ?? registry?.storage ?? new MemoryStorage();
-	const [state, setState] = useState<WorkflowState>("running");
-	const [result, setResult] = useState<unknown>(undefined);
-	const [error, setError] = useState<string | undefined>(undefined);
+	const snapshot = options?.snapshot;
+	const [state, setState] = useState<WorkflowState>(
+		snapshot?.state ?? "running",
+	);
+	const [result, setResult] = useState<unknown>(snapshot?.result);
+	const [error, setError] = useState<string | undefined>(snapshot?.error);
 	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
 	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
 		undefined,
@@ -85,7 +90,7 @@ export function useWorkflow(
 	const [waitingForAny, setWaitingForAny] = useState<string[] | undefined>(
 		undefined,
 	);
-	const [published, setPublished] = useState<unknown>(undefined);
+	const [published, setPublished] = useState<unknown>(snapshot?.published);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
 	const interpreterRef = useRef<Interpreter | null>(null);
 	const storageRef = useRef(storage);
@@ -132,6 +137,26 @@ export function useWorkflow(
 		let unsubscribe: (() => void) | undefined;
 
 		async function start() {
+			// Terminal snapshots: no interpreter needed, just seed storage
+			if (
+				snapshot &&
+				(snapshot.state === "completed" || snapshot.state === "failed")
+			) {
+				const stored = await storageRef.current.load(workflowId);
+				if (stored.length === 0) {
+					await storageRef.current.append(workflowId, snapshot.events);
+				}
+				return;
+			}
+
+			// Seed snapshot events into storage before loading
+			if (snapshot && snapshot.events.length > 0) {
+				const stored = await storageRef.current.load(workflowId);
+				if (stored.length === 0) {
+					await storageRef.current.append(workflowId, snapshot.events);
+				}
+			}
+
 			await checkVersion(storageRef.current, workflowId, options?.version);
 			const events = await storageRef.current.load(workflowId);
 			const observers: WorkflowEventObserver[] = options?.onEvent
