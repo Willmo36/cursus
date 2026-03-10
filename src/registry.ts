@@ -18,6 +18,7 @@ import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 type Waiter = {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
+	where?: (value: unknown) => boolean;
 };
 
 type WorkflowEntry = {
@@ -290,13 +291,24 @@ export class WorkflowRegistry<K extends string = string>
 
 	async waitForPublished<T>(
 		id: string,
-		options?: { start?: boolean; caller?: string },
+		options?: {
+			start?: boolean;
+			caller?: string;
+			where?: (value: unknown) => boolean;
+			afterSeq?: number;
+		},
 	): Promise<T> {
 		const entry = this.getEntry(id);
 		const shouldStart = options?.start ?? true;
 		const caller = options?.caller;
+		const where = options?.where;
+		const afterSeq = options?.afterSeq;
 
-		if (entry.published) {
+		if (
+			entry.published &&
+			afterSeq === undefined &&
+			(!where || where(entry.publishedValue))
+		) {
 			return entry.publishedValue as T;
 		}
 
@@ -310,7 +322,13 @@ export class WorkflowRegistry<K extends string = string>
 
 		if (!entry.interpreter && shouldStart) {
 			await this.start(id);
-			if (entry.published) return entry.publishedValue as T;
+			if (
+				entry.published &&
+				afterSeq === undefined &&
+				(!where || where(entry.publishedValue))
+			) {
+				return entry.publishedValue as T;
+			}
 			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
 		}
 
@@ -318,6 +336,7 @@ export class WorkflowRegistry<K extends string = string>
 			entry.publishedWaiters.push({
 				resolve: resolve as (value: unknown) => void,
 				reject,
+				where,
 			});
 		});
 	}
@@ -364,10 +383,15 @@ export class WorkflowRegistry<K extends string = string>
 			waiter.resolve(value);
 		}
 		entry.waiters = [];
+		const remaining: Waiter[] = [];
 		for (const waiter of entry.publishedWaiters) {
-			waiter.resolve(value);
+			if (waiter.where && !waiter.where(value)) {
+				remaining.push(waiter);
+			} else {
+				waiter.resolve(value);
+			}
 		}
-		entry.publishedWaiters = [];
+		entry.publishedWaiters = remaining;
 	}
 
 	async reset(id: string): Promise<void> {

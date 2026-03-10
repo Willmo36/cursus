@@ -1354,6 +1354,129 @@ describe("WorkflowRegistry", () => {
 		});
 	});
 
+	describe("published where predicate", () => {
+		it("waitForPublished skips value that does not match where", async () => {
+			type UserState = { status: "loading" } | { status: "ready"; user: string };
+
+			const workflow: WorkflowFunction<
+				void,
+				{ go: undefined },
+				Record<string, never>,
+				UserState
+			> = function* (ctx) {
+				yield* ctx.publish({ status: "loading" });
+				yield* ctx.receive("go");
+				yield* ctx.publish({ status: "ready", user: "max" });
+				yield* ctx.receive("go");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ user: workflow }, storage);
+			const startPromise = registry.start("user");
+
+			await new Promise((r) => setTimeout(r, 10));
+
+			// At this point, user has published { status: "loading" }
+			// waitForPublished with where should NOT resolve yet
+			let resolved = false;
+			let resolvedValue: unknown;
+			registry
+				.waitForPublished<UserState>("user", {
+					start: false,
+					where: (v) => (v as UserState).status === "ready",
+				})
+				.then((r) => {
+					resolved = true;
+					resolvedValue = r;
+				});
+
+			await new Promise((r) => setTimeout(r, 10));
+			expect(resolved).toBe(false);
+
+			// Trigger second publish with ready state
+			registry.signal("user", "go", undefined);
+			await new Promise((r) => setTimeout(r, 10));
+
+			expect(resolved).toBe(true);
+			expect(resolvedValue).toEqual({ status: "ready", user: "max" });
+		});
+
+		it("waitForPublished resolves immediately when where matches current value", async () => {
+			const workflow: WorkflowFunction<
+				void,
+				{ go: undefined },
+				Record<string, never>,
+				string
+			> = function* (ctx) {
+				yield* ctx.publish("hello");
+				yield* ctx.receive("go");
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ dep: workflow }, storage);
+			const startPromise = registry.start("dep");
+			await new Promise((r) => setTimeout(r, 10));
+
+			const result = await registry.waitForPublished<string>("dep", {
+				start: false,
+				where: (v) => v === "hello",
+			});
+			expect(result).toBe("hello");
+		});
+
+		it("publish re-evaluates where waiters on each publish", async () => {
+			type State = { count: number };
+
+			const workflow: WorkflowFunction<
+				void,
+				{ inc: undefined },
+				Record<string, never>,
+				State
+			> = function* (ctx) {
+				let count = 0;
+				yield* ctx.publish({ count });
+				yield* ctx.handle<void>({
+					inc: function* (_ctx, _payload) {
+						count++;
+						yield* ctx.publish({ count });
+					},
+				});
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry({ counter: workflow }, storage);
+			const startPromise = registry.start("counter");
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Wait for count >= 3
+			let resolvedValue: unknown;
+			registry
+				.waitForPublished<State>("counter", {
+					start: false,
+					where: (v) => (v as State).count >= 3,
+				})
+				.then((r) => {
+					resolvedValue = r;
+				});
+
+			await new Promise((r) => setTimeout(r, 10));
+			expect(resolvedValue).toBeUndefined();
+
+			// Increment 1, 2, 3
+			registry.signal("counter", "inc", undefined);
+			await new Promise((r) => setTimeout(r, 10));
+			expect(resolvedValue).toBeUndefined();
+
+			registry.signal("counter", "inc", undefined);
+			await new Promise((r) => setTimeout(r, 10));
+			expect(resolvedValue).toBeUndefined();
+
+			registry.signal("counter", "inc", undefined);
+			await new Promise((r) => setTimeout(r, 10));
+			expect(resolvedValue).toEqual({ count: 3 });
+		});
+	});
+
 	describe("getTrace", () => {
 		it("returns correct envelope shape", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {

@@ -189,15 +189,19 @@ export class Interpreter {
 					return result as { winner: number; value: unknown };
 				})();
 			},
-			published: (workflowId: string, options?: { start?: boolean }) => {
+			published: (workflowId: string, options?: { start?: boolean; where?: (value: unknown) => boolean; afterSeq?: number }) => {
 				const seq = ++this.seq;
 				const start = options?.start ?? true;
+				const where = options?.where;
+				const afterSeq = options?.afterSeq;
 				return (function* (): Generator<Command, unknown, unknown> {
 					const result = yield {
 						type: "published" as const,
 						workflowId,
 						start,
 						seq,
+						where,
+						afterSeq,
 					};
 					return result;
 				})();
@@ -757,6 +761,8 @@ export class Interpreter {
 			const result = await this.registry.waitForPublished(command.workflowId, {
 				start: command.start,
 				caller: this._workflowId,
+				where: command.where,
+				afterSeq: command.afterSeq,
 			});
 
 			this.log.append({

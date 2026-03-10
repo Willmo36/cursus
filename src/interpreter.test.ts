@@ -1699,6 +1699,64 @@ describe("Interpreter", () => {
 				caller: undefined,
 			});
 		});
+
+		it("passes where predicate to registry", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitForPublished: vi.fn().mockResolvedValue({ status: "ready", user: "max" }),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			type UserState = { status: "loading" } | { status: "ready"; user: string };
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ user: UserState }
+			> = function* (ctx) {
+				const state = yield* ctx.published("user", {
+					where: (s): s is { status: "ready"; user: string } => s.status === "ready",
+				});
+				return `got: ${state.user}`;
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("got: max");
+			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("user", {
+				start: true,
+				caller: undefined,
+				where: expect.any(Function),
+			});
+		});
+
+		it("passes afterSeq to registry for cursor-based waiting", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitForPublished: vi.fn().mockResolvedValue("value"),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+			};
+
+			const wf: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				{ dep: string }
+			> = function* (ctx) {
+				return yield* ctx.published("dep", { afterSeq: 5 });
+			};
+
+			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
+			await interpreter.run();
+
+			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("dep", {
+				start: true,
+				caller: undefined,
+				afterSeq: 5,
+			});
+		});
 	});
 
 	describe("ctx.join()", () => {

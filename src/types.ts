@@ -51,6 +51,8 @@ export type PublishedCommand = {
 	workflowId: string;
 	start: boolean;
 	seq: number;
+	where?: (value: unknown) => boolean;
+	afterSeq?: number;
 };
 
 export type JoinCommand = {
@@ -326,7 +328,12 @@ export type WorkflowState =
 export type WorkflowRegistryInterface = {
 	waitForPublished<T>(
 		workflowId: string,
-		options?: { start?: boolean; caller?: string },
+		options?: {
+			start?: boolean;
+			caller?: string;
+			where?: (value: unknown) => boolean;
+			afterSeq?: number;
+		},
 	): Promise<T>;
 	waitForCompletion<T>(
 		workflowId: string,
@@ -410,10 +417,16 @@ export type WorkflowContext<
 			...branches: Generator<Command, unknown, unknown>[]
 		): Generator<Command, { winner: number; value: unknown }, unknown>;
 	};
-	published: <K extends keyof WorkflowMap & string>(
-		workflowId: K,
-		options?: { start?: boolean },
-	) => Generator<Command, WorkflowMap[K], unknown>;
+	published: {
+		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K]>(
+			workflowId: K,
+			options: { start?: boolean; where: (value: WorkflowMap[K]) => value is S; afterSeq?: number },
+		): Generator<Command, S, unknown>;
+		<K extends keyof WorkflowMap & string>(
+			workflowId: K,
+			options?: { start?: boolean; where?: (value: WorkflowMap[K]) => boolean; afterSeq?: number },
+		): Generator<Command, WorkflowMap[K], unknown>;
+	};
 	join: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
 		options?: { start?: boolean },
@@ -456,7 +469,7 @@ export type InternalWorkflowContext = {
 	) => Generator<Command, { winner: number; value: unknown }, unknown>;
 	published: (
 		workflowId: string,
-		options?: { start?: boolean },
+		options?: { start?: boolean; where?: (value: unknown) => boolean; afterSeq?: number },
 	) => Generator<Command, unknown, unknown>;
 	join: (
 		workflowId: string,
