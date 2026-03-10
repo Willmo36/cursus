@@ -74,8 +74,8 @@ export function createCheckoutWorkflow(
 	apiFetch: ApiFetch,
 ): WorkflowFunction<Order, CheckoutSignals, CheckoutWorkflowMap> {
 	return function* (ctx) {
-		const [credentials, items] = yield* ctx.waitForAll(
-			"login",
+		const [credentials, items] = yield* ctx.all(
+			ctx.waitFor("login"),
 			ctx.workflow("cart"),
 		);
 

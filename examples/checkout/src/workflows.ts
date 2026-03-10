@@ -51,8 +51,8 @@ export const checkoutWorkflow: WorkflowFunction<
 	CheckoutSignals,
 	CheckoutDeps
 > = function* (ctx) {
-	const [payment, profile] = yield* ctx.waitForAll(
-		"payment",
+	const [payment, profile] = yield* ctx.all(
+		ctx.waitFor("payment"),
 		ctx.workflow("profile"),
 	);
 

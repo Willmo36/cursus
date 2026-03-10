@@ -15,7 +15,6 @@ import {
 	type WaitForAllItem,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
-	type WorkflowContext,
 	type WorkflowEvent,
 	type WorkflowEventObserver,
 	type WorkflowFailedEvent,
@@ -143,11 +142,14 @@ export class Interpreter {
 				const handlerNames = Object.keys(handlers);
 				return (function* (): Generator<Command, T, unknown> {
 					for (;;) {
-						const { signal, payload } = yield* ctx.waitForAny(...handlerNames);
+						const result = yield* ctx.race(
+							...handlerNames.map((n) => ctx.waitFor(n)),
+						);
+						const signal = handlerNames[result.winner];
 						const handler = handlers[signal];
 						if (!handler) continue;
 						try {
-							yield* handler(ctx, payload);
+							yield* handler(ctx, result.value);
 						} catch (err) {
 							if (err instanceof DoneSignal) {
 								return err.value as T;
@@ -282,8 +284,8 @@ export class Interpreter {
 					return result;
 				})();
 			},
-			workflow: (id: string): WorkflowRef => {
-				return { __brand: "WorkflowRef", workflow: id } as WorkflowRef;
+			workflow: (id: string) => {
+				return this.context.join(id);
 			},
 			publish: (value: unknown) => {
 				const seq = ++this.seq;
@@ -1429,6 +1431,11 @@ export class Interpreter {
 						raceWaiters.push({
 							signal: item.signal,
 							resolve: (payload: unknown) => {
+								// Immediately clear race waiters to prevent stale
+								// resolution when ctx.on() loops and a signal arrives
+								// before the next race is set up.
+								this._raceWaiters = null;
+								this._state = "running";
 								resolve({ index, value: payload });
 							},
 						});

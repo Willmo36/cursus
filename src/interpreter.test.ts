@@ -339,13 +339,13 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase E: parallel", () => {
+	describe("Phase E: parallel activities via all()", () => {
 		it("runs multiple activities concurrently and returns all results", async () => {
-			const workflow: WorkflowFunction<string[]> = function* (ctx) {
-				return yield* ctx.parallel([
-					{ name: "a", fn: async () => "one" },
-					{ name: "b", fn: async () => "two" },
-				]);
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.all(
+					ctx.activity("a", async () => "one"),
+					ctx.activity("b", async () => "two"),
+				);
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -358,20 +358,28 @@ describe("Interpreter", () => {
 			const fnA = vi.fn().mockResolvedValue("one");
 			const fnB = vi.fn().mockResolvedValue("two");
 
-			const workflow: WorkflowFunction<string[]> = function* (ctx) {
-				return yield* ctx.parallel([
-					{ name: "a", fn: fnA },
-					{ name: "b", fn: fnB },
-				]);
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.all(
+					ctx.activity("a", fnA),
+					ctx.activity("b", fnB),
+				);
 			};
 
-			// seq 1 = parallel command, seq 2 = activity "a", seq 3 = activity "b"
+			// seq 1 = activity "a", seq 2 = activity "b", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
-				{ type: "activity_scheduled", name: "a", seq: 2, timestamp: 2 },
-				{ type: "activity_completed", seq: 2, result: "one", timestamp: 3 },
-				{ type: "activity_scheduled", name: "b", seq: 3, timestamp: 2 },
-				{ type: "activity_completed", seq: 3, result: "two", timestamp: 3 },
+				{
+					type: "all_started",
+					seq: 3,
+					items: [{ type: "activity" }, { type: "activity" }],
+					timestamp: 2,
+				},
+				{
+					type: "all_completed",
+					seq: 3,
+					results: ["one", "two"],
+					timestamp: 3,
+				},
 				{ type: "workflow_completed", result: ["one", "two"], timestamp: 4 },
 			]);
 
@@ -383,17 +391,14 @@ describe("Interpreter", () => {
 			expect(fnB).not.toHaveBeenCalled();
 		});
 
-		it("fails the whole parallel command if one activity fails", async () => {
-			const workflow: WorkflowFunction<string[]> = function* (ctx) {
-				return yield* ctx.parallel([
-					{ name: "ok", fn: async () => "fine" },
-					{
-						name: "bad",
-						fn: async () => {
-							throw new Error("oops");
-						},
-					},
-				]);
+		it("fails the whole all() if one activity fails", async () => {
+			const workflow: WorkflowFunction<[string, string]> = function* (ctx) {
+				return yield* ctx.all(
+					ctx.activity("ok", async () => "fine"),
+					ctx.activity("bad", async () => {
+						throw new Error("oops");
+					}),
+				);
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -404,13 +409,16 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase F: waitForAll", () => {
+	describe("Phase F: all() with signals", () => {
 		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
 			const workflow: WorkflowFunction<
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("email", "password");
+				return yield* ctx.all(
+					ctx.waitFor("email"),
+					ctx.waitFor("password"),
+				);
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -436,12 +444,12 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("records wait_all_started and wait_all_completed events", async () => {
+		it("records all_started and all_completed events", async () => {
 			const workflow: WorkflowFunction<
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("a", "b");
+				return yield* ctx.all(ctx.waitFor("a"), ctx.waitFor("b"));
 			};
 
 			const log = new EventLog();
@@ -464,46 +472,39 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "wait_all_started",
-					items: [
-						{ kind: "signal", name: "a" },
-						{ kind: "signal", name: "b" },
-					],
-					seq: 1,
+					type: "all_started",
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
 				}),
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "wait_all_completed",
-					seq: 1,
-					results: { a: "val-a", b: "val-b" },
+					type: "all_completed",
+					results: ["val-a", "val-b"],
 				}),
 			);
 		});
 
-		it("replays waitForAll from event log", async () => {
+		it("replays all() from event log", async () => {
 			const workflow: WorkflowFunction<
 				[string, number],
 				{ name: string; age: number }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("name", "age");
+				return yield* ctx.all(ctx.waitFor("name"), ctx.waitFor("age"));
 			};
 
+			// seq 1 = waitFor "name", seq 2 = waitFor "age", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
-					type: "wait_all_started",
-					items: [
-						{ kind: "signal", name: "name" },
-						{ kind: "signal", name: "age" },
-					],
-					seq: 1,
+					type: "all_started",
+					seq: 3,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
 					timestamp: 2,
 				},
 				{
-					type: "wait_all_completed",
-					seq: 1,
-					results: { name: "Max", age: 30 },
+					type: "all_completed",
+					seq: 3,
+					results: ["Max", 30],
 					timestamp: 3,
 				},
 				{
@@ -524,7 +525,10 @@ describe("Interpreter", () => {
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("email", "password");
+				return yield* ctx.all(
+					ctx.waitFor("email"),
+					ctx.waitFor("password"),
+				);
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -542,7 +546,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("collects signal and workflow result concurrently in mixed waitForAll", async () => {
+		it("collects signal and workflow result concurrently via all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn().mockResolvedValue({ name: "Max" }),
@@ -555,7 +559,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -573,10 +580,11 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("profile", {
 				start: true,
+				caller: undefined,
 			});
 		});
 
-		it("records events for mixed waitForAll", async () => {
+		it("records events for mixed signal + workflow all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn().mockResolvedValue("profile-data"),
@@ -589,7 +597,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const log = new EventLog();
@@ -606,19 +617,14 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "wait_all_started",
-					items: [
-						{ kind: "signal", name: "payment" },
-						{ kind: "workflow", workflowId: "profile" },
-					],
-					seq: 1,
+					type: "all_started",
+					items: [{ type: "waitFor" }, { type: "join" }],
 				}),
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_dependency_started",
 					workflowId: "profile",
-					seq: 1,
 				}),
 			);
 			expect(events).toContainEqual(
@@ -626,25 +632,26 @@ describe("Interpreter", () => {
 					type: "workflow_dependency_completed",
 					workflowId: "profile",
 					result: "profile-data",
-					seq: 1,
 				}),
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "wait_all_completed",
-					seq: 1,
-					results: { payment: "pay-data", "workflow:profile": "profile-data" },
+					type: "all_completed",
+					results: ["pay-data", "profile-data"],
 				}),
 			);
 		});
 
-		it("throws without registry when mixed waitForAll has workflow items", async () => {
+		it("throws without registry when all() has join items", async () => {
 			const wf: WorkflowFunction<
 				unknown,
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -654,7 +661,7 @@ describe("Interpreter", () => {
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
-		it("replays mixed waitForAll from event log", async () => {
+		it("replays mixed all() from event log", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn(),
@@ -667,27 +674,25 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
+			// seq 1 = waitFor "payment", seq 2 = join "profile", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
-					type: "wait_all_started",
-					items: [
-						{ kind: "signal", name: "payment" },
-						{ kind: "workflow", workflowId: "profile" },
-					],
-					seq: 1,
+					type: "all_started",
+					seq: 3,
+					items: [{ type: "waitFor" }, { type: "join" }],
 					timestamp: 2,
 				},
 				{
-					type: "wait_all_completed",
-					seq: 1,
-					results: {
-						payment: { card: "1234" },
-						"workflow:profile": { name: "Max" },
-					},
+					type: "all_completed",
+					seq: 3,
+					results: [{ card: "1234" }, { name: "Max" }],
 					timestamp: 3,
 				},
 				{
@@ -704,7 +709,7 @@ describe("Interpreter", () => {
 			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
 		});
 
-		it("handles signal arriving after workflow completes in mixed waitForAll", async () => {
+		it("handles signal arriving after workflow completes in all()", async () => {
 			let resolveWorkflow: ((value: unknown) => void) | undefined;
 			const workflowPromise = new Promise((resolve) => {
 				resolveWorkflow = resolve;
@@ -722,7 +727,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -746,7 +754,7 @@ describe("Interpreter", () => {
 			expect(result).toEqual([{ card: "5678" }, { name: "Max" }]);
 		});
 
-		it("fails the workflow when a dependency workflow rejects in mixed waitForAll", async () => {
+		it("fails the workflow when a dependency workflow rejects in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi
@@ -761,7 +769,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -771,7 +782,7 @@ describe("Interpreter", () => {
 			expect(interpreter.error).toBe("dependency failed");
 		});
 
-		it("records workflow_dependency_failed when dependency fails in waitForAll", async () => {
+		it("records workflow_dependency_failed when dependency fails in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
@@ -784,7 +795,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const log = new EventLog();
@@ -797,7 +811,6 @@ describe("Interpreter", () => {
 				expect.objectContaining({
 					type: "workflow_dependency_failed",
 					workflowId: "profile",
-					seq: 1,
 					error: "dep boom",
 				}),
 			);
@@ -809,7 +822,7 @@ describe("Interpreter", () => {
 			).toMatch(/Error: dep boom/);
 		});
 
-		it("cleans up waiting state on dependency failure in waitForAll", async () => {
+		it("cleans up waiting state on dependency failure in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
@@ -822,7 +835,10 @@ describe("Interpreter", () => {
 				Record<string, unknown>,
 				{ profile: unknown }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+				return yield* ctx.all(
+					ctx.waitFor("payment"),
+					ctx.workflow("profile"),
+				);
 			};
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -832,171 +848,7 @@ describe("Interpreter", () => {
 			expect(interpreter.waitingForAll).toBeUndefined();
 		});
 
-		it("replays dependency failure from event log in waitForAll", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			};
-
-			const wf: WorkflowFunction<
-				unknown,
-				Record<string, unknown>,
-				{ profile: unknown }
-			> = function* (ctx) {
-				return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
-			};
-
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				{
-					type: "wait_all_started",
-					items: [
-						{ kind: "signal", name: "payment" },
-						{ kind: "workflow", workflowId: "profile" },
-					],
-					seq: 1,
-					timestamp: 2,
-				},
-				{
-					type: "workflow_dependency_failed",
-					workflowId: "profile",
-					seq: 1,
-					error: "dep boom",
-					timestamp: 3,
-				},
-				{
-					type: "workflow_failed",
-					error: "dep boom",
-					timestamp: 4,
-				},
-			]);
-
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			expect(interpreter.state).toBe("failed");
-			expect(interpreter.error).toBe("dep boom");
-			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
-		});
-
-		it("guards against late callbacks after first dep fails in multi-dep waitForAll", async () => {
-			let resolveSecond: ((value: unknown) => void) | undefined;
-			const secondPromise = new Promise((resolve) => {
-				resolveSecond = resolve;
-			});
-
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockImplementation((id: string) => {
-					if (id === "fast-fail") return Promise.reject(new Error("boom"));
-					return secondPromise;
-				}),
-				start: vi.fn(),
-				publish: vi.fn(),
-			};
-
-			const wf: WorkflowFunction<
-				unknown,
-				Record<string, unknown>,
-				{ "fast-fail": unknown; slow: unknown }
-			> = function* (ctx) {
-				return yield* ctx.waitForAll(
-					ctx.workflow("fast-fail"),
-					ctx.workflow("slow"),
-				);
-			};
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const runPromise = interpreter.run();
-
-			// Let the fast-fail rejection propagate
-			await new Promise((r) => setTimeout(r, 0));
-
-			// Now the slow dep resolves after the waitForAll already failed
-			resolveSecond?.("late-result");
-			await new Promise((r) => setTimeout(r, 0));
-
-			await runPromise;
-
-			expect(interpreter.state).toBe("failed");
-			expect(interpreter.error).toBe("boom");
-
-			const events = log.events();
-			const depFailedEvents = events.filter(
-				(e) => e.type === "workflow_dependency_failed",
-			);
-			expect(depFailedEvents).toHaveLength(1);
-
-			// No wait_all_completed should be logged
-			expect(
-				events.find((e) => e.type === "wait_all_completed"),
-			).toBeUndefined();
-
-			// No workflow_dependency_completed for the late resolve
-			const depCompletedEvents = events.filter(
-				(e) => e.type === "workflow_dependency_completed",
-			);
-			expect(depCompletedEvents).toHaveLength(0);
-		});
-
-		it("logs only the first error when both deps fail in waitForAll", async () => {
-			let rejectSecond: ((err: Error) => void) | undefined;
-			const secondPromise = new Promise((_resolve, reject) => {
-				rejectSecond = reject;
-			});
-
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockImplementation((id: string) => {
-					if (id === "first") return Promise.reject(new Error("first-error"));
-					return secondPromise;
-				}),
-				start: vi.fn(),
-				publish: vi.fn(),
-			};
-
-			const wf: WorkflowFunction<
-				unknown,
-				Record<string, unknown>,
-				{ first: unknown; second: unknown }
-			> = function* (ctx) {
-				return yield* ctx.waitForAll(
-					ctx.workflow("first"),
-					ctx.workflow("second"),
-				);
-			};
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const runPromise = interpreter.run();
-
-			// Let first rejection propagate
-			await new Promise((r) => setTimeout(r, 0));
-
-			// Second dep also fails
-			rejectSecond?.(new Error("second-error"));
-			await new Promise((r) => setTimeout(r, 0));
-
-			await runPromise;
-
-			expect(interpreter.state).toBe("failed");
-			expect(interpreter.error).toBe("first-error");
-
-			const events = log.events();
-			const depFailedEvents = events.filter(
-				(e) => e.type === "workflow_dependency_failed",
-			);
-			expect(depFailedEvents).toHaveLength(1);
-			expect(depFailedEvents[0]).toMatchObject({
-				workflowId: "first",
-				error: "first-error",
-			});
-		});
-
-		it("workflow can catch waitForAll dependency failure and recover", async () => {
+		it("workflow can catch all() dependency failure and recover", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				waitForPublished: vi.fn(),
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
@@ -1010,7 +862,10 @@ describe("Interpreter", () => {
 				{ profile: unknown }
 			> = function* (ctx) {
 				try {
-					yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+					yield* ctx.all(
+						ctx.waitFor("payment"),
+						ctx.workflow("profile"),
+					);
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -1027,7 +882,6 @@ describe("Interpreter", () => {
 				expect.objectContaining({
 					type: "workflow_dependency_failed",
 					workflowId: "profile",
-					seq: 1,
 					error: "dep boom",
 				}),
 			);
@@ -2549,40 +2403,57 @@ describe("Interpreter", () => {
 				});
 			};
 
+			// ctx.on() now uses ctx.race(ctx.waitFor(...)) internally.
+			// Seq allocation: waitFor("inc")=1, waitFor("finish")=2, race=3
+			// After first iteration handler: activity("count")=4
+			// Second iteration: waitFor("inc")=5, waitFor("finish")=6, race=7
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
-				// First iteration: inc
+				// First iteration: race picks "inc" (winner 0)
 				{
-					type: "signal_received",
-					signal: "inc",
-					payload: undefined,
-					seq: 1,
+					type: "race_started",
+					seq: 3,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
 					timestamp: 2,
 				},
 				{
+					type: "race_completed",
+					seq: 3,
+					winner: 0,
+					value: undefined,
+					timestamp: 3,
+				},
+				// Handler runs activity
+				{
 					type: "activity_scheduled",
 					name: "count",
-					seq: 2,
-					timestamp: 3,
+					seq: 4,
+					timestamp: 4,
 				},
 				{
 					type: "activity_completed",
-					seq: 2,
+					seq: 4,
 					result: "fetched",
-					timestamp: 4,
-				},
-				// Second iteration: finish
-				{
-					type: "signal_received",
-					signal: "finish",
-					payload: undefined,
-					seq: 3,
 					timestamp: 5,
+				},
+				// Second iteration: race picks "finish" (winner 1)
+				{
+					type: "race_started",
+					seq: 7,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					timestamp: 6,
+				},
+				{
+					type: "race_completed",
+					seq: 7,
+					winner: 1,
+					value: undefined,
+					timestamp: 7,
 				},
 				{
 					type: "workflow_completed",
 					result: "total:1",
-					timestamp: 6,
+					timestamp: 8,
 				},
 			]);
 

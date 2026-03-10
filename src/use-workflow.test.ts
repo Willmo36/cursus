@@ -760,7 +760,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("debug panel shows all events for waitForAll with signal + workflow dep", async () => {
+		it("debug panel shows all events for all() with signal + workflow dep", async () => {
 			const profileWorkflow: WorkflowFunction<
 				{ name: string },
 				{ profile: { name: string } }
@@ -774,8 +774,8 @@ describe("useWorkflow", () => {
 				{ payment: string },
 				{ profile: { name: string } }
 			> = function* (ctx) {
-				const [payment, profile] = yield* ctx.waitForAll(
-					"payment",
+				const [payment, profile] = yield* ctx.all(
+					ctx.waitFor("payment"),
 					ctx.workflow("profile"),
 				);
 				const order = yield* ctx.activity("place-order", async () => {
@@ -808,7 +808,7 @@ describe("useWorkflow", () => {
 				expect(result.current.profile.waitingFor).toBe("profile");
 			});
 
-			// Wait for checkout to be waiting (waitForAll)
+			// Wait for checkout to be waiting (all)
 			await waitFor(() => {
 				expect(result.current.checkout.state).toBe("waiting");
 			});
@@ -840,9 +840,8 @@ describe("useWorkflow", () => {
 				expect(checkoutLog).toBeDefined();
 				const types = checkoutLog?.events.map((e) => e.type);
 				expect(types).toContain("workflow_started");
-				expect(types).toContain("wait_all_started");
-				expect(types).toContain("signal_received");
-				expect(types).toContain("wait_all_completed");
+				expect(types).toContain("all_started");
+				expect(types).toContain("all_completed");
 				expect(types).toContain("activity_scheduled");
 				expect(types).toContain("activity_completed");
 				expect(types).toContain("workflow_completed");

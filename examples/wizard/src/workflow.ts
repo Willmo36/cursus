@@ -14,7 +14,10 @@ type SignupResult = {
 
 export const signupWorkflow: WorkflowFunction<SignupResult, SignupSignals> =
 	function* (ctx) {
-		const [email, password] = yield* ctx.waitForAll("email", "password");
+		const [email, password] = yield* ctx.all(
+			ctx.waitFor("email"),
+			ctx.waitFor("password"),
+		);
 
 		const token = yield* ctx.activity("create-account", async () => {
 			await new Promise((r) => setTimeout(r, 1500));

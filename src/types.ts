@@ -509,7 +509,7 @@ export type WorkflowContext<
 	) => Generator<Command, WorkflowMap[K], unknown>;
 	workflow: <K extends keyof WorkflowMap & string>(
 		id: K,
-	) => WorkflowRef<WorkflowMap[K]>;
+	) => Generator<Command, WorkflowMap[K], unknown>;
 	publish: (value: PublishType) => Generator<Command, void, unknown>;
 };
 
@@ -563,7 +563,7 @@ export type InternalWorkflowContext = {
 		workflowId: string,
 		options?: { start?: boolean },
 	) => Generator<Command, unknown, unknown>;
-	workflow: (id: string) => WorkflowRef;
+	workflow: (id: string) => Generator<Command, unknown, unknown>;
 	publish: (value: unknown) => Generator<Command, void, unknown>;
 };
 

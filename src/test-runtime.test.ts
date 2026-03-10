@@ -171,13 +171,13 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("mock-recovered");
 	});
 
-	it("runs mixed waitForAll with signals and workflowResults", async () => {
+	it("runs mixed all with signals and workflowResults", async () => {
 		const wf: WorkflowFunction<
 			unknown,
 			Record<string, unknown>,
 			{ profile: unknown }
 		> = function* (ctx) {
-			return yield* ctx.waitForAll("payment", ctx.workflow("profile"));
+			return yield* ctx.all(ctx.waitFor("payment"), ctx.workflow("profile"));
 		};
 
 		const result = await createTestRuntime(wf, {
