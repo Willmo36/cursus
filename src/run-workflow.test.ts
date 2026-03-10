@@ -2,9 +2,9 @@
 // ABOUTME: Covers runWorkflow() returning snapshots for completed, failed, and waiting workflows.
 
 import { describe, expect, it } from "vitest";
+import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowFunction } from "./types";
-import { runWorkflow } from "./run-workflow";
 
 describe("runWorkflow", () => {
 	it("returns snapshot with completed state and result", async () => {
@@ -36,7 +36,12 @@ describe("runWorkflow", () => {
 	});
 
 	it("captures published value in snapshot", async () => {
-		const workflow: WorkflowFunction<string, Record<string, unknown>, Record<string, never>, string> = function* (ctx) {
+		const workflow: WorkflowFunction<
+			string,
+			Record<string, unknown>,
+			Record<string, never>,
+			string
+		> = function* (ctx) {
 			yield* ctx.publish("intermediate");
 			return yield* ctx.activity("work", async () => "done");
 		};

@@ -1,6 +1,7 @@
 // ABOUTME: Core entry point for cursus (React-free).
 // ABOUTME: Re-exports types, registry, storage, retry utilities, and test runtime.
 
+export { default as eventSchema } from "./event-schema.json";
 export type { WorkflowLayer } from "./layer";
 export { createLayer } from "./layer";
 export { WorkflowRegistry } from "./registry";
@@ -24,17 +25,17 @@ export type {
 	AnyWorkflowFunction,
 	ChildCommand,
 	Command,
+	JoinCommand,
 	OnHandlers,
 	ParallelCommand,
 	PublishCommand,
+	PublishedCommand,
 	RaceCommand,
 	SleepCommand,
 	WaitForAllCommand,
 	WaitForAllItem,
 	WaitForAnyCommand,
 	WaitForCommand,
-	JoinCommand,
-	PublishedCommand,
 	Workflow,
 	WorkflowCancelledEvent,
 	WorkflowContext,
@@ -52,4 +53,3 @@ export type {
 } from "./types";
 export { CancelledError } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
-export { default as eventSchema } from "./event-schema.json";

@@ -7,7 +7,6 @@ import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
-import type { WorkflowSnapshot } from "./run-workflow";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent, WorkflowFunction } from "./types";
@@ -1040,7 +1039,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("initializes published value from snapshot", async () => {
-			const workflow: WorkflowFunction<string, Record<string, unknown>, Record<string, never>, string> = function* (ctx) {
+			const workflow: WorkflowFunction<
+				string,
+				Record<string, unknown>,
+				Record<string, never>,
+				string
+			> = function* (ctx) {
 				yield* ctx.publish("progress");
 				return yield* ctx.activity("work", async () => "done");
 			};

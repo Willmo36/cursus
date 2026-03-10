@@ -12,8 +12,8 @@ import {
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { RegistryContext } from "./registry-provider";
-import { checkVersion, MemoryStorage } from "./storage";
 import type { WorkflowSnapshot } from "./run-workflow";
+import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
 	WorkflowEvent,
