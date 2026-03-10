@@ -15,6 +15,8 @@ export {
 	withRetry,
 	wrapActivity,
 } from "./retry";
+export type { WorkflowSnapshot } from "./run-workflow";
+export { runWorkflow } from "./run-workflow";
 export { checkVersion, LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {

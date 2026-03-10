@@ -91,6 +91,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — `withRetry`, `withCircuitBreaker`, composable `wrapActivity`
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
+- **SSR** — `runWorkflow` for server-side execution, snapshot hydration via `useWorkflow`
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
 - **Type-safe** — fully generic `WorkflowFunction` with typed signals and workflow deps
 
@@ -246,6 +247,7 @@ expect(result).toEqual({ displayName: "Alice" });
 - [Testing](./docs/testing.md) — `createTestRuntime`
 - [Resilience](./docs/resilience.md) — retry and circuit breaker
 - [Observability](./docs/observability.md) — event observers and debug panel
+- [SSR & Hydration](./docs/ssr.md) — server-side execution and snapshot hydration
 - [API Reference](./docs/api-reference.md) — exhaustive type and export reference
 
 ## Examples
