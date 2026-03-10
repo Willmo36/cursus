@@ -18,6 +18,9 @@ export type WorkflowSnapshot = {
 	result: unknown;
 	error: string | undefined;
 	published: unknown;
+	waitingFor: string | undefined;
+	waitingForAll: string[] | undefined;
+	waitingForAny: string[] | undefined;
 };
 
 export async function runWorkflow(
@@ -65,5 +68,8 @@ export async function runWorkflow(
 		result: interpreter.result,
 		error: interpreter.error,
 		published: interpreter.published,
+		waitingFor: interpreter.waitingFor,
+		waitingForAll: interpreter.waitingForAll,
+		waitingForAny: interpreter.waitingForAny,
 	};
 }

@@ -79,6 +79,24 @@ describe("runWorkflow", () => {
 		expect(snapshot.result).toBeUndefined();
 		expect(snapshot.error).toBeUndefined();
 		expect(snapshot.events.length).toBeGreaterThan(0);
+		expect(snapshot.waitingFor).toBe("submit");
+	});
+
+	it("includes waitingFor in snapshot for SSR hydration", async () => {
+		const workflow: WorkflowFunction<string, { confirm: boolean }> = function* (
+			ctx,
+		) {
+			yield* ctx.activity("prep", async () => "prepared");
+			const confirmed = yield* ctx.waitFor("confirm");
+			return confirmed ? "confirmed" : "denied";
+		};
+
+		const snapshot = await runWorkflow("test-waiting", workflow);
+
+		expect(snapshot.state).toBe("waiting");
+		expect(snapshot.waitingFor).toBe("confirm");
+		expect(snapshot.waitingForAll).toBeUndefined();
+		expect(snapshot.waitingForAny).toBeUndefined();
 	});
 
 	it("uses provided storage", async () => {

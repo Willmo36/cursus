@@ -83,12 +83,14 @@ export function useWorkflow(
 	);
 	const [result, setResult] = useState<unknown>(snapshot?.result);
 	const [error, setError] = useState<string | undefined>(snapshot?.error);
-	const [waitingFor, setWaitingFor] = useState<string | undefined>(undefined);
+	const [waitingFor, setWaitingFor] = useState<string | undefined>(
+		snapshot?.waitingFor,
+	);
 	const [waitingForAll, setWaitingForAll] = useState<string[] | undefined>(
-		undefined,
+		snapshot?.waitingForAll,
 	);
 	const [waitingForAny, setWaitingForAny] = useState<string[] | undefined>(
-		undefined,
+		snapshot?.waitingForAny,
 	);
 	const [published, setPublished] = useState<unknown>(snapshot?.published);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);

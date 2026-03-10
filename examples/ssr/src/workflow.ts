@@ -23,22 +23,21 @@ export const productWorkflow: WorkflowFunction<
 	ProductSignals,
 	Record<string, never>,
 	Product
-> =
-	function* (ctx) {
-		const product = yield* ctx.activity("fetch-product", async () => {
-			// Simulate API call
-			await new Promise((r) => setTimeout(r, 500));
-			return {
-				name: "Wireless Headphones",
-				price: "$79.99",
-				description:
-					"Premium noise-cancelling headphones with 30-hour battery life.",
-			};
-		});
+> = function* (ctx) {
+	const product = yield* ctx.activity("fetch-product", async () => {
+		// Simulate API call
+		await new Promise((r) => setTimeout(r, 500));
+		return {
+			name: "Wireless Headphones",
+			price: "$79.99",
+			description:
+				"Premium noise-cancelling headphones with 30-hour battery life.",
+		};
+	});
 
-		yield* ctx.publish(product);
+	yield* ctx.publish(product);
 
-		const review = yield* ctx.waitFor("review");
+	const review = yield* ctx.waitFor("review");
 
-		return { product, review };
-	};
+	return { product, review };
+};
