@@ -543,6 +543,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue({ name: "Max" }),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -578,6 +579,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("profile-data"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -649,6 +651,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -699,6 +702,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockReturnValue(workflowPromise),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -738,6 +742,7 @@ describe("Interpreter", () => {
 					.mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -761,6 +766,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -798,6 +804,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -821,6 +828,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1212,6 +1220,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -1275,6 +1284,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("login-result"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1302,6 +1312,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("result"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1343,6 +1354,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("user-data"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1383,6 +1395,7 @@ describe("Interpreter", () => {
 					.mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1421,6 +1434,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1469,6 +1483,7 @@ describe("Interpreter", () => {
 					.mockRejectedValue(new Error("dependency failed")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1506,6 +1521,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1554,6 +1570,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1581,6 +1598,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1619,6 +1637,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1681,6 +1700,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1706,6 +1726,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			type UserState = { status: "loading" } | { status: "ready"; user: string };
@@ -1738,6 +1759,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1766,6 +1788,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("final-result"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1793,6 +1816,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("join-data"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1831,6 +1855,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -1893,6 +1918,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockRejectedValue(new Error("join failed")),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf: WorkflowFunction<
@@ -3154,6 +3180,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue("workflow-result"),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3645,6 +3672,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn().mockResolvedValue({ name: "Max" }),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3817,6 +3845,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3855,6 +3884,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: publishFn,
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3884,6 +3914,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<
@@ -3916,6 +3947,7 @@ describe("Interpreter", () => {
 				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: publishFn,
+			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const workflow: WorkflowFunction<

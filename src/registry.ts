@@ -30,6 +30,7 @@ type WorkflowEntry = {
 	error?: string;
 	published: boolean;
 	publishedValue?: unknown;
+	publishSeq: number;
 	observed: boolean;
 	waiters: Waiter[];
 	publishedWaiters: Waiter[];
@@ -66,6 +67,7 @@ export class WorkflowRegistry<K extends string = string>
 				completed: false,
 				failed: false,
 				published: false,
+				publishSeq: 0,
 				observed: false,
 				waiters: [],
 				publishedWaiters: [],
@@ -304,11 +306,12 @@ export class WorkflowRegistry<K extends string = string>
 		const where = options?.where;
 		const afterSeq = options?.afterSeq;
 
-		if (
+		const matchesNow = () =>
 			entry.published &&
-			afterSeq === undefined &&
-			(!where || where(entry.publishedValue))
-		) {
+			(afterSeq === undefined || entry.publishSeq > afterSeq) &&
+			(!where || where(entry.publishedValue));
+
+		if (matchesNow()) {
 			return entry.publishedValue as T;
 		}
 
@@ -322,11 +325,7 @@ export class WorkflowRegistry<K extends string = string>
 
 		if (!entry.interpreter && shouldStart) {
 			await this.start(id);
-			if (
-				entry.published &&
-				afterSeq === undefined &&
-				(!where || where(entry.publishedValue))
-			) {
+			if (matchesNow()) {
 				return entry.publishedValue as T;
 			}
 			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
@@ -379,6 +378,7 @@ export class WorkflowRegistry<K extends string = string>
 		const entry = this.getEntry(id);
 		entry.published = true;
 		entry.publishedValue = value;
+		entry.publishSeq++;
 		for (const waiter of entry.waiters) {
 			waiter.resolve(value);
 		}
@@ -394,6 +394,10 @@ export class WorkflowRegistry<K extends string = string>
 		entry.publishedWaiters = remaining;
 	}
 
+	getPublishSeq(id: string): number {
+		return this.getEntry(id).publishSeq;
+	}
+
 	async reset(id: string): Promise<void> {
 		const entry = this.getEntry(id);
 
@@ -403,6 +407,7 @@ export class WorkflowRegistry<K extends string = string>
 		entry.failed = false;
 		entry.published = false;
 		entry.publishedValue = undefined;
+		entry.publishSeq = 0;
 		entry.result = undefined;
 		entry.error = undefined;
 		entry.publishedWaiters = [];
@@ -466,6 +471,7 @@ export class WorkflowRegistry<K extends string = string>
 			completed: false,
 			failed: false,
 			published: false,
+			publishSeq: 0,
 			observed: true,
 			waiters: [],
 			publishedWaiters: [],

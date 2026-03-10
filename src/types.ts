@@ -341,6 +341,7 @@ export type WorkflowRegistryInterface = {
 	): Promise<T>;
 	start(workflowId: string): Promise<void>;
 	publish(workflowId: string, value: unknown): void;
+	getPublishSeq(workflowId: string): number;
 };
 
 // --- Context (provided to workflow generators) ---
@@ -435,6 +436,24 @@ export type WorkflowContext<
 		id: K,
 	) => Generator<Command, WorkflowMap[K], unknown>;
 	publish: (value: PublishType) => Generator<Command, void, unknown>;
+	subscribe: {
+		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K]>(
+			workflowId: K,
+			options: { start?: boolean; where: (value: WorkflowMap[K]) => value is S },
+			body: (
+				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
+				value: S,
+			) => Generator<Command, void, unknown>,
+		): Generator<Command, never, unknown>;
+		<K extends keyof WorkflowMap & string>(
+			workflowId: K,
+			options: { start?: boolean; where?: (value: WorkflowMap[K]) => boolean },
+			body: (
+				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
+				value: WorkflowMap[K],
+			) => Generator<Command, void, unknown>,
+		): Generator<Command, never, unknown>;
+	};
 };
 
 // Internal context type for the interpreter. Matches WorkflowContext structurally
@@ -477,6 +496,14 @@ export type InternalWorkflowContext = {
 	) => Generator<Command, unknown, unknown>;
 	workflow: (id: string) => Generator<Command, unknown, unknown>;
 	publish: (value: unknown) => Generator<Command, void, unknown>;
+	subscribe: (
+		workflowId: string,
+		options: { start?: boolean; where?: (value: unknown) => boolean },
+		body: (
+			ctx: InternalWorkflowContext,
+			value: unknown,
+		) => Generator<Command, void, unknown>,
+	) => Generator<Command, never, unknown>;
 };
 
 // --- Observers ---

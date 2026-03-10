@@ -228,6 +228,47 @@ export class Interpreter {
 					yield { type: "publish" as const, value, seq };
 				})();
 			},
+			subscribe: (
+				workflowId: string,
+				options: { start?: boolean; where?: (value: unknown) => boolean },
+				body: (
+					ctx: InternalWorkflowContext,
+					value: unknown,
+				) => Generator<Command, void, unknown>,
+			): Generator<Command, never, unknown> => {
+				const ctx = this.context;
+				const start = options?.start;
+				const where = options?.where;
+				const getPublishSeq = () =>
+					this.registry?.getPublishSeq(workflowId) ?? 0;
+				return (function* (): Generator<Command, never, unknown> {
+					// First iteration: get current or first matching value
+					let value = yield* ctx.published(workflowId, { start, where });
+					for (;;) {
+						// Snapshot cursor before racing
+						const seqBefore = getPublishSeq();
+						const result = yield* ctx.race(
+							body(ctx, value),
+							ctx.published(workflowId, {
+								start,
+								where,
+								afterSeq: seqBefore,
+							}),
+						);
+						if (result.winner === 0) {
+							// Body completed — wait for next publish
+							value = yield* ctx.published(workflowId, {
+								start,
+								where,
+								afterSeq: getPublishSeq(),
+							});
+						} else {
+							// New publish won the race — use its value
+							value = result.value;
+						}
+					}
+				})();
+			},
 		};
 	}
 

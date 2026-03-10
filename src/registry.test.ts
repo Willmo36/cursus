@@ -1477,6 +1477,183 @@ describe("WorkflowRegistry", () => {
 		});
 	});
 
+	describe("ctx.subscribe()", () => {
+		it("runs callback each time dependency publishes a new value", async () => {
+			const fetchCalls: number[] = [];
+
+			const accountWorkflow: WorkflowFunction<
+				void,
+				{ update: { name: string } },
+				Record<string, never>,
+				{ name: string }
+			> = function* (ctx) {
+				yield* ctx.publish({ name: "max" });
+				yield* ctx.handle<void>({
+					update: function* (_ctx, payload) {
+						yield* ctx.publish(payload);
+					},
+				});
+			};
+
+			const pointsWorkflow: WorkflowFunction<
+				never,
+				Record<string, unknown>,
+				{ account: { name: string } },
+				number
+			> = function* (ctx) {
+				let callCount = 0;
+				yield* ctx.subscribe("account", {}, function* (ctx, account) {
+					callCount++;
+					fetchCalls.push(callCount);
+					const points = yield* ctx.activity(
+						"fetchPoints",
+						async () => callCount * 100,
+					);
+					yield* ctx.publish(points);
+				});
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ account: accountWorkflow, points: pointsWorkflow },
+				storage,
+			);
+
+			// Start both
+			const accountPromise = registry.start("account");
+			await new Promise((r) => setTimeout(r, 10));
+			const pointsPromise = registry.start("points");
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Points should have fetched once for initial publish
+			expect(fetchCalls).toEqual([1]);
+
+			// Update account — should trigger points to refetch
+			registry.signal("account", "update", { name: "max2" });
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(fetchCalls).toEqual([1, 2]);
+		});
+
+		it("cancels in-flight work when dependency publishes again (takeLatest)", async () => {
+			let activityStarted = 0;
+			let activityFinished = 0;
+
+			const sourceWorkflow: WorkflowFunction<
+				void,
+				{ bump: undefined },
+				Record<string, never>,
+				number
+			> = function* (ctx) {
+				yield* ctx.publish(1);
+				yield* ctx.handle<void>({
+					bump: function* (_ctx, _payload) {
+						yield* ctx.publish(
+							((yield* ctx.activity("getCount", async () => 0)) as number) + 1,
+						);
+					},
+				});
+			};
+
+			const reactiveWorkflow: WorkflowFunction<
+				never,
+				Record<string, unknown>,
+				{ source: number },
+				string
+			> = function* (ctx) {
+				yield* ctx.subscribe("source", {}, function* (ctx, value) {
+					activityStarted++;
+					const result = yield* ctx.activity(
+						"slowFetch",
+						async (signal) => {
+							await new Promise((r) => setTimeout(r, 200));
+							if (signal.aborted) return "aborted";
+							activityFinished++;
+							return `done-${value}`;
+						},
+					);
+					yield* ctx.publish(result);
+				});
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ source: sourceWorkflow, reactive: reactiveWorkflow },
+				storage,
+			);
+
+			registry.start("source");
+			await new Promise((r) => setTimeout(r, 10));
+			registry.start("reactive");
+			await new Promise((r) => setTimeout(r, 50));
+
+			// First callback started but still in-flight (200ms activity)
+			expect(activityStarted).toBe(1);
+
+			// Bump source — should cancel the in-flight activity
+			registry.signal("source", "bump", undefined);
+			await new Promise((r) => setTimeout(r, 300));
+
+			// The first activity should have been cancelled, second should complete
+			expect(activityStarted).toBe(2);
+			expect(activityFinished).toBe(1);
+		});
+
+		it("subscribe with where filters values", async () => {
+			type UserState = { status: "loading" } | { status: "ready"; user: string };
+			const receivedUsers: string[] = [];
+
+			const userWorkflow: WorkflowFunction<
+				void,
+				{ go: undefined },
+				Record<string, never>,
+				UserState
+			> = function* (ctx) {
+				yield* ctx.publish({ status: "loading" as const });
+				yield* ctx.receive("go");
+				yield* ctx.publish({ status: "ready" as const, user: "max" });
+				yield* ctx.receive("go");
+			};
+
+			const consumerWorkflow: WorkflowFunction<
+				never,
+				Record<string, unknown>,
+				{ user: UserState }
+			> = function* (ctx) {
+				yield* ctx.subscribe(
+					"user",
+					{
+						where: (s): s is { status: "ready"; user: string } =>
+							s.status === "ready",
+					},
+					function* (_ctx, state) {
+						receivedUsers.push(state.user);
+					},
+				);
+			};
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ user: userWorkflow, consumer: consumerWorkflow },
+				storage,
+			);
+
+			registry.start("user");
+			await new Promise((r) => setTimeout(r, 10));
+			registry.start("consumer");
+			await new Promise((r) => setTimeout(r, 10));
+
+			// Loading state should be filtered out
+			expect(receivedUsers).toEqual([]);
+
+			// Trigger ready state
+			registry.signal("user", "go", undefined);
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(receivedUsers).toEqual(["max"]);
+		});
+	});
+
 	describe("getTrace", () => {
 		it("returns correct envelope shape", async () => {
 			const workflow: WorkflowFunction<string> = function* (ctx) {
