@@ -74,12 +74,12 @@ describe("createTestRuntime", () => {
 		await expect(createTestRuntime(workflow, {})).rejects.toThrow("boom");
 	});
 
-	it("runs a workflow with waitForAll and pre-queued signals", async () => {
+	it("runs a workflow with all and pre-queued signals", async () => {
 		const workflow: WorkflowFunction<
 			[string, string],
 			{ email: string; password: string }
 		> = function* (ctx) {
-			return yield* ctx.waitForAll("email", "password");
+			return yield* ctx.all(ctx.waitFor("email"), ctx.waitFor("password"));
 		};
 
 		const result = await createTestRuntime(workflow, {
@@ -188,11 +188,14 @@ describe("createTestRuntime", () => {
 		expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
 	});
 
-	it("runs a workflow with waitForAny and pre-queued signals", async () => {
+	it("runs a workflow with race and pre-queued signals", async () => {
 		const workflow: WorkflowFunction<string, { a: string; b: string }> =
 			function* (ctx) {
-				const { signal, payload } = yield* ctx.waitForAny("a", "b");
-				return `${signal}:${payload}`;
+				const { winner, value } = yield* ctx.race(
+					ctx.waitFor("a"),
+					ctx.waitFor("b"),
+				);
+				return winner === 0 ? `a:${value}` : `b:${value}`;
 			};
 
 		const result = await createTestRuntime(workflow, {

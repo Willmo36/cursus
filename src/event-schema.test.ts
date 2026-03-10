@@ -70,8 +70,6 @@ describe("event schema", () => {
 			"child_started",
 			"child_completed",
 			"child_failed",
-			"wait_all_started",
-			"wait_all_completed",
 			"all_started",
 			"all_completed",
 			"workflow_dependency_started",

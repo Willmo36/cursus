@@ -11,15 +11,12 @@ import {
 	type InternalWorkflowContext,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
-	type WaitForAllCompletedEvent,
-	type WaitForAllItem,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
 	type WorkflowEvent,
 	type WorkflowEventObserver,
 	type WorkflowFailedEvent,
 	type WorkflowFunction,
-	type WorkflowRef,
 	type WorkflowRegistryInterface,
 	type WorkflowState,
 } from "./types";
@@ -44,22 +41,7 @@ export class Interpreter {
 		  }
 		| undefined;
 	private _waitingForAll: string[] | undefined;
-	private pendingWaitForAll:
-		| {
-				needed: Set<string>;
-				seq: number;
-				onSignal: (name: string, payload: unknown) => void;
-				onComplete: () => void;
-		  }
-		| undefined;
 	private _waitingForAny: string[] | undefined;
-	private pendingWaitForAny:
-		| {
-				signals: Set<string>;
-				seq: number;
-				resolve: (result: { signal: string; payload: unknown }) => void;
-		  }
-		| undefined;
 	private _publishedValue: unknown;
 	private changeListeners: Array<() => void> = [];
 	private registry?: WorkflowRegistryInterface;
@@ -114,21 +96,6 @@ export class Interpreter {
 					return result;
 				})();
 			},
-			waitForAny: (...signals: string[]) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<
-					Command,
-					{ signal: string; payload: unknown },
-					unknown
-				> {
-					const result = yield {
-						type: "waitForAny" as const,
-						signals,
-						seq,
-					};
-					return result as { signal: string; payload: unknown };
-				})();
-			},
 			on: <T>(
 				handlers: Record<
 					string,
@@ -170,27 +137,6 @@ export class Interpreter {
 					yield { type: "sleep" as const, durationMs, seq };
 				})();
 			},
-			parallel: <T>(
-				activities: Array<{
-					name: string;
-					fn: (signal: AbortSignal) => Promise<T>;
-				}>,
-			) => {
-				const seq = ++this.seq;
-				// Pre-allocate seq numbers for each activity within the parallel block
-				const seqActivities = activities.map((a) => ({
-					...a,
-					seq: ++this.seq,
-				}));
-				return (function* (): Generator<Command, T[], unknown> {
-					const result = yield {
-						type: "parallel" as const,
-						activities: seqActivities,
-						seq,
-					};
-					return result as T[];
-				})();
-			},
 			child: <T, CS extends Record<string, unknown>>(
 				name: string,
 				workflow: WorkflowFunction<T, CS>,
@@ -204,22 +150,6 @@ export class Interpreter {
 						seq,
 					};
 					return result as T;
-				})();
-			},
-			waitForAll: (...args: (string | WorkflowRef)[]) => {
-				const seq = ++this.seq;
-				const items: WaitForAllItem[] = args.map((arg) =>
-					typeof arg === "string"
-						? { kind: "signal" as const, name: arg }
-						: { kind: "workflow" as const, workflowId: arg.workflow },
-				);
-				return (function* (): Generator<Command, unknown, unknown> {
-					const result = yield {
-						type: "waitForAll" as const,
-						items,
-						seq,
-					};
-					return result;
 				})();
 			},
 			all: (...branches: Generator<Command, unknown, unknown>[]) => {
@@ -390,46 +320,6 @@ export class Interpreter {
 			return;
 		}
 
-		// waitForAny path
-		if (this.pendingWaitForAny?.signals.has(name)) {
-			const pending = this.pendingWaitForAny;
-			this.log.append({
-				type: "signal_received",
-				signal: name,
-				payload,
-				seq: pending.seq,
-				timestamp: Date.now(),
-			});
-			this._state = "running";
-			this._waitingForAny = undefined;
-			this.pendingWaitForAny = undefined;
-			this.notifyChange();
-			pending.resolve({ signal: name, payload });
-			return;
-		}
-
-		// waitForAll path
-		if (this.pendingWaitForAll?.needed.has(name)) {
-			const pending = this.pendingWaitForAll;
-			pending.needed.delete(name);
-
-			this.log.append({
-				type: "signal_received",
-				signal: name,
-				payload,
-				seq: pending.seq,
-				timestamp: Date.now(),
-			});
-
-			pending.onSignal(name, payload);
-			this._waitingForAll = [...pending.needed];
-
-			if (pending.needed.size === 0) {
-				pending.onComplete();
-			} else {
-				this.notifyChange();
-			}
-		}
 	}
 
 	cancel(): void {
@@ -474,8 +364,6 @@ export class Interpreter {
 		this._waitingForAll = undefined;
 		this._waitingForAny = undefined;
 		this.pendingSignal = undefined;
-		this.pendingWaitForAll = undefined;
-		this.pendingWaitForAny = undefined;
 		this.notifyChange();
 	}
 
@@ -553,8 +441,7 @@ export class Interpreter {
 		}
 
 		// InternalWorkflowContext is structurally identical to WorkflowContext at
-		// runtime. The only gap is waitForAll's mapped-tuple return type which TS
-		// can't unify with `unknown` for a generic K — a known TS limitation.
+		// runtime, but TS can't unify overloaded return types with `unknown`.
 		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary between InternalWorkflowContext and user-facing WorkflowContext
 		const gen = this.workflowFn(this.context as any);
 
@@ -611,14 +498,8 @@ export class Interpreter {
 				return this.executeActivity(command);
 			case "waitFor":
 				return this.executeWaitFor(command);
-			case "waitForAll":
-				return this.executeWaitForAll(command);
-			case "waitForAny":
-				return this.executeWaitForAny(command);
 			case "sleep":
 				return this.executeSleep(command);
-			case "parallel":
-				return this.executeParallel(command);
 			case "child":
 				return this.executeChild(command);
 			case "published":
@@ -714,170 +595,6 @@ export class Interpreter {
 			this.pendingSignal = { resolve };
 			this._pendingReject = reject;
 			// Notify after pendingSignal is set so signal() can resolve the promise
-			this.notifyChange();
-		});
-	}
-
-	private async executeWaitForAny(
-		command: Extract<Command, { type: "waitForAny" }>,
-	): Promise<{ signal: string; payload: unknown }> {
-		// Check for replay
-		const received = this.log.findCompleted(command.seq, "signal_received");
-		if (received) {
-			const event = received as SignalReceivedEvent;
-			return { signal: event.signal, payload: event.payload };
-		}
-
-		// Live: pause until signal() is called with a matching signal
-		this._state = "waiting";
-		this._waitingForAny = command.signals;
-
-		return new Promise((resolve, reject) => {
-			this.pendingWaitForAny = {
-				signals: new Set(command.signals),
-				seq: command.seq,
-				resolve,
-			};
-			this._pendingReject = reject;
-			this.notifyChange();
-		});
-	}
-
-	private async executeWaitForAll(
-		command: Extract<Command, { type: "waitForAll" }>,
-	): Promise<unknown> {
-		const itemKeys = command.items.map(waitForAllItemKey);
-
-		// Check for replay: completed
-		const completed = this.log.findCompleted(command.seq, "wait_all_completed");
-		if (completed) {
-			const results = (completed as WaitForAllCompletedEvent).results;
-			return itemKeys.map((k) => results[k]);
-		}
-
-		// Check for replay: dependency failed
-		const depFailed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_failed",
-		);
-		if (depFailed) {
-			throw new Error((depFailed as { error: string }).error);
-		}
-
-		// Live: record start event
-		this.log.append({
-			type: "wait_all_started",
-			items: command.items,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
-
-		const signalItems = command.items.filter(
-			(i): i is Extract<WaitForAllItem, { kind: "signal" }> =>
-				i.kind === "signal",
-		);
-		const workflowItems = command.items.filter(
-			(i): i is Extract<WaitForAllItem, { kind: "workflow" }> =>
-				i.kind === "workflow",
-		);
-
-		// Require registry when workflow items are present
-		const registry = this.registry;
-		if (workflowItems.length > 0 && !registry) {
-			throw new Error(
-				"waitForAll with workflow items requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
-		const collected = new Map<string, unknown>();
-		let remaining = command.items.length;
-		let failed = false;
-
-		this._state = "waiting";
-		this._waitingForAll = signalItems.map((i) => i.name);
-
-		return new Promise((resolve, reject) => {
-			const tryComplete = () => {
-				if (remaining > 0) return;
-
-				const results: Record<string, unknown> = {};
-				for (const [k, v] of collected) {
-					results[k] = v;
-				}
-				this.log.append({
-					type: "wait_all_completed",
-					seq: command.seq,
-					results,
-					timestamp: Date.now(),
-				});
-				this._state = "running";
-				this._waitingForAll = undefined;
-				this.pendingWaitForAll = undefined;
-				this.notifyChange();
-				resolve(itemKeys.map((k) => results[k]));
-			};
-
-			// Set up signal collection
-			this.pendingWaitForAll = {
-				needed: new Set(signalItems.map((i) => i.name)),
-				seq: command.seq,
-				onSignal: (name, payload) => {
-					collected.set(name, payload);
-					remaining--;
-				},
-				onComplete: tryComplete,
-			};
-
-			// Fire workflow waits concurrently
-			for (const item of workflowItems) {
-				const key = waitForAllItemKey(item);
-
-				this.log.append({
-					type: "workflow_dependency_started",
-					workflowId: item.workflowId,
-					seq: command.seq,
-					timestamp: Date.now(),
-				});
-
-				registry
-					?.waitForCompletion(item.workflowId, {
-						start: true,
-						caller: this._workflowId,
-					})
-					.then((result) => {
-						if (failed) return;
-						collected.set(key, result);
-						remaining--;
-
-						this.log.append({
-							type: "workflow_dependency_completed",
-							workflowId: item.workflowId,
-							seq: command.seq,
-							result,
-							timestamp: Date.now(),
-						});
-
-						tryComplete();
-					})
-					.catch((err) => {
-						if (failed) return;
-						failed = true;
-						const message = err instanceof Error ? err.message : String(err);
-						const stack = err instanceof Error ? err.stack : undefined;
-						this.log.append({
-							type: "workflow_dependency_failed",
-							workflowId: item.workflowId,
-							seq: command.seq,
-							error: message,
-							stack,
-							timestamp: Date.now(),
-						});
-						this._waitingForAll = undefined;
-						this.pendingWaitForAll = undefined;
-						reject(err);
-					});
-			}
-
 			this.notifyChange();
 		});
 	}
@@ -1279,33 +996,6 @@ export class Interpreter {
 						value,
 					}));
 				}
-				case "parallel": {
-					return this.executeParallel(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
-				case "waitForAll": {
-					return this.executeWaitForAll(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
-				case "waitForAny": {
-					return new Promise<{ index: number; value: unknown }>((resolve) => {
-						for (const sig of item.signals) {
-							allWaiters.push({
-								signal: sig,
-								resolve: (payload: unknown) => {
-									resolve({
-										index,
-										value: { signal: sig, payload },
-									});
-								},
-							});
-						}
-					});
-				}
 				case "publish": {
 					throw new Error("publish cannot be used inside an all branch");
 				}
@@ -1404,7 +1094,6 @@ export class Interpreter {
 			this._waitingFor = undefined;
 			this.pendingSignal = undefined;
 			this._waitingForAny = undefined;
-			this.pendingWaitForAny = undefined;
 			this._raceCleanup = null;
 		};
 
@@ -1440,27 +1129,6 @@ export class Interpreter {
 							},
 						});
 					});
-				}
-				case "waitForAny": {
-					return new Promise<{ index: number; value: unknown }>((resolve) => {
-						for (const sig of item.signals) {
-							raceWaiters.push({
-								signal: sig,
-								resolve: (payload: unknown) => {
-									resolve({
-										index,
-										value: { signal: sig, payload },
-									});
-								},
-							});
-						}
-					});
-				}
-				case "parallel": {
-					return this.executeParallel(item).then((value) => ({
-						index,
-						value,
-					}));
 				}
 				case "child": {
 					const raceChildName = item.name;
@@ -1510,12 +1178,6 @@ export class Interpreter {
 				}
 				case "join": {
 					return this.executeJoinCommand(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
-				case "waitForAll": {
-					return this.executeWaitForAll(item).then((value) => ({
 						index,
 						value,
 					}));
@@ -1575,7 +1237,6 @@ export class Interpreter {
 		this._waitingFor = undefined;
 		this.pendingSignal = undefined;
 		this._waitingForAny = undefined;
-		this.pendingWaitForAny = undefined;
 		if (this._activeChild) {
 			this._activeChild = null;
 			this.clearChildState();
@@ -1594,20 +1255,6 @@ export class Interpreter {
 		return { winner: raceResult.index, value: raceResult.value };
 	}
 
-	private async executeParallel(
-		command: Extract<Command, { type: "parallel" }>,
-	): Promise<unknown[]> {
-		const promises = command.activities.map((activity) =>
-			this.executeActivity({
-				type: "activity",
-				name: activity.name,
-				fn: activity.fn,
-				seq: activity.seq,
-			}),
-		);
-		return Promise.all(promises);
-	}
-
 	private verifyActivityReplay(
 		command: Extract<Command, { type: "activity" }>,
 	): void {
@@ -1623,8 +1270,4 @@ export class Interpreter {
 			);
 		}
 	}
-}
-
-function waitForAllItemKey(item: WaitForAllItem): string {
-	return item.kind === "signal" ? item.name : `workflow:${item.workflowId}`;
 }

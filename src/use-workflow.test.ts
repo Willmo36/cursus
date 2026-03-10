@@ -72,15 +72,18 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("exposes waitingForAny when workflow uses waitForAny", async () => {
+		it("exposes waitingForAny when workflow uses race with signals", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal } = yield* ctx.waitForAny("a", "b");
-					return signal;
+					const { winner } = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return winner === 0 ? "a" : "b";
 				};
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-waitForAny", workflow, {
+				useWorkflow("test-race-signals", workflow, {
 					storage: new MemoryStorage(),
 				}),
 			);
@@ -175,16 +178,19 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("collects multiple signals with waitForAll", async () => {
+		it("collects multiple signals with all", async () => {
 			const workflow: WorkflowFunction<
 				[string, string],
 				{ email: string; password: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("email", "password");
+				return yield* ctx.all(
+					ctx.waitFor("email"),
+					ctx.waitFor("password"),
+				);
 			};
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-waitall", workflow, {
+				useWorkflow("test-all-signals", workflow, {
 					storage: new MemoryStorage(),
 				}),
 			);

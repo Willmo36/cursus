@@ -130,7 +130,7 @@ export async function createTestRuntime<
 			return;
 		}
 
-		// waitForAny: send first matching signal from queue
+		// race with signals: send first matching signal from queue
 		const waitingAny = interpreter.waitingForAny;
 		if (waitingAny) {
 			const idx = signalQueue.findIndex((s) => waitingAny.includes(s.name));
@@ -141,7 +141,7 @@ export async function createTestRuntime<
 			return;
 		}
 
-		// waitForAll: send any matching signals from the queue
+		// all with signals: send any matching signals from the queue
 		const waitingAll = interpreter.waitingForAll;
 		if (waitingAll) {
 			for (const needed of waitingAll) {

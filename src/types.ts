@@ -9,18 +9,6 @@ type RaceResult<T extends unknown[]> = {
 		: never;
 }[number];
 
-// --- Heterogeneous waitForAll helpers ---
-
-export type WorkflowRef<T = unknown> = {
-	__brand: "WorkflowRef";
-	__phantom?: T;
-	workflow: string;
-};
-
-export type WaitForAllItem =
-	| { kind: "signal"; name: string }
-	| { kind: "workflow"; workflowId: string };
-
 // --- Cancellation ---
 
 export class CancelledError extends Error {
@@ -51,32 +39,10 @@ export type SleepCommand = {
 	seq: number;
 };
 
-export type ParallelCommand = {
-	type: "parallel";
-	activities: Array<{
-		name: string;
-		fn: (signal: AbortSignal) => Promise<unknown>;
-		seq: number;
-	}>;
-	seq: number;
-};
-
-export type WaitForAllCommand = {
-	type: "waitForAll";
-	items: WaitForAllItem[];
-	seq: number;
-};
-
 export type ChildCommand = {
 	type: "child";
 	name: string;
 	workflow: AnyWorkflowFunction;
-	seq: number;
-};
-
-export type WaitForAnyCommand = {
-	type: "waitForAny";
-	signals: string[];
 	seq: number;
 };
 
@@ -115,10 +81,7 @@ export type AllCommand = {
 export type Command =
 	| ActivityCommand
 	| WaitForCommand
-	| WaitForAllCommand
-	| WaitForAnyCommand
 	| SleepCommand
-	| ParallelCommand
 	| ChildCommand
 	| PublishedCommand
 	| JoinCommand
@@ -198,20 +161,6 @@ export type ChildFailedEvent = {
 	seq: number;
 	error: string;
 	stack?: string;
-	timestamp: number;
-};
-
-export type WaitForAllStartedEvent = {
-	type: "wait_all_started";
-	items: WaitForAllItem[];
-	seq: number;
-	timestamp: number;
-};
-
-export type WaitForAllCompletedEvent = {
-	type: "wait_all_completed";
-	seq: number;
-	results: Record<string, unknown>;
 	timestamp: number;
 };
 
@@ -307,8 +256,6 @@ export type WorkflowEvent =
 	| ActivityCompletedEvent
 	| ActivityFailedEvent
 	| SignalReceivedEvent
-	| WaitForAllStartedEvent
-	| WaitForAllCompletedEvent
 	| TimerStartedEvent
 	| TimerFiredEvent
 	| ChildStartedEvent
@@ -416,45 +363,15 @@ export type WorkflowContext<
 	waitFor: <K extends keyof SignalMap & string>(
 		signal: K,
 	) => Generator<Command, SignalMap[K], unknown>;
-	waitForAny: <K extends (keyof SignalMap & string)[]>(
-		...signals: K
-	) => Generator<
-		Command,
-		{
-			[I in keyof K]: K[I] extends keyof SignalMap & string
-				? { signal: K[I]; payload: SignalMap[K[I]] }
-				: never;
-		}[number],
-		unknown
-	>;
 	on: <T>(
 		handlers: OnHandlers<SignalMap, WorkflowMap, PublishType>,
 	) => Generator<Command, T, unknown>;
 	done: <T>(value: T) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
-	parallel: <T>(
-		activities: Array<{
-			name: string;
-			fn: (signal: AbortSignal) => Promise<T>;
-		}>,
-	) => Generator<Command, T[], unknown>;
 	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitForAll: <K extends ((keyof SignalMap & string) | WorkflowRef<unknown>)[]>(
-		...args: K
-	) => Generator<
-		Command,
-		{
-			[I in keyof K]: K[I] extends WorkflowRef<infer R>
-				? R
-				: K[I] extends keyof SignalMap & string
-					? SignalMap[K[I]]
-					: never;
-		},
-		unknown
-	>;
 	all: {
 		<A, B>(
 			a: Generator<Command, A, unknown>,
@@ -522,9 +439,6 @@ export type InternalWorkflowContext = {
 		fn: (signal: AbortSignal) => Promise<T>,
 	) => Generator<Command, T, unknown>;
 	waitFor: (signal: string) => Generator<Command, unknown, unknown>;
-	waitForAny: (
-		...signals: string[]
-	) => Generator<Command, { signal: string; payload: unknown }, unknown>;
 	on: <T>(
 		handlers: Record<
 			string,
@@ -536,19 +450,10 @@ export type InternalWorkflowContext = {
 	) => Generator<Command, T, unknown>;
 	done: (value: unknown) => Generator<Command, never, unknown>;
 	sleep: (durationMs: number) => Generator<Command, void, unknown>;
-	parallel: <T>(
-		activities: Array<{
-			name: string;
-			fn: (signal: AbortSignal) => Promise<T>;
-		}>,
-	) => Generator<Command, T[], unknown>;
 	child: <T, CS extends Record<string, unknown>>(
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
 	) => Generator<Command, T, unknown>;
-	waitForAll: (
-		...args: (string | WorkflowRef)[]
-	) => Generator<Command, unknown, unknown>;
 	all: (
 		...branches: Generator<Command, unknown, unknown>[]
 	) => Generator<Command, unknown[], unknown>;

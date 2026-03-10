@@ -1,5 +1,5 @@
 // ABOUTME: Tests for the workflow interpreter runtime.
-// ABOUTME: Covers activity execution, replay, signals, sleep, parallel, and child workflows.
+// ABOUTME: Covers activity execution, replay, signals, sleep, race, all, and child workflows.
 
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
@@ -2070,14 +2070,19 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase I: waitForAny", () => {
+	describe("Phase I: race with signals", () => {
 		it("pauses and resumes when any matching signal arrives", async () => {
 			const workflow: WorkflowFunction<
 				string,
 				{ add: string; remove: string }
 			> = function* (ctx) {
-				const { signal, payload } = yield* ctx.waitForAny("add", "remove");
-				return `${signal}:${payload}`;
+				const result = yield* ctx.race(
+					ctx.waitFor("add"),
+					ctx.waitFor("remove"),
+				);
+				return result.winner === 0
+					? `add:${result.value}`
+					: `remove:${result.value}`;
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2094,12 +2099,12 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("returns { signal, payload } with correct discriminant", async () => {
+		it("returns { winner, value } with correct discriminant", async () => {
 			const workflow: WorkflowFunction<
-				{ signal: string; payload: unknown },
+				{ winner: number; value: unknown },
 				{ a: string; b: number }
 			> = function* (ctx) {
-				return yield* ctx.waitForAny("a", "b");
+				return yield* ctx.race(ctx.waitFor("a"), ctx.waitFor("b"));
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2112,16 +2117,19 @@ describe("Interpreter", () => {
 			interpreter.signal("b", 42);
 
 			const result = await runPromise;
-			expect(result).toEqual({ signal: "b", payload: 42 });
+			expect(result).toEqual({ winner: 1, value: 42 });
 		});
 
-		it("ignores signals not in the list", async () => {
+		it("ignores signals not in the race", async () => {
 			const workflow: WorkflowFunction<
 				string,
 				{ a: string; b: string; c: string }
 			> = function* (ctx) {
-				const { signal } = yield* ctx.waitForAny("a", "b");
-				return signal;
+				const { winner } = yield* ctx.race(
+					ctx.waitFor("a"),
+					ctx.waitFor("b"),
+				);
+				return winner === 0 ? "a" : "b";
 			};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2140,8 +2148,11 @@ describe("Interpreter", () => {
 		it("exposes waitingForAny getter", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal } = yield* ctx.waitForAny("a", "b");
-					return signal;
+					const { winner } = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return winner === 0 ? "a" : "b";
 				};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2156,23 +2167,35 @@ describe("Interpreter", () => {
 		it("replays from event log", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal, payload } = yield* ctx.waitForAny("a", "b");
-					return `${signal}:${payload}`;
+					const result = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return result.winner === 0
+						? `a:${result.value}`
+						: `b:${result.value}`;
 				};
 
+			// seq 1 = waitFor "a", seq 2 = waitFor "b", seq 3 = race command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
-					type: "signal_received",
-					signal: "b",
-					payload: "replayed",
-					seq: 1,
+					type: "race_started",
+					seq: 3,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
 					timestamp: 2,
+				},
+				{
+					type: "race_completed",
+					seq: 3,
+					winner: 1,
+					value: "replayed",
+					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
 					result: "b:replayed",
-					timestamp: 3,
+					timestamp: 4,
 				},
 			]);
 
@@ -2185,31 +2208,53 @@ describe("Interpreter", () => {
 		it("multiple sequential calls replay correctly", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const first = yield* ctx.waitForAny("a", "b");
-					const second = yield* ctx.waitForAny("a", "b");
-					return `${first.signal}-${second.signal}`;
+					const first = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					const second = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					const firstName = first.winner === 0 ? "a" : "b";
+					const secondName = second.winner === 0 ? "a" : "b";
+					return `${firstName}-${secondName}`;
 				};
 
+			// First race: seq 1=waitFor "a", seq 2=waitFor "b", seq 3=race
+			// Second race: seq 4=waitFor "a", seq 5=waitFor "b", seq 6=race
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
-					type: "signal_received",
-					signal: "a",
-					payload: "x",
-					seq: 1,
+					type: "race_started",
+					seq: 3,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
 					timestamp: 2,
 				},
 				{
-					type: "signal_received",
-					signal: "b",
-					payload: "y",
-					seq: 2,
+					type: "race_completed",
+					seq: 3,
+					winner: 0,
+					value: "x",
 					timestamp: 3,
+				},
+				{
+					type: "race_started",
+					seq: 6,
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
+					timestamp: 4,
+				},
+				{
+					type: "race_completed",
+					seq: 6,
+					winner: 1,
+					value: "y",
+					timestamp: 5,
 				},
 				{
 					type: "workflow_completed",
 					result: "a-b",
-					timestamp: 4,
+					timestamp: 6,
 				},
 			]);
 
@@ -2219,11 +2264,14 @@ describe("Interpreter", () => {
 			expect(result).toBe("a-b");
 		});
 
-		it("records signal_received event", async () => {
+		it("records race_started and race_completed events", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal } = yield* ctx.waitForAny("a", "b");
-					return signal;
+					const { winner } = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return winner === 0 ? "a" : "b";
 				};
 
 			const log = new EventLog();
@@ -2240,10 +2288,15 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "signal_received",
-					signal: "a",
-					payload: "payload-a",
-					seq: 1,
+					type: "race_started",
+					items: [{ type: "waitFor" }, { type: "waitFor" }],
+				}),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "race_completed",
+					winner: 0,
+					value: "payload-a",
 				}),
 			);
 		});
@@ -2251,8 +2304,11 @@ describe("Interpreter", () => {
 		it("cancel breaks out of waiting", async () => {
 			const workflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal } = yield* ctx.waitForAny("a", "b");
-					return signal;
+					const { winner } = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return winner === 0 ? "a" : "b";
 				};
 
 			const interpreter = new Interpreter(workflow, new EventLog());
@@ -2506,7 +2562,7 @@ describe("Interpreter", () => {
 				expect(interpreter.state).toBe("waiting");
 			});
 
-			// "b" is in the waitForAny list but has no handler — should be skipped
+			// "b" is in the signal map but has no handler — should be skipped
 			interpreter.signal("b", "ignored");
 
 			await vi.waitFor(() => {
@@ -2574,7 +2630,7 @@ describe("Interpreter", () => {
 				[string, string],
 				{ a: string; b: string }
 			> = function* (ctx) {
-				return yield* ctx.waitForAll("a", "b");
+				return yield* ctx.all(ctx.waitFor("a"), ctx.waitFor("b"));
 			};
 
 			const parentWorkflow: WorkflowFunction<
@@ -2596,8 +2652,11 @@ describe("Interpreter", () => {
 		it("parent reports child's waitingForAny", async () => {
 			const childWorkflow: WorkflowFunction<string, { x: string; y: string }> =
 				function* (ctx) {
-					const { signal, payload } = yield* ctx.waitForAny("x", "y");
-					return `${signal}:${payload}`;
+					const { winner, value } = yield* ctx.race(
+						ctx.waitFor("x"),
+						ctx.waitFor("y"),
+					);
+					return winner === 0 ? `x:${value}` : `y:${value}`;
 				};
 
 			const parentWorkflow: WorkflowFunction<string, { x: string; y: string }> =
@@ -2985,20 +3044,17 @@ describe("Interpreter", () => {
 			expect(interpreter.state).toBe("completed");
 		});
 
-		it("races waitFor against waitForAny", async () => {
+		it("races three waitFor branches — third signal wins", async () => {
 			const workflow: WorkflowFunction<
 				| { winner: 0; value: string }
-				| {
-						winner: 1;
-						value:
-							| { signal: "optA"; payload: string }
-							| { signal: "optB"; payload: string };
-				  },
+				| { winner: 1; value: string }
+				| { winner: 2; value: string },
 				{ single: string; optA: string; optB: string }
 			> = function* (ctx) {
 				return yield* ctx.race(
 					ctx.waitFor("single"),
-					ctx.waitForAny("optA", "optB"),
+					ctx.waitFor("optA"),
+					ctx.waitFor("optB"),
 				);
 			};
 
@@ -3013,8 +3069,8 @@ describe("Interpreter", () => {
 
 			const result = await runPromise;
 			expect(result).toEqual({
-				winner: 1,
-				value: { signal: "optB", payload: "picked-B" },
+				winner: 2,
+				value: "picked-B",
 			});
 		});
 
@@ -3057,17 +3113,17 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("races parallel against sleep", async () => {
+		it("races all against sleep", async () => {
 			vi.useFakeTimers();
 
 			const workflow: WorkflowFunction<
 				{ winner: 0; value: string[] } | { winner: 1; value: void }
 			> = function* (ctx) {
 				return yield* ctx.race(
-					ctx.parallel([
-						{ name: "a", fn: async () => "one" },
-						{ name: "b", fn: async () => "two" },
-					]),
+					ctx.all(
+						ctx.activity("a", async () => "one"),
+						ctx.activity("b", async () => "two"),
+					),
 					ctx.sleep(5000),
 				);
 			};
@@ -3381,11 +3437,14 @@ describe("Interpreter", () => {
 			expect(result).toBe("deep: deep-data");
 		});
 
-		it("child with waitForAny routes correct signal", async () => {
+		it("child with race routes correct signal", async () => {
 			const childWorkflow: WorkflowFunction<string, { a: string; b: string }> =
 				function* (ctx) {
-					const { signal, payload } = yield* ctx.waitForAny("a", "b");
-					return `${signal}:${payload}`;
+					const { winner, value } = yield* ctx.race(
+						ctx.waitFor("a"),
+						ctx.waitFor("b"),
+					);
+					return winner === 0 ? `a:${value}` : `b:${value}`;
 				};
 
 			const parentWorkflow: WorkflowFunction<string, { a: string; b: string }> =
