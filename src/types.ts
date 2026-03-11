@@ -64,67 +64,81 @@ export type Requirements<W> =
 		: W extends Step<infer R> ? R
 		: never;
 
-// --- Commands (yielded by workflow generators) ---
+// --- Descriptors (yielded by workflow generators, no seq) ---
 
-export type ActivityCommand = {
+export type ActivityDescriptor = {
 	type: "activity";
 	name: string;
 	fn: (signal: AbortSignal) => Promise<unknown>;
-	seq: number;
 };
 
-export type ReceiveCommand = {
+export type ReceiveDescriptor = {
 	type: "receive";
 	signal: string;
-	seq: number;
 };
 
-export type SleepCommand = {
+export type SleepDescriptor = {
 	type: "sleep";
 	durationMs: number;
-	seq: number;
 };
 
-export type ChildCommand = {
+export type ChildDescriptor = {
 	type: "child";
 	name: string;
 	workflow: AnyWorkflowFunction;
-	seq: number;
 };
 
-export type PublishedCommand = {
+export type PublishedDescriptor = {
 	type: "published";
 	workflowId: string;
 	start: boolean;
-	seq: number;
 	where?: (value: unknown) => boolean;
 	afterSeq?: number;
 };
 
-export type JoinCommand = {
+export type JoinDescriptor = {
 	type: "join";
 	workflowId: string;
 	start: boolean;
-	seq: number;
 };
 
-export type PublishCommand = {
+export type PublishDescriptor = {
 	type: "publish";
 	value: unknown;
-	seq: number;
 };
 
-export type RaceCommand = {
+export type RaceDescriptor = {
 	type: "race";
-	items: Command[];
-	seq: number;
+	items: Descriptor[];
 };
 
-export type AllCommand = {
+export type AllDescriptor = {
 	type: "all";
-	items: Command[];
-	seq: number;
+	items: Descriptor[];
 };
+
+export type Descriptor =
+	| ActivityDescriptor
+	| ReceiveDescriptor
+	| SleepDescriptor
+	| ChildDescriptor
+	| PublishedDescriptor
+	| JoinDescriptor
+	| RaceDescriptor
+	| AllDescriptor
+	| PublishDescriptor;
+
+// --- Commands (descriptors with seq, internal to interpreter) ---
+
+export type ActivityCommand = ActivityDescriptor & { seq: number };
+export type ReceiveCommand = ReceiveDescriptor & { seq: number };
+export type SleepCommand = SleepDescriptor & { seq: number };
+export type ChildCommand = ChildDescriptor & { seq: number };
+export type PublishedCommand = PublishedDescriptor & { seq: number };
+export type JoinCommand = JoinDescriptor & { seq: number };
+export type PublishCommand = PublishDescriptor & { seq: number };
+export type RaceCommand = { type: "race"; items: Command[]; seq: number };
+export type AllCommand = { type: "all"; items: Command[]; seq: number };
 
 export type Command =
 	| ActivityCommand
@@ -347,7 +361,7 @@ export type ResultOf<
 
 // --- Workflow types ---
 
-export type Workflow<A, R extends Requirement = never> = Generator<Command & Step<R>, A, unknown>;
+export type Workflow<A, R extends Requirement = never> = Generator<Descriptor & Step<R>, A, unknown>;
 
 // Wraps a generator function into a workflow with inferred requirements.
 // At runtime, this is the identity function — the magic is at the type level,
@@ -505,6 +519,7 @@ export type WorkflowContext<
 			) => Workflow<void, Requirement>,
 		): Workflow<T, Dependency<K, WorkflowMap[K]>>;
 	};
+
 };
 
 // Internal context type for the interpreter. Matches WorkflowContext structurally
@@ -557,6 +572,9 @@ export type InternalWorkflowContext = {
 		) => Workflow<void, Requirement>,
 	) => Workflow<T, Requirement>;
 };
+
+// Type alias for generators yielding descriptors (internal to interpreter)
+type DescriptorGenerator<T = unknown> = Generator<Descriptor, T, unknown>;
 
 // --- Observers ---
 

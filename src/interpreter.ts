@@ -8,6 +8,7 @@ import {
 	type AnyWorkflowFunction,
 	CancelledError,
 	type Command,
+	type Descriptor,
 	type InternalWorkflowContext,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
@@ -78,19 +79,16 @@ export class Interpreter {
 		// happens at the WorkflowContext<SignalMap, WorkflowMap> level for end users.
 		this.context = {
 			activity: <T>(name: string, fn: (signal: AbortSignal) => Promise<T>) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<Command, T, unknown> {
-					const result = yield { type: "activity" as const, name, fn, seq };
+				return (function* (): Generator<Descriptor, T, unknown> {
+					const result = yield { type: "activity" as const, name, fn };
 					return result as T;
 				})();
 			},
 			receive: (signalName: string) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<Command, unknown, unknown> {
+				return (function* (): Generator<Descriptor, unknown, unknown> {
 					const result = yield {
 						type: "receive" as const,
 						signal: signalName,
-						seq,
 					};
 					return result;
 				})();
@@ -101,18 +99,18 @@ export class Interpreter {
 					(
 						ctx: InternalWorkflowContext,
 						payload: unknown,
-						done: (value: unknown) => Generator<Command, never, unknown>,
-					) => Generator<Command, void, unknown>
+						done: (value: unknown) => Generator<Descriptor, never, unknown>,
+					) => Generator<Descriptor, void, unknown>
 				>,
-			): Generator<Command, T, unknown> => {
+			): Generator<Descriptor, T, unknown> => {
 				const ctx = this.context;
 				const handlerNames = Object.keys(handlers);
-				const doneFn = (value: unknown): Generator<Command, never, unknown> => {
-					return (function* (): Generator<Command, never, unknown> {
+				const doneFn = (value: unknown): Generator<Descriptor, never, unknown> => {
+					return (function* (): Generator<Descriptor, never, unknown> {
 						throw new DoneSignal(value);
 					})();
 				};
-				return (function* (): Generator<Command, T, unknown> {
+				return (function* (): Generator<Descriptor, T, unknown> {
 					for (;;) {
 						const result = yield* ctx.race(
 							...handlerNames.map((n) => ctx.receive(n)),
@@ -132,73 +130,64 @@ export class Interpreter {
 				})();
 			},
 			sleep: (durationMs: number) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<Command, void, unknown> {
-					yield { type: "sleep" as const, durationMs, seq };
+				return (function* (): Generator<Descriptor, void, unknown> {
+					yield { type: "sleep" as const, durationMs };
 				})();
 			},
 			child: <T>(
 				name: string,
 				workflow: AnyWorkflowFunction,
 			) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<Command, T, unknown> {
+				return (function* (): Generator<Descriptor, T, unknown> {
 					const result = yield {
 						type: "child" as const,
 						name,
 						workflow: workflow as AnyWorkflowFunction,
-						seq,
 					};
 					return result as T;
 				})();
 			},
-			all: (...branches: Generator<Command, unknown, unknown>[]) => {
-				const seq = ++this.seq;
-				const items: Command[] = branches.map((gen) => {
+			all: (...branches: Generator<Descriptor, unknown, unknown>[]) => {
+				const items: Descriptor[] = branches.map((gen) => {
 					const result = gen.next();
 					if (result.done) throw new Error("All branch yielded no command");
-					return result.value as Command;
+					return result.value as Descriptor;
 				});
-				return (function* (): Generator<Command, unknown[], unknown> {
+				return (function* (): Generator<Descriptor, unknown[], unknown> {
 					const result = yield {
 						type: "all" as const,
 						items,
-						seq,
 					};
 					return result as unknown[];
 				})();
 			},
-			race: (...branches: Generator<Command, unknown, unknown>[]) => {
-				const seq = ++this.seq;
-				const items: Command[] = branches.map((gen) => {
+			race: (...branches: Generator<Descriptor, unknown, unknown>[]) => {
+				const items: Descriptor[] = branches.map((gen) => {
 					const result = gen.next();
 					if (result.done) throw new Error("Race branch yielded no command");
-					return result.value as Command;
+					return result.value as Descriptor;
 				});
 				return (function* (): Generator<
-					Command,
+					Descriptor,
 					{ winner: number; value: unknown },
 					unknown
 				> {
 					const result = yield {
 						type: "race" as const,
 						items,
-						seq,
 					};
 					return result as { winner: number; value: unknown };
 				})();
 			},
 			published: (workflowId: string, options?: { start?: boolean; where?: (value: unknown) => boolean; afterSeq?: number }) => {
-				const seq = ++this.seq;
 				const start = options?.start ?? true;
 				const where = options?.where;
 				const afterSeq = options?.afterSeq;
-				return (function* (): Generator<Command, unknown, unknown> {
+				return (function* (): Generator<Descriptor, unknown, unknown> {
 					const result = yield {
 						type: "published" as const,
 						workflowId,
 						start,
-						seq,
 						where,
 						afterSeq,
 					};
@@ -206,14 +195,12 @@ export class Interpreter {
 				})();
 			},
 			join: (workflowId: string, options?: { start?: boolean }) => {
-				const seq = ++this.seq;
 				const start = options?.start ?? true;
-				return (function* (): Generator<Command, unknown, unknown> {
+				return (function* (): Generator<Descriptor, unknown, unknown> {
 					const result = yield {
 						type: "join" as const,
 						workflowId,
 						start,
-						seq,
 					};
 					return result;
 				})();
@@ -222,9 +209,8 @@ export class Interpreter {
 				return this.context.join(id);
 			},
 			publish: (value: unknown) => {
-				const seq = ++this.seq;
-				return (function* (): Generator<Command, void, unknown> {
-					yield { type: "publish" as const, value, seq };
+				return (function* (): Generator<Descriptor, void, unknown> {
+					yield { type: "publish" as const, value };
 				})();
 			},
 			subscribe: <T>(
@@ -233,20 +219,20 @@ export class Interpreter {
 				body: (
 					ctx: InternalWorkflowContext,
 					value: unknown,
-					done: (value: unknown) => Generator<Command, never, unknown>,
-				) => Generator<Command, void, unknown>,
-			): Generator<Command, T, unknown> => {
+					done: (value: unknown) => Generator<Descriptor, never, unknown>,
+				) => Generator<Descriptor, void, unknown>,
+			): Generator<Descriptor, T, unknown> => {
 				const ctx = this.context;
 				const start = options?.start;
 				const where = options?.where;
 				const getPublishSeq = () =>
 					this.registry?.getPublishSeq(workflowId) ?? 0;
-				const doneFn = (value: unknown): Generator<Command, never, unknown> => {
-					return (function* (): Generator<Command, never, unknown> {
+				const doneFn = (value: unknown): Generator<Descriptor, never, unknown> => {
+					return (function* (): Generator<Descriptor, never, unknown> {
 						throw new DoneSignal(value);
 					})();
 				};
-				return (function* (): Generator<Command, T, unknown> {
+				return (function* (): Generator<Descriptor, T, unknown> {
 					// First iteration: get current or first matching value
 					let value = yield* ctx.published(workflowId, { start, where });
 					for (;;) {
@@ -492,7 +478,8 @@ export class Interpreter {
 			let next = gen.next();
 
 			while (!next.done) {
-				const command = next.value as Command;
+				const descriptor = next.value as Descriptor;
+				const command = this.assignSeq(descriptor);
 				try {
 					const result = await this.executeCommand(command);
 					next = gen.next(result);
@@ -533,6 +520,18 @@ export class Interpreter {
 			this.notifyChange();
 			return undefined;
 		}
+	}
+
+	private assignSeq(descriptor: Descriptor): Command {
+		if (descriptor.type === "race" || descriptor.type === "all") {
+			// Assign seq to items first, then the container — matches the order
+			// in which context methods consumed seq (branches before race/all).
+			const items = descriptor.items.map((item) => this.assignSeq(item));
+			const seq = ++this.seq;
+			return { ...descriptor, items, seq };
+		}
+		const seq = ++this.seq;
+		return { ...descriptor, seq } as Command;
 	}
 
 	private async executeCommand(command: Command): Promise<unknown> {
