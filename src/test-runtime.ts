@@ -6,9 +6,16 @@ import { Interpreter } from "./interpreter";
 import type {
 	AnyWorkflowFunction,
 	WorkflowContext,
-	WorkflowFunction,
 	WorkflowRegistryInterface,
 } from "./types";
+
+// Extracts the SignalMap from a workflow function's context parameter
+type ExtractSignalMap<F> =
+	F extends (ctx: WorkflowContext<infer S, any, any>) => any ? S : Record<string, unknown>;
+
+// Extracts the return value type from a workflow function's generator
+type ExtractResult<F> =
+	F extends (...args: any[]) => Generator<any, infer A, any> ? A : unknown;
 
 type TestRuntimeOptions<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
@@ -23,13 +30,12 @@ type TestRuntimeOptions<
 };
 
 export async function createTestRuntime<
-	T,
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-	WorkflowMap extends Record<string, unknown> = Record<string, never>,
+	// biome-ignore lint/suspicious/noExplicitAny: infers from any workflow function shape
+	F extends (ctx: any) => Generator<any, any, unknown>,
 >(
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
-	options: TestRuntimeOptions<SignalMap>,
-): Promise<T> {
+	workflowFn: F,
+	options: TestRuntimeOptions<ExtractSignalMap<F>>,
+): Promise<ExtractResult<F>> {
 	const { activities = {}, signals = [], workflowResults } = options;
 	const signalQueue = [...signals];
 
@@ -87,9 +93,9 @@ export async function createTestRuntime<
 			},
 			child: <U, CS extends Record<string, unknown>>(
 				name: string,
-				workflow: WorkflowFunction<U, CS>,
+				workflow: AnyWorkflowFunction,
 			) => {
-				const wrappedChild: WorkflowFunction<U, CS> = function* (childCtx) {
+				const wrappedChild: AnyWorkflowFunction = function* (childCtx) {
 					const wrappedChildCtx = wrapContext(
 						childCtx as unknown as WorkflowContext<
 							Record<string, unknown>,
@@ -163,5 +169,5 @@ export async function createTestRuntime<
 		throw new Error(interpreter.error ?? "Workflow failed");
 	}
 
-	return interpreter.result as T;
+	return interpreter.result as ExtractResult<F>;
 }

@@ -430,9 +430,9 @@ export type WorkflowContext<
 		handlers: SignalHandlers<SignalMap, WorkflowMap, PublishType>,
 	) => Workflow<T, Requirement>;
 	sleep: (durationMs: number) => Workflow<void>;
-	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
+	child: <T>(
 		name: string,
-		workflow: WorkflowFunction<T, CS>,
+		workflow: AnyWorkflowFunction,
 	) => Workflow<T>;
 	all: {
 		<A, B>(
@@ -516,7 +516,7 @@ export type WorkflowContext<
 
 // Internal context type for the interpreter. Matches WorkflowContext structurally
 // but without generic constraints that TypeScript can't satisfy at the erased level.
-// WorkflowFunction narrows this to the user-facing WorkflowContext<SignalMap, WorkflowMap>.
+// workflow() narrows this to the user-facing WorkflowContext<SignalMap, WorkflowMap>.
 export type InternalWorkflowContext = {
 	activity: <T>(
 		name: string,
@@ -534,9 +534,9 @@ export type InternalWorkflowContext = {
 		>,
 	) => Workflow<T, Requirement>;
 	sleep: (durationMs: number) => Workflow<void>;
-	child: <T, CS extends Record<string, unknown>>(
+	child: <T>(
 		name: string,
-		workflow: WorkflowFunction<T, CS>,
+		workflow: AnyWorkflowFunction,
 	) => Workflow<T>;
 	all: (
 		...branches: Workflow<unknown, Requirement>[]

@@ -16,9 +16,9 @@ import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
+	WorkflowContext,
 	WorkflowEvent,
 	WorkflowEventObserver,
-	WorkflowFunction,
 	WorkflowState,
 	WorkflowStorage,
 } from "./types";
@@ -62,7 +62,7 @@ export function useWorkflow<
 	PublishType = never,
 >(
 	workflowId: string,
-	workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap, PublishType>,
+	workflowFn: (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Generator<any, T, unknown>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap>;
 

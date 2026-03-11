@@ -16,7 +16,6 @@ import {
 	type WorkflowEvent,
 	type WorkflowEventObserver,
 	type WorkflowFailedEvent,
-	type WorkflowFunction,
 	type WorkflowRegistryInterface,
 	type WorkflowState,
 } from "./types";
@@ -76,7 +75,7 @@ export class Interpreter {
 		this.seq = 0;
 
 		// The context methods work with `unknown` internally; generic narrowing
-		// happens at the WorkflowFunction<T, SignalMap, WorkflowMap> level for end users.
+		// happens at the WorkflowContext<SignalMap, WorkflowMap> level for end users.
 		this.context = {
 			activity: <T>(name: string, fn: (signal: AbortSignal) => Promise<T>) => {
 				const seq = ++this.seq;
@@ -138,9 +137,9 @@ export class Interpreter {
 					yield { type: "sleep" as const, durationMs, seq };
 				})();
 			},
-			child: <T, CS extends Record<string, unknown>>(
+			child: <T>(
 				name: string,
-				workflow: WorkflowFunction<T, CS>,
+				workflow: AnyWorkflowFunction,
 			) => {
 				const seq = ++this.seq;
 				return (function* (): Generator<Command, T, unknown> {
