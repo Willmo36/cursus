@@ -16,7 +16,6 @@ import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
-	WorkflowContext,
 	WorkflowEvent,
 	WorkflowEventObserver,
 	WorkflowState,
@@ -58,11 +57,9 @@ export function useWorkflow<T = unknown>(
 export function useWorkflow<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	PublishType = never,
 >(
 	workflowId: string,
-	workflowFn: (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Generator<any, T, unknown>,
+	workflowFn: AnyWorkflowFunction,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap>;
 

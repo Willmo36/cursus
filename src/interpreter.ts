@@ -10,7 +10,6 @@ import {
 	type Command,
 	type Descriptor,
 	DoneSignal,
-	type InternalWorkflowContext,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
 	type WorkflowCancelledEvent,
@@ -23,8 +22,6 @@ import {
 } from "./types";
 
 export class Interpreter {
-	readonly context: InternalWorkflowContext;
-
 	private workflowFn: AnyWorkflowFunction;
 	private log: EventLog;
 	private seq = 0;
@@ -71,186 +68,6 @@ export class Interpreter {
 		this._workflowId = workflowId;
 		this.observers = observers ?? [];
 		this.seq = 0;
-
-		// The context methods work with `unknown` internally; generic narrowing
-		// happens at the WorkflowContext<SignalMap, WorkflowMap> level for end users.
-		this.context = {
-			activity: <T>(name: string, fn: (signal: AbortSignal) => Promise<T>) => {
-				return (function* (): Generator<Descriptor, T, unknown> {
-					const result = yield { type: "activity" as const, name, fn };
-					return result as T;
-				})();
-			},
-			receive: (signalName: string) => {
-				return (function* (): Generator<Descriptor, unknown, unknown> {
-					const result = yield {
-						type: "receive" as const,
-						signal: signalName,
-					};
-					return result;
-				})();
-			},
-			handle: <T>(
-				handlers: Record<
-					string,
-					(
-						ctx: InternalWorkflowContext,
-						payload: unknown,
-						done: (value: unknown) => Generator<Descriptor, never, unknown>,
-					) => Generator<Descriptor, void, unknown>
-				>,
-			): Generator<Descriptor, T, unknown> => {
-				const ctx = this.context;
-				const handlerNames = Object.keys(handlers);
-				const doneFn = (value: unknown): Generator<Descriptor, never, unknown> => {
-					return (function* (): Generator<Descriptor, never, unknown> {
-						throw new DoneSignal(value);
-					})();
-				};
-				return (function* (): Generator<Descriptor, T, unknown> {
-					for (;;) {
-						const result = yield* ctx.race(
-							...handlerNames.map((n) => ctx.receive(n)),
-						);
-						const signal = handlerNames[result.winner];
-						const handler = handlers[signal];
-						if (!handler) continue;
-						try {
-							yield* handler(ctx, result.value, doneFn);
-						} catch (err) {
-							if (err instanceof DoneSignal) {
-								return err.value as T;
-							}
-							throw err;
-						}
-					}
-				})();
-			},
-			sleep: (durationMs: number) => {
-				return (function* (): Generator<Descriptor, void, unknown> {
-					yield { type: "sleep" as const, durationMs };
-				})();
-			},
-			child: <T>(
-				name: string,
-				workflow: AnyWorkflowFunction,
-			) => {
-				return (function* (): Generator<Descriptor, T, unknown> {
-					const result = yield {
-						type: "child" as const,
-						name,
-						workflow: workflow as AnyWorkflowFunction,
-					};
-					return result as T;
-				})();
-			},
-			all: (...branches: Generator<Descriptor, unknown, unknown>[]) => {
-				const items: Descriptor[] = branches.map((gen) => {
-					const result = gen.next();
-					if (result.done) throw new Error("All branch yielded no command");
-					return result.value as Descriptor;
-				});
-				return (function* (): Generator<Descriptor, unknown[], unknown> {
-					const result = yield {
-						type: "all" as const,
-						items,
-					};
-					return result as unknown[];
-				})();
-			},
-			race: (...branches: Generator<Descriptor, unknown, unknown>[]) => {
-				const items: Descriptor[] = branches.map((gen) => {
-					const result = gen.next();
-					if (result.done) throw new Error("Race branch yielded no command");
-					return result.value as Descriptor;
-				});
-				return (function* (): Generator<
-					Descriptor,
-					{ winner: number; value: unknown },
-					unknown
-				> {
-					const result = yield {
-						type: "race" as const,
-						items,
-					};
-					return result as { winner: number; value: unknown };
-				})();
-			},
-			published: (workflowId: string, options?: { start?: boolean; where?: (value: unknown) => boolean; afterSeq?: number }) => {
-				const start = options?.start ?? true;
-				const where = options?.where;
-				const afterSeq = options?.afterSeq;
-				return (function* (): Generator<Descriptor, unknown, unknown> {
-					const result = yield {
-						type: "published" as const,
-						workflowId,
-						start,
-						where,
-						afterSeq,
-					};
-					return result;
-				})();
-			},
-			join: (workflowId: string, options?: { start?: boolean }) => {
-				const start = options?.start ?? true;
-				return (function* (): Generator<Descriptor, unknown, unknown> {
-					const result = yield {
-						type: "join" as const,
-						workflowId,
-						start,
-					};
-					return result;
-				})();
-			},
-			workflow: (id: string) => {
-				return this.context.join(id);
-			},
-			publish: (value: unknown) => {
-				return (function* (): Generator<Descriptor, void, unknown> {
-					yield { type: "publish" as const, value };
-				})();
-			},
-			subscribe: <T>(
-				workflowId: string,
-				options: { start?: boolean; where?: (value: unknown) => boolean },
-				body: (
-					ctx: InternalWorkflowContext,
-					value: unknown,
-					done: (value: unknown) => Generator<Descriptor, never, unknown>,
-				) => Generator<Descriptor, void, unknown>,
-			): Generator<Descriptor, T, unknown> => {
-				const ctx = this.context;
-				const start = options?.start;
-				const where = options?.where;
-				const getPublishSeq = () =>
-					this.registry?.getPublishSeq(workflowId) ?? 0;
-				const doneFn = (value: unknown): Generator<Descriptor, never, unknown> => {
-					return (function* (): Generator<Descriptor, never, unknown> {
-						throw new DoneSignal(value);
-					})();
-				};
-				return (function* (): Generator<Descriptor, T, unknown> {
-					// First iteration: get current or first matching value
-					let value = yield* ctx.published(workflowId, { start, where });
-					for (;;) {
-						try {
-							yield* body(ctx, value, doneFn);
-						} catch (err) {
-							if (err instanceof DoneSignal) {
-								return err.value as T;
-							}
-							throw err;
-						}
-						// Body completed — wait for next publish
-						value = yield* ctx.published(workflowId, {
-							start,
-							where,
-							afterSeq: getPublishSeq(),
-						});
-					}
-				})();
-			},
-		};
 	}
 
 	onStateChange(callback: () => void): () => void {
@@ -466,10 +283,7 @@ export class Interpreter {
 			this.log.append({ type: "workflow_started", timestamp: Date.now() });
 		}
 
-		// InternalWorkflowContext is structurally identical to WorkflowContext at
-		// runtime, but TS can't unify overloaded return types with `unknown`.
-		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary between InternalWorkflowContext and user-facing WorkflowContext
-		const gen = this.workflowFn(this.context as any);
+		const gen = this.workflowFn();
 
 		try {
 			let next = gen.next();

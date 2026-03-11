@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handle, publish, race, receive, sleep, workflow } from "./types";
-import type { Dependency, Publishes, Requirements, Signal, Workflow, WorkflowContext } from "./types";
+import { activity, all, child, handle, publish, published, race, receive, sleep, workflow } from "./types";
+import type { Dependency, Publishes, Requirements, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -19,7 +19,7 @@ describe("Monad laws", () => {
 	describe("Pure/return", () => {
 		it("workflow that yields no commands returns value directly", async () => {
 			// biome-ignore lint/correctness/useYield: testing pure return with no yields
-			const w = workflow(function* (_ctx: WorkflowContext) {
+			const w = workflow(function* () {
 				return 42;
 			});
 
@@ -28,7 +28,7 @@ describe("Monad laws", () => {
 		});
 
 		it("yield* pure(a) returns a", async () => {
-			const w = workflow(function* (_ctx: WorkflowContext) {
+			const w = workflow(function* () {
 				return yield* pure("hello");
 			});
 
@@ -39,23 +39,20 @@ describe("Monad laws", () => {
 
 	describe("Left identity: pure(a) >>= f  ≡  f(a)", () => {
 		it("yield* pure(a) then f equals f(a) directly", async () => {
-			function* f(
-				ctx: WorkflowContext,
-				x: number,
-			): Workflow<string> {
-				const result = yield* ctx.activity("double", async () => x * 2);
+			function* f(x: number): Workflow<string> {
+				const result = yield* activity("double", async () => x * 2);
 				return `result: ${result}`;
 			}
 
 			// Left side: pure(5) >>= f
-			const left = workflow(function* (ctx: WorkflowContext) {
+			const left = workflow(function* () {
 				const a = yield* pure(5);
-				return yield* f(ctx, a);
+				return yield* f(a);
 			});
 
 			// Right side: f(5) directly
-			const right = workflow(function* (ctx: WorkflowContext) {
-				return yield* f(ctx, 5);
+			const right = workflow(function* () {
+				return yield* f(5);
 			});
 
 			const leftResult = await createTestRuntime(left, {
@@ -72,13 +69,13 @@ describe("Monad laws", () => {
 	describe("Right identity: m >>= pure  ≡  m", () => {
 		it("workflow piped through pure produces same result", async () => {
 			// m: a workflow that does real work
-			const m = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const m = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			// m >>= pure: feed m's result through pure
-			const mBindPure = workflow(function* (ctx: WorkflowContext) {
-				const a = yield* ctx.activity("greet", async () => "hello");
+			const mBindPure = workflow(function* () {
+				const a = yield* activity("greet", async () => "hello");
 				return yield* pure(a);
 			});
 
@@ -93,27 +90,21 @@ describe("Monad laws", () => {
 		});
 
 		it("child workflow behaves same as inline (right identity via delegation)", async () => {
-			const childWorkflow = workflow(
-				function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
-					return `got: ${val}`;
-				},
-			);
+			const childWorkflow = workflow(function* () {
+				const val = yield* receive<string>("data");
+				return `got: ${val}`;
+			});
 
-			// Via ctx.child (yield* delegation to sub-interpreter)
-			const viaChild = workflow(
-				function* (ctx: WorkflowContext<{ data: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
-				},
-			);
+			// Via child (yield* delegation to sub-interpreter)
+			const viaChild = workflow(function* () {
+				return yield* child<string>("sub", childWorkflow);
+			});
 
 			// Inline (same logic, no child)
-			const inline = workflow(
-				function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
-					return `got: ${val}`;
-				},
-			);
+			const inline = workflow(function* () {
+				const val = yield* receive<string>("data");
+				return `got: ${val}`;
+			});
 
 			const childResult = await createTestRuntime(viaChild, {
 				signals: [{ name: "data", payload: "test" }],
@@ -129,46 +120,35 @@ describe("Monad laws", () => {
 	describe("Associativity: (m >>= f) >>= g  ≡  m >>= (x => f(x) >>= g)", () => {
 		it("extracting a sub-generator and yield*-ing produces same result as inlining", async () => {
 			// Three sequential operations: fetch user, greet user, format greeting
-			function* fetchUser(
-				ctx: WorkflowContext,
-			): Workflow<string> {
-				return yield* ctx.activity("fetchUser", async () => "Max");
+			function* fetchUser(): Workflow<string> {
+				return yield* activity("fetchUser", async () => "Max");
 			}
 
-			function* greetUser(
-				ctx: WorkflowContext,
-				name: string,
-			): Workflow<string> {
-				return yield* ctx.activity("greet", async () => `Hello, ${name}!`);
+			function* greetUser(name: string): Workflow<string> {
+				return yield* activity("greet", async () => `Hello, ${name}!`);
 			}
 
-			function* formatGreeting(
-				ctx: WorkflowContext,
-				greeting: string,
-			): Workflow<string> {
-				return yield* ctx.activity("format", async () => `[${greeting}]`);
+			function* formatGreeting(greeting: string): Workflow<string> {
+				return yield* activity("format", async () => `[${greeting}]`);
 			}
 
 			// Left-associated: (m >>= f) >>= g
-			const leftAssoc = workflow(function* (ctx: WorkflowContext) {
-				const user = yield* fetchUser(ctx);
-				const greeting = yield* greetUser(ctx, user);
-				return yield* formatGreeting(ctx, greeting);
+			const leftAssoc = workflow(function* () {
+				const user = yield* fetchUser();
+				const greeting = yield* greetUser(user);
+				return yield* formatGreeting(greeting);
 			});
 
 			// Right-associated: m >>= (x => f(x) >>= g)
 			// Equivalent to extracting a composed sub-generator
-			function* greetAndFormat(
-				ctx: WorkflowContext,
-				name: string,
-			): Workflow<string> {
-				const greeting = yield* greetUser(ctx, name);
-				return yield* formatGreeting(ctx, greeting);
+			function* greetAndFormat(name: string): Workflow<string> {
+				const greeting = yield* greetUser(name);
+				return yield* formatGreeting(greeting);
 			}
 
-			const rightAssoc = workflow(function* (ctx: WorkflowContext) {
-				const user = yield* fetchUser(ctx);
-				return yield* greetAndFormat(ctx, user);
+			const rightAssoc = workflow(function* () {
+				const user = yield* fetchUser();
+				return yield* greetAndFormat(user);
 			});
 
 			const mocks = {
@@ -194,8 +174,8 @@ describe("Monad laws", () => {
 	describe("Requirement inference", () => {
 
 		it("activity-only workflow has no requirements", () => {
-			const w = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("fetch", async () => 42);
+			const w = workflow(function* () {
+				return yield* activity("fetch", async () => 42);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, never> = true;
@@ -204,8 +184,8 @@ describe("Monad laws", () => {
 		});
 
 		it("receive propagates Signal requirement", () => {
-			const w = workflow(function* (ctx: WorkflowContext<{ login: { name: string } }>) {
-				const user = yield* ctx.receive("login");
+			const w = workflow(function* () {
+				const user = yield* receive<{ name: string }, "login">("login");
 				return user.name;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
@@ -215,10 +195,8 @@ describe("Monad laws", () => {
 		});
 
 		it("published propagates Dependency requirement", () => {
-			const w = workflow(function* (
-				ctx: WorkflowContext<Record<string, unknown>, { config: { url: string } }>,
-			) {
-				const config = yield* ctx.published("config");
+			const w = workflow(function* () {
+				const config = yield* published<{ url: string }, "config">("config");
 				return config.url;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
@@ -228,10 +206,8 @@ describe("Monad laws", () => {
 		});
 
 		it("publish propagates Publishes requirement", () => {
-			const w = workflow(function* (
-				ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, number>,
-			) {
-				yield* ctx.publish(42);
+			const w = workflow(function* () {
+				yield* publish(42);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Publishes<number>> = true;
@@ -240,16 +216,10 @@ describe("Monad laws", () => {
 		});
 
 		it("multiple operations accumulate requirements as union", () => {
-			const w = workflow(function* (
-				ctx: WorkflowContext<
-					{ login: { name: string } },
-					{ config: { url: string } },
-					number
-				>,
-			) {
-				const config = yield* ctx.published("config");
-				const user = yield* ctx.receive("login");
-				yield* ctx.publish(42);
+			const w = workflow(function* () {
+				const config = yield* published<{ url: string }, "config">("config");
+				const user = yield* receive<{ name: string }, "login">("login");
+				yield* publish(42);
 				return `${config.url}-${user.name}`;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
@@ -264,9 +234,9 @@ describe("Monad laws", () => {
 		});
 
 		it("workflow() constructor enables inference and works at runtime", async () => {
-			const w = workflow(function* (ctx: WorkflowContext<{ greet: string }>) {
-				const name = yield* ctx.receive("greet");
-				const msg = yield* ctx.activity("format", async () => `Hello ${name}`);
+			const w = workflow(function* () {
+				const name = yield* receive<string, "greet">("greet");
+				const msg = yield* activity("format", async () => `Hello ${name}`);
 				return msg;
 			});
 
