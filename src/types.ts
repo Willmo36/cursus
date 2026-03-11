@@ -392,52 +392,52 @@ export function workflow<F extends (...args: any[]) => Generator<any, any, unkno
 export function activity<T>(
 	name: string,
 	fn: (signal: AbortSignal) => Promise<T>,
-): Workflow<T> {
+): Generator<ActivityDescriptor & Step<never>, T, unknown> {
 	return (function* () {
-		const result = yield { type: "activity" as const, name, fn } as Descriptor & Step<never>;
+		const result = yield { type: "activity" as const, name, fn } as ActivityDescriptor & Step<never>;
 		return result as T;
 	})();
 }
 
 export function receive<V, K extends string = string>(
 	signal: K,
-): Workflow<V, Signal<K, V>> {
+): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> {
 	return (function* () {
-		const result = yield { type: "receive" as const, signal } as Descriptor & Step<Signal<K, V>>;
+		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<K, V>>;
 		return result as V;
 	})();
 }
 
-export function sleep(durationMs: number): Workflow<void> {
+export function sleep(durationMs: number): Generator<SleepDescriptor & Step<never>, void, unknown> {
 	return (function* () {
-		yield { type: "sleep" as const, durationMs } as Descriptor & Step<never>;
+		yield { type: "sleep" as const, durationMs } as SleepDescriptor & Step<never>;
 	})();
 }
 
 export function child<T>(
 	name: string,
 	workflowFn: AnyWorkflowFunction,
-): Workflow<T> {
+): Generator<ChildDescriptor & Step<never>, T, unknown> {
 	return (function* () {
 		const result = yield {
 			type: "child" as const,
 			name,
 			workflow: workflowFn,
-		} as Descriptor & Step<never>;
+		} as ChildDescriptor & Step<never>;
 		return result as T;
 	})();
 }
 
-export function publish<V>(value: V): Workflow<void, Publishes<V>> {
+export function publish<V>(value: V): Generator<PublishDescriptor & Step<Publishes<V>>, void, unknown> {
 	return (function* () {
-		yield { type: "publish" as const, value } as Descriptor & Step<Publishes<V>>;
+		yield { type: "publish" as const, value } as PublishDescriptor & Step<Publishes<V>>;
 	})();
 }
 
 export function published<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean; where?: (value: V) => boolean; afterSeq?: number },
-): Workflow<V, Dependency<K, V>> {
+): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> {
 	const start = options?.start ?? true;
 	return (function* () {
 		const result = yield {
@@ -446,7 +446,7 @@ export function published<V, K extends string = string>(
 			start,
 			where: options?.where as ((value: unknown) => boolean) | undefined,
 			afterSeq: options?.afterSeq,
-		} as Descriptor & Step<Dependency<K, V>>;
+		} as PublishedDescriptor & Step<Dependency<K, V>>;
 		return result as V;
 	})();
 }
@@ -454,54 +454,54 @@ export function published<V, K extends string = string>(
 export function join<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean },
-): Workflow<V, Dependency<K, V>> {
+): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> {
 	const start = options?.start ?? true;
 	return (function* () {
 		const result = yield {
 			type: "join" as const,
 			workflowId,
 			start,
-		} as Descriptor & Step<Dependency<K, V>>;
+		} as JoinDescriptor & Step<Dependency<K, V>>;
 		return result as V;
 	})();
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A, B>(a: Workflow<A, any>, b: Workflow<B, any>): Workflow<RaceResult<[A, B]>, Requirement>;
+export function race<A, B>(a: Generator<any, A, any>, b: Generator<any, B, any>): Generator<RaceDescriptor & Step<Requirement>, RaceResult<[A, B]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A, B, C>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>): Workflow<RaceResult<[A, B, C]>, Requirement>;
+export function race<A, B, C>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>): Generator<RaceDescriptor & Step<Requirement>, RaceResult<[A, B, C]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Workflow<unknown, any>[]): Workflow<{ winner: number; value: unknown }, Requirement>;
+export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Step<Requirement>, { winner: number; value: unknown }, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Workflow<unknown, any>[]): Workflow<{ winner: number; value: unknown }, Requirement> {
+export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Step<Requirement>, { winner: number; value: unknown }, unknown> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("Race branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "race" as const, items } as Descriptor & Step<Requirement>;
+		const result = yield { type: "race" as const, items } as RaceDescriptor & Step<Requirement>;
 		return result as { winner: number; value: unknown };
 	})();
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B>(a: Workflow<A, any>, b: Workflow<B, any>): Workflow<[A, B], Requirement>;
+export function all<A, B>(a: Generator<any, A, any>, b: Generator<any, B, any>): Generator<AllDescriptor & Step<Requirement>, [A, B], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B, C>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>): Workflow<[A, B, C], Requirement>;
+export function all<A, B, C>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>): Generator<AllDescriptor & Step<Requirement>, [A, B, C], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B, C, D>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>, d: Workflow<D, any>): Workflow<[A, B, C, D], Requirement>;
+export function all<A, B, C, D>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>, d: Generator<any, D, any>): Generator<AllDescriptor & Step<Requirement>, [A, B, C, D], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Workflow<unknown, any>[]): Workflow<unknown[], Requirement>;
+export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Step<Requirement>, unknown[], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Workflow<unknown, any>[]): Workflow<unknown[], Requirement> {
+export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Step<Requirement>, unknown[], unknown> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("All branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "all" as const, items } as Descriptor & Step<Requirement>;
+		const result = yield { type: "all" as const, items } as AllDescriptor & Step<Requirement>;
 		return result as unknown[];
 	})();
 }
@@ -513,7 +513,7 @@ export function subscribe<T, V, K extends string = string>(
 		value: V,
 		done: <D>(value: D) => Workflow<never>,
 	) => Workflow<void, Requirement>,
-): Workflow<T, Dependency<K, V>> {
+): Generator<SubscribeDescriptor & Step<Dependency<K, V>>, T, unknown> {
 	const start = options?.start ?? true;
 	return (function* () {
 		const result = yield {
@@ -522,7 +522,7 @@ export function subscribe<T, V, K extends string = string>(
 			start,
 			where: options?.where as ((value: unknown) => boolean) | undefined,
 			body: body as SubscribeDescriptor["body"],
-		} as Descriptor & Step<Dependency<K, V>>;
+		} as SubscribeDescriptor & Step<Dependency<K, V>>;
 		return result as T;
 	})();
 }
@@ -542,11 +542,11 @@ export function handle<T>(
 ): Workflow<T, Requirement> {
 	const handlerNames = Object.keys(handlers);
 	const doneFn = <D>(value: D): Workflow<never> => {
-		return (function* (): Generator<Descriptor, never, unknown> {
+		return (function* (): Generator<never, never, unknown> {
 			throw new DoneSignal(value);
 		})();
 	};
-	return (function* (): Generator<Descriptor, T, unknown> {
+	return (function* (): Generator<Descriptor & Step<Requirement>, T, unknown> {
 		for (;;) {
 			const result = yield* race(
 				...handlerNames.map((n) => receive(n)),

@@ -59,7 +59,8 @@ export function useWorkflow<
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 >(
 	workflowId: string,
-	workflowFn: AnyWorkflowFunction,
+	// biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T from the generator return type
+	workflowFn: (...args: any[]) => Generator<any, T, unknown>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<T, SignalMap>;
 
