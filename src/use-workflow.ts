@@ -16,6 +16,7 @@ import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflowFunction,
+	SignalMapOf,
 	WorkflowEvent,
 	WorkflowEventObserver,
 	WorkflowState,
@@ -54,15 +55,12 @@ export function useWorkflow<T = unknown>(
 ): UseWorkflowResult<T, Record<string, unknown>>;
 
 // Overload 2: run an inline workflow with optional layer deps
-export function useWorkflow<
-	T,
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
->(
+// biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T and signal map from the workflow function
+export function useWorkflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
 	workflowId: string,
-	// biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T from the generator return type
-	workflowFn: (...args: any[]) => Generator<any, T, unknown>,
+	workflowFn: F,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap>;
+): UseWorkflowResult<ReturnType<F> extends Generator<any, infer T, any> ? T : unknown, SignalMapOf<F>>;
 
 // Implementation
 export function useWorkflow(

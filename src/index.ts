@@ -48,6 +48,7 @@ export type {
 	Requirements,
 	Signal,
 	SignalHandler,
+	SignalMapOf,
 	SleepCommand,
 	SleepDescriptor,
 	SubscribeCommand,

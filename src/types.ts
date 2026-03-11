@@ -64,6 +64,23 @@ export type Requirements<W> =
 		: W extends Step<infer R> ? R
 		: never;
 
+// Extracts a signal map { name: payload } from a workflow function's requirements.
+// Filters to Signal requirements and builds a record from their key-value pairs.
+export type SignalMap<W> =
+	Requirements<W> extends infer R
+		? R extends Signal<infer K, infer V>
+			? { readonly [P in K]: V }
+			: never
+		: never;
+
+// Merges a union of single-key records into one record.
+// e.g. { profile: UserProfile } | { payment: PaymentInfo } → { profile: UserProfile; payment: PaymentInfo }
+// biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection accumulation
+type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void ? I : never;
+export type SignalMapOf<F> = F extends (...args: any[]) => infer G
+	? [SignalMap<G>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<G>>
+	: Record<string, never>;
+
 // --- Descriptors (yielded by workflow generators, no seq) ---
 
 export type ActivityDescriptor = {
@@ -466,10 +483,15 @@ export function join<V, K extends string = string>(
 	})();
 }
 
+// Extracts requirements from a generator's yield type
+type Req<G> = G extends Generator<infer Y, any, any>
+	? Y extends { __requirement?: infer R } ? R extends Requirement ? R : never : never
+	: never;
+
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A, B>(a: Generator<any, A, any>, b: Generator<any, B, any>): Generator<RaceDescriptor & Step<Requirement>, RaceResult<[A, B]>, unknown>;
+export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<RaceDescriptor & Step<Req<A> | Req<B>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A, B, C>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>): Generator<RaceDescriptor & Step<Requirement>, RaceResult<[A, B, C]>, unknown>;
+export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<RaceDescriptor & Step<Req<A> | Req<B> | Req<C>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
 export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Step<Requirement>, { winner: number; value: unknown }, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
@@ -486,11 +508,11 @@ export function race(...branches: Generator<any, unknown, any>[]): Generator<Rac
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B>(a: Generator<any, A, any>, b: Generator<any, B, any>): Generator<AllDescriptor & Step<Requirement>, [A, B], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<AllDescriptor & Step<Req<A> | Req<B>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B, C>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>): Generator<AllDescriptor & Step<Requirement>, [A, B, C], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<AllDescriptor & Step<Req<A> | Req<B> | Req<C>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A, B, C, D>(a: Generator<any, A, any>, b: Generator<any, B, any>, c: Generator<any, C, any>, d: Generator<any, D, any>): Generator<AllDescriptor & Step<Requirement>, [A, B, C, D], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>, D extends Generator<any, any, any>>(a: A, b: B, c: C, d: D): Generator<AllDescriptor & Step<Req<A> | Req<B> | Req<C> | Req<D>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never, D extends Generator<any, infer RD, any> ? RD : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
 export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Step<Requirement>, unknown[], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference

@@ -5,12 +5,7 @@ import { WorkflowDebugPanel } from "cursus/devtools";
 import { useWorkflow } from "cursus/react";
 import { useEffect, useState } from "react";
 import { storage } from "./storage";
-import {
-	type ApprovalResult,
-	approvalWorkflow,
-	type FetchResult,
-	fetchWorkflow,
-} from "./workflows";
+import { approvalWorkflow, fetchWorkflow } from "./workflows";
 
 export function App() {
 	return (
@@ -58,7 +53,7 @@ export function App() {
 }
 
 function FetchFlow() {
-	const { state, result } = useWorkflow<FetchResult>("fetch", fetchWorkflow, {
+	const { state, result } = useWorkflow("fetch", fetchWorkflow, {
 		storage,
 	});
 
@@ -150,10 +145,7 @@ function FetchFlow() {
 }
 
 function ApprovalFlow() {
-	const { state, result, signal } = useWorkflow<
-		ApprovalResult,
-		{ approve: string }
-	>("approval", approvalWorkflow, { storage });
+	const { state, result, signal } = useWorkflow("approval", approvalWorkflow, { storage });
 
 	const [seconds, setSeconds] = useState(10);
 

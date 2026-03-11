@@ -11,10 +11,9 @@ import { productWorkflow } from "./workflow";
 const storage = new LocalStorage("ssr");
 
 export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
-	const { state, result, published, receiving, signal, reset } = useWorkflow<
-		ProductResult,
-		ProductSignals
-	>("product", productWorkflow, { storage, snapshot });
+	const { state, result, published, receiving, signal, reset } = useWorkflow(
+		"product", productWorkflow, { storage, snapshot },
+	);
 
 	const product = (published ?? snapshot.published) as Product | undefined;
 
