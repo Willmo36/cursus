@@ -9,6 +9,7 @@ import {
 	CancelledError,
 	type Command,
 	type Descriptor,
+	DoneSignal,
 	type InternalWorkflowContext,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
@@ -20,10 +21,6 @@ import {
 	type WorkflowRegistryInterface,
 	type WorkflowState,
 } from "./types";
-
-class DoneSignal {
-	constructor(public readonly value: unknown) {}
-}
 
 export class Interpreter {
 	readonly context: InternalWorkflowContext;
@@ -554,6 +551,8 @@ export class Interpreter {
 				return this.executeAll(command);
 			case "publish":
 				return this.executePublish(command);
+			case "subscribe":
+				return this.executeSubscribe(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -913,6 +912,56 @@ export class Interpreter {
 		this.notifyChange();
 	}
 
+	private async executeSubscribe(
+		command: Extract<Command, { type: "subscribe" }>,
+	): Promise<unknown> {
+		const { workflowId, start, where, body } = command;
+
+		const doneFn = <T>(value: T): Generator<Descriptor, never, unknown> => {
+			return (function* (): Generator<Descriptor, never, unknown> {
+				throw new DoneSignal(value);
+			})();
+		};
+
+		// First iteration: get current or first matching value
+		const firstPublished: Descriptor = {
+			type: "published",
+			workflowId,
+			start,
+			where,
+		};
+		let value = await this.executeCommand(this.assignSeq(firstPublished));
+
+		for (;;) {
+			// Run the body as a sub-generator, driving it through the interpreter
+			const bodyGen = body(value, doneFn);
+			try {
+				let next = bodyGen.next();
+				while (!next.done) {
+					const desc = next.value as Descriptor;
+					const cmd = this.assignSeq(desc);
+					const result = await this.executeCommand(cmd);
+					next = bodyGen.next(result);
+				}
+			} catch (err) {
+				if (err instanceof DoneSignal) {
+					return err.value;
+				}
+				throw err;
+			}
+
+			// Body completed — wait for next publish
+			const nextPublished: Descriptor = {
+				type: "published",
+				workflowId,
+				start,
+				where,
+				afterSeq: this.registry?.getPublishSeq(workflowId) ?? 0,
+			};
+			value = await this.executeCommand(this.assignSeq(nextPublished));
+		}
+	}
+
 	private async executeAll(
 		command: Extract<Command, { type: "all" }>,
 	): Promise<unknown[]> {
@@ -1042,6 +1091,9 @@ export class Interpreter {
 				}
 				case "publish": {
 					throw new Error("publish cannot be used inside an all branch");
+				}
+				case "subscribe": {
+					throw new Error("subscribe cannot be used inside an all branch");
 				}
 				default: {
 					const _exhaustive: never = item;
@@ -1240,6 +1292,9 @@ export class Interpreter {
 				}
 				case "publish": {
 					throw new Error("publish cannot be used inside a race branch");
+				}
+				case "subscribe": {
+					throw new Error("subscribe cannot be used inside a race branch");
 				}
 				default: {
 					const _exhaustive: never = item;

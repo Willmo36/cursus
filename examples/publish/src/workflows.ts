@@ -1,7 +1,6 @@
 // ABOUTME: Session and checkout workflows demonstrating the publish pattern.
 // ABOUTME: Session publishes the account on login and keeps running for revocation.
-import { activity, publish, published, receive, workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+import { activity, handle, publish, published, receive, workflow } from "cursus";
 
 type Account = { user: string; tier: string };
 
@@ -15,9 +14,7 @@ type WorkflowMap = {
 	session: Account;
 };
 
-export const sessionWorkflow = workflow(function* (
-	ctx: WorkflowContext<SessionSignals, Record<string, never>, Account>,
-) {
+export const sessionWorkflow = workflow(function* () {
 	const { user } = yield* receive<{ user: string; password: string }, "login">("login");
 
 	const account: Account = yield* activity("authenticate", async () => ({
@@ -28,14 +25,15 @@ export const sessionWorkflow = workflow(function* (
 	yield* publish(account);
 
 	// Session stays alive — handle upgrades and revocation
-	yield* ctx.handle<void>({
-		upgrade: function* (ctx, { tier }) {
+	yield* handle<void>({
+		upgrade: function* (payload) {
+			const { tier } = payload as { tier: string };
 			yield* activity("apply-upgrade", async () => {
 				// In a real app, this would call an API
 			});
 			yield* publish({ ...account, tier });
 		},
-		revoke: function* (ctx, _payload, done) {
+		revoke: function* (_payload, done) {
 			yield* activity("revoke-session", async () => {
 				// Clean up session server-side
 			});

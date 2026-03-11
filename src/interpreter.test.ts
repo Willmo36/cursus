@@ -4,8 +4,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { activity, all, child, join, publish, published, race, receive, sleep, workflow } from "./types";
-import type { WorkflowContext, WorkflowRegistryInterface } from "./types";
+import { activity, all, child, handle, join, publish, published, race, receive, sleep, workflow } from "./types";
+import type { WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
@@ -2212,10 +2212,11 @@ describe("Interpreter", () => {
 
 	describe("Phase J: on/done event loop", () => {
 		it("dispatches to matching handler", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ greet: string }>) {
+			const wf = workflow(function* () {
 				let message = "";
-				const result = yield* ctx.handle<string>({
-					greet: function* (_ctx, name: string, done) {
+				const result = yield* handle<string>({
+					greet: function* (payload, done) {
+						const name = payload as string;
 						message = name;
 						yield* done(message);
 					},
@@ -2237,13 +2238,13 @@ describe("Interpreter", () => {
 		});
 
 		it("loops: handles multiple signals before done", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined; finish: undefined }>) {
+			const wf = workflow(function* () {
 				let count = 0;
-				return yield* ctx.handle<number>({
+				return yield* handle<number>({
 					inc: function* () {
 						count++;
 					},
-					finish: function* (_ctx, _payload, done) {
+					finish: function* (_payload, done) {
 						yield* done(count);
 					},
 				});
@@ -2273,10 +2274,10 @@ describe("Interpreter", () => {
 		});
 
 		it("done() exits loop and returns value", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ stop: string }>) {
-				return yield* ctx.handle<string>({
-					stop: function* (_ctx, value: string, done) {
-						yield* done(value);
+			const wf = workflow(function* () {
+				return yield* handle<string>({
+					stop: function* (payload, done) {
+						yield* done(payload as string);
 					},
 				});
 			});
@@ -2295,10 +2296,10 @@ describe("Interpreter", () => {
 		});
 
 		it("handlers can yield commands (activity, sleep, etc.)", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ go: undefined }>) {
-				return yield* ctx.handle<string>({
-					go: function* (ctx, _payload, done) {
-						const result = yield* ctx.activity("fetch", async () => "fetched");
+			const wf = workflow(function* () {
+				return yield* handle<string>({
+					go: function* (_payload, done) {
+						const result = yield* activity("fetch", async () => "fetched");
 						yield* done(result);
 					},
 				});
@@ -2319,20 +2320,20 @@ describe("Interpreter", () => {
 
 		it("full loop replays from event log", async () => {
 			const activityFn = vi.fn().mockResolvedValue("fetched");
-			const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined; finish: undefined }>) {
+			const wf = workflow(function* () {
 				let count = 0;
-				return yield* ctx.handle<string>({
-					inc: function* (ctx) {
-						yield* ctx.activity("count", activityFn);
+				return yield* handle<string>({
+					inc: function* () {
+						yield* activity("count", activityFn);
 						count++;
 					},
-					finish: function* (_ctx, _payload, done) {
+					finish: function* (_payload, done) {
 						yield* done(`total:${count}`);
 					},
 				});
 			});
 
-			// ctx.handle() uses ctx.race(ctx.receive(...)) internally.
+			// handle() uses race(receive(...)) internally.
 			// Seq allocation: receive("inc")=1, receive("finish")=2, race=3
 			// After first iteration handler: activity("count")=4
 			// Second iteration: receive("inc")=5, receive("finish")=6, race=7
@@ -2394,8 +2395,8 @@ describe("Interpreter", () => {
 		});
 
 		it("handler error propagates as workflow failure", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ go: undefined }>) {
-				return yield* ctx.handle<string>({
+			const wf = workflow(function* () {
+				return yield* handle<string>({
 					go: function* () {
 						throw new Error("handler boom");
 					},
@@ -2417,10 +2418,10 @@ describe("Interpreter", () => {
 		});
 
 		it("unmatched signal is skipped (re-waits)", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					return yield* ctx.handle<string>({
-						a: function* (_ctx, value: string, done) {
-							yield* done(value);
+			const wf = workflow(function* () {
+					return yield* handle<string>({
+						a: function* (payload, done) {
+							yield* done(payload as string);
 						},
 					});
 				});
@@ -3107,10 +3108,10 @@ describe("Interpreter", () => {
 					return `child: ${val}`;
 				});
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ go: undefined; input: string }>) {
-				return yield* ctx.handle<string>({
-					go: function* (ctx, _payload, done) {
-						const result = yield* ctx.child("sub", childWorkflow);
+			const wf = workflow(function* () {
+				return yield* handle<string>({
+					go: function* (_payload, done) {
+						const result = yield* child("sub", childWorkflow);
 						yield* done(result);
 					},
 				});
@@ -3195,10 +3196,10 @@ describe("Interpreter", () => {
 				return yield* child("grandchild", grandchild);
 			});
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ start: undefined; value: string }>) {
-				return yield* ctx.handle<string>({
-					start: function* (ctx, _payload, done) {
-						const result = yield* ctx.child("child", childWf);
+			const wf = workflow(function* () {
+				return yield* handle<string>({
+					start: function* (_payload, done) {
+						const result = yield* child("child", childWf);
 						yield* done(result);
 					},
 				});

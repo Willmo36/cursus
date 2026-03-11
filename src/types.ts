@@ -117,6 +117,17 @@ export type AllDescriptor = {
 	items: Descriptor[];
 };
 
+export type SubscribeDescriptor = {
+	type: "subscribe";
+	workflowId: string;
+	start: boolean;
+	where?: (value: unknown) => boolean;
+	body: (
+		value: unknown,
+		done: <T>(value: T) => Workflow<never>,
+	) => Workflow<void, Requirement>;
+};
+
 export type Descriptor =
 	| ActivityDescriptor
 	| ReceiveDescriptor
@@ -126,7 +137,8 @@ export type Descriptor =
 	| JoinDescriptor
 	| RaceDescriptor
 	| AllDescriptor
-	| PublishDescriptor;
+	| PublishDescriptor
+	| SubscribeDescriptor;
 
 // --- Commands (descriptors with seq, internal to interpreter) ---
 
@@ -139,6 +151,7 @@ export type JoinCommand = JoinDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
+export type SubscribeCommand = SubscribeDescriptor & { seq: number };
 
 export type Command =
 	| ActivityCommand
@@ -149,7 +162,8 @@ export type Command =
 	| JoinCommand
 	| RaceCommand
 	| AllCommand
-	| PublishCommand;
+	| PublishCommand
+	| SubscribeCommand;
 
 // --- Events (recorded in the event log) ---
 
@@ -489,6 +503,66 @@ export function all(...branches: Workflow<unknown, any>[]): Workflow<unknown[], 
 	return (function* () {
 		const result = yield { type: "all" as const, items } as Descriptor & Step<Requirement>;
 		return result as unknown[];
+	})();
+}
+
+export function subscribe<T, V, K extends string = string>(
+	workflowId: K,
+	options: { start?: boolean; where?: (value: V) => boolean },
+	body: (
+		value: V,
+		done: <D>(value: D) => Workflow<never>,
+	) => Workflow<void, Requirement>,
+): Workflow<T, Dependency<K, V>> {
+	const start = options?.start ?? true;
+	return (function* () {
+		const result = yield {
+			type: "subscribe" as const,
+			workflowId,
+			start,
+			where: options?.where as ((value: unknown) => boolean) | undefined,
+			body: body as SubscribeDescriptor["body"],
+		} as Descriptor & Step<Dependency<K, V>>;
+		return result as T;
+	})();
+}
+
+// Sentinel thrown by done() callbacks inside handle/subscribe to exit the loop.
+export class DoneSignal {
+	constructor(public readonly value: unknown) {}
+}
+
+export type SignalHandler = (
+	payload: unknown,
+	done: <T>(value: T) => Workflow<never>,
+) => Workflow<void, Requirement>;
+
+export function handle<T>(
+	handlers: Record<string, SignalHandler>,
+): Workflow<T, Requirement> {
+	const handlerNames = Object.keys(handlers);
+	const doneFn = <D>(value: D): Workflow<never> => {
+		return (function* (): Generator<Descriptor, never, unknown> {
+			throw new DoneSignal(value);
+		})();
+	};
+	return (function* (): Generator<Descriptor, T, unknown> {
+		for (;;) {
+			const result = yield* race(
+				...handlerNames.map((n) => receive(n)),
+			);
+			const signal = handlerNames[result.winner];
+			const handler = handlers[signal];
+			if (!handler) continue;
+			try {
+				yield* handler(result.value, doneFn);
+			} catch (err) {
+				if (err instanceof DoneSignal) {
+					return err.value as T;
+				}
+				throw err;
+			}
+		}
 	})();
 }
 

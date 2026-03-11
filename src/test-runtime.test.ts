@@ -3,8 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, join, race, receive, workflow } from "./types";
-import type { WorkflowContext } from "./types";
+import { activity, all, child, handle, join, race, receive, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -191,13 +190,13 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs an on/done loop with pre-queued signals", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined; finish: undefined }>) {
+		const wf = workflow(function* () {
 			let count = 0;
-			return yield* ctx.handle<number>({
+			return yield* handle<number>({
 				inc: function* () {
 					count++;
 				},
-				finish: function* (_ctx, _payload, done) {
+				finish: function* (_payload, done) {
 					yield* done(count);
 				},
 			});

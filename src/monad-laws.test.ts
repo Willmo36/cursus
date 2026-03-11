@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, publish, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, handle, publish, race, receive, sleep, workflow } from "./types";
 import type { Dependency, Publishes, Requirements, Signal, Workflow, WorkflowContext } from "./types";
 
 /**
@@ -367,6 +367,38 @@ describe("Monad laws", () => {
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Publishes<number>> = true;
 			void _check;
+		});
+
+		it("handle free function dispatches to matching handler", async () => {
+			const w = workflow(function* () {
+				return yield* handle<string>({
+					greet: function* (name, done) {
+						yield* done(name as string);
+					},
+				});
+			});
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "greet", payload: "Max" }],
+			});
+			expect(result).toBe("Max");
+		});
+
+		it("handle handlers can use free functions", async () => {
+			const w = workflow(function* () {
+				return yield* handle<string>({
+					go: function* (_payload, done) {
+						const result = yield* activity("fetch", async () => "fetched");
+						yield* done(result);
+					},
+				});
+			});
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "go", payload: undefined }],
+				activities: { fetch: () => "fetched" },
+			});
+			expect(result).toBe("fetched");
 		});
 
 		it("race free function picks first completing branch", async () => {

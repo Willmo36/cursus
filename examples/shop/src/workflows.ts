@@ -1,7 +1,6 @@
 // ABOUTME: Workflow definitions for the shop example.
 // ABOUTME: Catalog fetches products, cart manages items via signals, checkout coordinates login and cart.
-import { activity, all, join, publish, receive, workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+import { activity, all, handle, join, publish, receive, workflow } from "cursus";
 import {
 	type ApiFetch,
 	addToCart,
@@ -31,25 +30,25 @@ type CartSignals = {
 };
 
 export function createCartWorkflow(apiFetch: ApiFetch) {
-	return workflow(function* (
-		ctx: WorkflowContext<CartSignals, Record<string, never>, CartItem[]>,
-	) {
+	return workflow(function* () {
 		let items: CartItem[] = [];
 
-		const res = yield* ctx.handle<CartItem[]>({
-			add: function* (ctx, productId: string) {
+		const res = yield* handle<CartItem[]>({
+			add: function* (payload) {
+				const productId = payload as string;
 				items = yield* activity("add-to-cart", (signal) =>
 					addToCart(apiFetch, productId, signal),
 				);
 				yield* publish(items);
 			},
-			remove: function* (ctx, productId: string) {
+			remove: function* (payload) {
+				const productId = payload as string;
 				items = yield* activity("remove-from-cart", (signal) =>
 					removeFromCart(apiFetch, productId, signal),
 				);
 				yield* publish(items);
 			},
-			checkout: function* (_ctx, _payload, done) {
+			checkout: function* (_payload, done) {
 				yield* done(items);
 			},
 		});

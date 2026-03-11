@@ -1,7 +1,6 @@
 // ABOUTME: Account and points store workflows demonstrating subscribe with takeLatest.
 // ABOUTME: Points store reactively refetches whenever the account changes.
-import { activity, publish, receive, workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+import { activity, handle, publish, receive, subscribe, workflow } from "cursus";
 
 type Account = { id: string; name: string; tier: string };
 
@@ -18,9 +17,7 @@ type WorkflowMap = {
 	account: AccountState;
 };
 
-export const accountWorkflow = workflow(function* (
-	ctx: WorkflowContext<AccountSignals, Record<string, never>, AccountState>,
-) {
+export const accountWorkflow = workflow(function* () {
 	yield* publish({ status: "loading" as const });
 
 	const { name } = yield* receive<{ name: string }, "login">("login");
@@ -36,8 +33,9 @@ export const accountWorkflow = workflow(function* (
 
 	yield* publish({ status: "ready" as const, account });
 
-	yield* ctx.handle<never>({
-		upgrade: function* (ctx, { tier }) {
+	yield* handle<never>({
+		upgrade: function* (payload) {
+			const { tier } = payload as { tier: string };
 			const updated = yield* activity(
 				"apply-upgrade",
 				async () => ({ ...account, tier }),
@@ -47,18 +45,17 @@ export const accountWorkflow = workflow(function* (
 	});
 });
 
-export const pointsWorkflow = workflow(function* (
-	ctx: WorkflowContext<Record<string, unknown>, WorkflowMap, number | null>,
-) {
+export const pointsWorkflow = workflow(function* () {
 	yield* publish(null);
 
-	yield* ctx.subscribe(
+	yield* subscribe(
 		"account",
 		{
 			where: (s): s is { status: "ready"; account: Account } =>
-				s.status === "ready",
+				(s as AccountState).status === "ready",
 		},
-		function* (ctx, { account }) {
+		function* (s) {
+			const { account } = s as { status: "ready"; account: Account };
 			const points = yield* activity(
 				"fetch-points",
 				async () => account.tier === "pro" ? 500 : 100,

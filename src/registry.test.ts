@@ -6,9 +6,8 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import { activity, all, join, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, handle, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type {
-	WorkflowContext,
 	WorkflowEvent,
 	WorkflowEventObserver,
 } from "./types";
@@ -1320,13 +1319,13 @@ describe("WorkflowRegistry", () => {
 		it("publish re-evaluates where waiters on each publish", async () => {
 			type State = { count: number };
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined }, Record<string, never>, State>) {
+			const wf = workflow(function* () {
 				let count = 0;
-				yield* ctx.publish({ count });
-				yield* ctx.handle<void>({
-					inc: function* (_ctx, _payload) {
+				yield* publish({ count });
+				yield* handle<void>({
+					inc: function* () {
 						count++;
-						yield* ctx.publish({ count });
+						yield* publish({ count });
 					},
 				});
 			});
@@ -1369,25 +1368,25 @@ describe("WorkflowRegistry", () => {
 		it("runs callback each time dependency publishes a new value", async () => {
 			const fetchCalls: number[] = [];
 
-			const accountWf = workflow(function* (ctx: WorkflowContext<{ update: { name: string } }, Record<string, never>, { name: string }>) {
-				yield* ctx.publish({ name: "max" });
-				yield* ctx.handle<void>({
-					update: function* (_ctx, payload) {
-						yield* ctx.publish(payload);
+			const accountWf = workflow(function* () {
+				yield* publish({ name: "max" });
+				yield* handle<void>({
+					update: function* (payload) {
+						yield* publish(payload as { name: string });
 					},
 				});
 			});
 
-			const pointsWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { account: { name: string } }, number>) {
+			const pointsWf = workflow(function* () {
 				let callCount = 0;
-				yield* ctx.subscribe("account", {}, function* (ctx, account) {
+				yield* subscribe("account", {}, function* (account) {
 					callCount++;
 					fetchCalls.push(callCount);
-					const points = yield* ctx.activity(
+					const points = yield* activity(
 						"fetchPoints",
 						async () => callCount * 100,
 					);
-					yield* ctx.publish(points);
+					yield* publish(points);
 				});
 			});
 
@@ -1416,23 +1415,23 @@ describe("WorkflowRegistry", () => {
 		it("runs body to completion before waiting for next publish", async () => {
 			const bodyCalls: number[] = [];
 
-			const sourceWf = workflow(function* (ctx: WorkflowContext<{ bump: undefined }, Record<string, never>, number>) {
-				yield* ctx.publish(1);
-				yield* ctx.handle<void>({
-					bump: function* (_ctx, _payload) {
-						yield* ctx.publish(2);
+			const sourceWf = workflow(function* () {
+				yield* publish(1);
+				yield* handle<void>({
+					bump: function* () {
+						yield* publish(2);
 					},
 				});
 			});
 
-			const reactiveWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { source: number }, string>) {
-				yield* ctx.subscribe("source", {}, function* (ctx, value) {
-					const result = yield* ctx.activity(
+			const reactiveWf = workflow(function* () {
+				yield* subscribe("source", {}, function* (value) {
+					const result = yield* activity(
 						"fetch",
 						async () => `result-${value}`,
 					);
 					bodyCalls.push(value as number);
-					yield* ctx.publish(result);
+					yield* publish(result);
 				});
 			});
 
@@ -1468,15 +1467,15 @@ describe("WorkflowRegistry", () => {
 				yield* receive("go");
 			});
 
-			const consumerWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { user: UserState }>) {
-				yield* ctx.subscribe(
+			const consumerWf = workflow(function* () {
+				yield* subscribe(
 					"user",
 					{
 						where: (s): s is { status: "ready"; user: string } =>
-							s.status === "ready",
+							(s as { status: string }).status === "ready",
 					},
-					function* (_ctx, state) {
-						receivedUsers.push(state.user);
+					function* (state) {
+						receivedUsers.push((state as { status: "ready"; user: string }).user);
 					},
 				);
 			});
@@ -1503,20 +1502,20 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("done() exits the subscribe loop and returns a value", async () => {
-			const sourceWf = workflow(function* (ctx: WorkflowContext<{ bump: undefined }, Record<string, never>, number>) {
-				yield* ctx.publish(1);
-				yield* ctx.handle<void>({
-					bump: function* (_ctx, _payload) {
-						yield* ctx.publish(2);
+			const sourceWf = workflow(function* () {
+				yield* publish(1);
+				yield* handle<void>({
+					bump: function* () {
+						yield* publish(2);
 					},
 				});
 			});
 
-			const consumerWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { source: number }>) {
-				const result = yield* ctx.subscribe(
+			const consumerWf = workflow(function* () {
+				const result = yield* subscribe(
 					"source",
 					{},
-					function* (_ctx, value, done) {
+					function* (value, done) {
 						if (value === 2) {
 							yield* done("stopped at 2");
 						}

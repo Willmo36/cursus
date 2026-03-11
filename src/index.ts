@@ -47,9 +47,12 @@ export type {
 	Requirement,
 	Requirements,
 	Signal,
+	SignalHandler,
 	SignalHandlers,
 	SleepCommand,
 	SleepDescriptor,
+	SubscribeCommand,
+	SubscribeDescriptor,
 	Step,
 	Workflow,
 	WorkflowCancelledEvent,
@@ -64,5 +67,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CancelledError, child, join, publish, published, race, receive, sleep, workflow } from "./types";
+export { activity, all, CancelledError, child, DoneSignal, handle, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
