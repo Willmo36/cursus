@@ -1,6 +1,7 @@
 // ABOUTME: Checkout workflow demonstrating OTel-traced activities and signals.
 // ABOUTME: Simulates a multi-step checkout with validation, payment, and confirmation.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 export type OrderResult = {
 	orderId: string;
@@ -12,8 +13,9 @@ type CheckoutSignals = {
 	confirm: { cardLast4: string };
 };
 
-export const checkoutWorkflow: WorkflowFunction<OrderResult, CheckoutSignals> =
-	function* (ctx) {
+export const checkoutWorkflow = workflow(function* (
+	ctx: WorkflowContext<CheckoutSignals>,
+) {
 		// Validate the cart
 		const cart = yield* ctx.activity("validate-cart", async () => {
 			await new Promise((r) => setTimeout(r, 300));
@@ -46,4 +48,4 @@ export const checkoutWorkflow: WorkflowFunction<OrderResult, CheckoutSignals> =
 			total: cart.total,
 			status: "confirmed",
 		};
-	};
+	});

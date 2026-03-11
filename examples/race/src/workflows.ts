@@ -1,6 +1,7 @@
 // ABOUTME: Data-fetch workflow that races an API call against a timeout.
 // ABOUTME: Demonstrates ctx.race to implement the timeout-an-activity pattern.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 export type FetchResult =
 	| { status: "ok"; data: string }
@@ -25,7 +26,7 @@ async function fetchData(signal: AbortSignal): Promise<string> {
 	});
 }
 
-export const fetchWorkflow: WorkflowFunction<FetchResult> = function* (ctx) {
+export const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 	const result = yield* ctx.race(
 		ctx.activity("fetch-data", fetchData),
 		ctx.sleep(3000),
@@ -34,19 +35,18 @@ export const fetchWorkflow: WorkflowFunction<FetchResult> = function* (ctx) {
 		return { status: "ok" as const, data: result.value };
 	}
 	return { status: "timeout" as const };
-};
+});
 
 export type ApprovalResult =
 	| { status: "approved"; by: string }
 	| { status: "escalated" };
 
-export const approvalWorkflow: WorkflowFunction<
-	ApprovalResult,
-	{ approve: string }
-> = function* (ctx) {
+export const approvalWorkflow = workflow(function* (
+	ctx: WorkflowContext<{ approve: string }>,
+) {
 	const result = yield* ctx.race(ctx.receive("approve"), ctx.sleep(10_000));
 	if (result.winner === 0) {
 		return { status: "approved" as const, by: result.value };
 	}
 	return { status: "escalated" as const };
-};
+});

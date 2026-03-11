@@ -1,6 +1,7 @@
 // ABOUTME: Two-step signup workflow collecting email and password, then creating an account.
 // ABOUTME: Demonstrates all() to collect both fields in any order.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 type SignupSignals = {
 	email: string;
@@ -12,8 +13,9 @@ type SignupResult = {
 	token: string;
 };
 
-export const signupWorkflow: WorkflowFunction<SignupResult, SignupSignals> =
-	function* (ctx) {
+export const signupWorkflow = workflow(function* (
+	ctx: WorkflowContext<SignupSignals>,
+) {
 		const [email, password] = yield* ctx.all(
 			ctx.receive("email"),
 			ctx.receive("password"),
@@ -25,4 +27,4 @@ export const signupWorkflow: WorkflowFunction<SignupResult, SignupSignals> =
 		});
 
 		return { email, token };
-	};
+	});

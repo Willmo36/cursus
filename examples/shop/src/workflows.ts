@@ -1,6 +1,7 @@
 // ABOUTME: Workflow definitions for the shop example.
 // ABOUTME: Catalog fetches products, cart manages items via signals, checkout coordinates login and cart.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 import {
 	type ApiFetch,
 	addToCart,
@@ -14,15 +15,13 @@ import type { CartItem, Order, Product } from "./types";
 
 type CatalogSignals = Record<string, never>;
 
-export function createCatalogWorkflow(
-	apiFetch: ApiFetch,
-): WorkflowFunction<Product[], CatalogSignals> {
-	return function* (ctx) {
+export function createCatalogWorkflow(apiFetch: ApiFetch) {
+	return workflow(function* (ctx: WorkflowContext<CatalogSignals>) {
 		const products = yield* ctx.activity("fetch-products", (signal) =>
 			fetchProducts(apiFetch, signal),
 		);
 		return products;
-	};
+	});
 }
 
 // --- Cart workflow ---
@@ -33,15 +32,10 @@ type CartSignals = {
 	checkout: undefined;
 };
 
-export function createCartWorkflow(
-	apiFetch: ApiFetch,
-): WorkflowFunction<
-	CartItem[],
-	CartSignals,
-	Record<string, never>,
-	CartItem[]
-> {
-	return function* (ctx) {
+export function createCartWorkflow(apiFetch: ApiFetch) {
+	return workflow(function* (
+		ctx: WorkflowContext<CartSignals, Record<string, never>, CartItem[]>,
+	) {
 		let items: CartItem[] = [];
 
 		const res = yield* ctx.handle<CartItem[]>({
@@ -62,7 +56,7 @@ export function createCartWorkflow(
 			},
 		});
 		return res;
-	};
+	});
 }
 
 // --- Checkout workflow ---
@@ -75,10 +69,10 @@ type CheckoutWorkflowMap = {
 	cart: CartItem[];
 };
 
-export function createCheckoutWorkflow(
-	apiFetch: ApiFetch,
-): WorkflowFunction<Order, CheckoutSignals, CheckoutWorkflowMap> {
-	return function* (ctx) {
+export function createCheckoutWorkflow(apiFetch: ApiFetch) {
+	return workflow(function* (
+		ctx: WorkflowContext<CheckoutSignals, CheckoutWorkflowMap>,
+	) {
 		const [credentials, items] = yield* ctx.all(
 			ctx.receive("login"),
 			ctx.workflow("cart"),
@@ -102,5 +96,5 @@ export function createCheckoutWorkflow(
 		});
 
 		return order;
-	};
+	});
 }

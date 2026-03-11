@@ -1,6 +1,7 @@
 // ABOUTME: Environment and user profile workflows demonstrating infrastructure dependencies.
 // ABOUTME: The env workflow parses config; the user workflow consumes it via join.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 // --- Types ---
 
@@ -24,8 +25,8 @@ export type UserProfile = {
 
 type EnvSignals = Record<string, never>;
 
-export const envWorkflow: WorkflowFunction<EnvConfig, EnvSignals> = function* (
-	ctx,
+export const envWorkflow = workflow(function* (
+	ctx: WorkflowContext<EnvSignals>,
 ) {
 	const config = yield* ctx.activity("parse-env", async () => {
 		const env = window.__ENV__ ?? { API_BASE_URL: "/api" };
@@ -33,7 +34,7 @@ export const envWorkflow: WorkflowFunction<EnvConfig, EnvSignals> = function* (
 	});
 
 	return config;
-};
+});
 
 // --- User workflow (local, depends on env) ---
 
@@ -43,11 +44,9 @@ type UserDeps = {
 	env: EnvConfig;
 };
 
-export const userWorkflow: WorkflowFunction<
-	UserProfile,
-	UserSignals,
-	UserDeps
-> = function* (ctx) {
+export const userWorkflow = workflow(function* (
+	ctx: WorkflowContext<UserSignals, UserDeps>,
+) {
 	const env = yield* ctx.join("env");
 
 	const user = yield* ctx.activity("fetch-user", async () => {
@@ -63,4 +62,4 @@ export const userWorkflow: WorkflowFunction<
 	});
 
 	return user;
-};
+});

@@ -1,6 +1,7 @@
 // ABOUTME: Account and points store workflows demonstrating subscribe with takeLatest.
 // ABOUTME: Points store reactively refetches whenever the account changes.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 type Account = { id: string; name: string; tier: string };
 
@@ -17,12 +18,9 @@ type WorkflowMap = {
 	account: AccountState;
 };
 
-export const accountWorkflow: WorkflowFunction<
-	void,
-	AccountSignals,
-	Record<string, never>,
-	AccountState
-> = function* (ctx) {
+export const accountWorkflow = workflow(function* (
+	ctx: WorkflowContext<AccountSignals, Record<string, never>, AccountState>,
+) {
 	yield* ctx.publish({ status: "loading" as const });
 
 	const { name } = yield* ctx.receive("login");
@@ -47,14 +45,11 @@ export const accountWorkflow: WorkflowFunction<
 			yield* ctx.publish({ status: "ready" as const, account: updated });
 		},
 	});
-};
+});
 
-export const pointsWorkflow: WorkflowFunction<
-	void,
-	Record<string, unknown>,
-	WorkflowMap,
-	number | null
-> = function* (ctx) {
+export const pointsWorkflow = workflow(function* (
+	ctx: WorkflowContext<Record<string, unknown>, WorkflowMap, number | null>,
+) {
 	yield* ctx.publish(null);
 
 	yield* ctx.subscribe(
@@ -71,4 +66,4 @@ export const pointsWorkflow: WorkflowFunction<
 			yield* ctx.publish(points);
 		},
 	);
-};
+});

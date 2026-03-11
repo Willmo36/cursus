@@ -1,6 +1,7 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
 // ABOUTME: Demonstrates sequential waitFor calls with a final submission activity.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 type PersonalInfo = {
 	name: string;
@@ -23,10 +24,9 @@ type Application = {
 	confirmationId: string;
 };
 
-export const applicationWorkflow: WorkflowFunction<
-	Application,
-	ApplicationSignals
-> = function* (ctx) {
+export const applicationWorkflow = workflow(function* (
+	ctx: WorkflowContext<ApplicationSignals>,
+) {
 	const personalInfo = yield* ctx.receive("personal-info");
 	const education = yield* ctx.receive("education");
 
@@ -36,4 +36,4 @@ export const applicationWorkflow: WorkflowFunction<
 	});
 
 	return { personalInfo, education, confirmationId };
-};
+});

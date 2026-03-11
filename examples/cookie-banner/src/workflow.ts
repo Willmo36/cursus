@@ -1,6 +1,7 @@
 // ABOUTME: Cookie consent workflow that waits for a single user choice.
 // ABOUTME: Demonstrates waitFor with a discriminated union payload.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 export type CookieChoice =
 	| { type: "accept-all" }
@@ -17,10 +18,9 @@ export type CookiePreferences = {
 	marketing: boolean;
 };
 
-export const cookieWorkflow: WorkflowFunction<
-	CookiePreferences,
-	CookieSignals
-> = function* (ctx) {
+export const cookieWorkflow = workflow(function* (
+	ctx: WorkflowContext<CookieSignals>,
+) {
 	const choice = yield* ctx.receive("cookie-choice");
 
 	switch (choice.type) {
@@ -35,4 +35,4 @@ export const cookieWorkflow: WorkflowFunction<
 				marketing: choice.marketing,
 			};
 	}
-};
+});

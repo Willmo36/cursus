@@ -9,19 +9,20 @@ import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
-import type { WorkflowEvent, WorkflowFunction } from "./types";
+import type { WorkflowContext, WorkflowEvent } from "./types";
+import { workflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
 describe("useWorkflow", () => {
 	describe("inline mode (with workflowFn)", () => {
 		it("starts with running state and completes", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-1", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("test-1", w, { storage: new MemoryStorage() }),
 			);
 
 			expect(result.current.state).toBe("running");
@@ -33,12 +34,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("completes and returns the result", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-2", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("test-2", w, { storage: new MemoryStorage() }),
 			);
 
 			await waitFor(() => {
@@ -48,13 +49,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("provides signal function that pushes data into workflow", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-3", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("test-3", w, { storage: new MemoryStorage() }),
 			);
 
 			await waitFor(() => {
@@ -73,17 +74,16 @@ describe("useWorkflow", () => {
 		});
 
 		it("exposes waitingForAny when workflow uses race with signals", async () => {
-			const workflow: WorkflowFunction<string, { a: string; b: string }> =
-				function* (ctx) {
-					const { winner } = yield* ctx.race(
-						ctx.receive("a"),
-						ctx.receive("b"),
-					);
-					return winner === 0 ? "a" : "b";
-				};
+			const w = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
+				const { winner } = yield* ctx.race(
+					ctx.receive("a"),
+					ctx.receive("b"),
+				);
+				return winner === 0 ? "a" : "b";
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-race-signals", workflow, {
+				useWorkflow("test-race-signals", w, {
 					storage: new MemoryStorage(),
 				}),
 			);
@@ -105,14 +105,14 @@ describe("useWorkflow", () => {
 
 		it("resets clears storage and restarts the workflow", async () => {
 			let callCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				callCount++;
 				return yield* ctx.activity("count", async () => callCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const { result } = renderHook(() =>
-				useWorkflow("test-4", workflow, { storage }),
+				useWorkflow("test-4", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -132,14 +132,14 @@ describe("useWorkflow", () => {
 
 		it("resumes from storage on remount (replay)", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			const { result: result1, unmount } = renderHook(() =>
-				useWorkflow("test-5", workflow, { storage }),
+				useWorkflow("test-5", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -150,7 +150,7 @@ describe("useWorkflow", () => {
 			unmount();
 
 			const { result: result2 } = renderHook(() =>
-				useWorkflow("test-5", workflow, { storage }),
+				useWorkflow("test-5", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -162,14 +162,14 @@ describe("useWorkflow", () => {
 		});
 
 		it("exposes what signal the workflow is waiting for", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const email = yield* ctx.receive<string>("email");
 				const password = yield* ctx.receive<string>("password");
 				return `${email}:${password}`;
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-6", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("test-6", w, { storage: new MemoryStorage() }),
 			);
 
 			await waitFor(() => {
@@ -179,15 +179,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("collects multiple signals with all", async () => {
-			const workflow: WorkflowFunction<
-				[string, string],
-				{ email: string; password: string }
-			> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext<{ email: string; password: string }>) {
 				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("test-all-signals", workflow, {
+				useWorkflow("test-all-signals", w, {
 					storage: new MemoryStorage(),
 				}),
 			);
@@ -216,19 +213,19 @@ describe("useWorkflow", () => {
 
 		it("uses storage from registry context when no explicit storage provided", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
 			const providerStorage = new MemoryStorage();
-			const layer = createLayer({ bg: workflow }, providerStorage);
+			const layer = createLayer({ bg: w }, providerStorage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
 
-			const inlineWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const inlineWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("compute", async () => "inline-result");
-			};
+			});
 
 			const { result } = renderHook(
 				() => useWorkflow("inline-ctx", inlineWorkflow),
@@ -246,20 +243,20 @@ describe("useWorkflow", () => {
 		});
 
 		it("explicit options.storage overrides registry storage", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const providerStorage = new MemoryStorage();
 			const explicitStorage = new MemoryStorage();
-			const layer = createLayer({ bg: workflow }, providerStorage);
+			const layer = createLayer({ bg: w }, providerStorage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
 
-			const inlineWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const inlineWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("compute", async () => "result");
-			};
+			});
 
 			const { result } = renderHook(
 				() =>
@@ -281,13 +278,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("falls back to MemoryStorage without a provider", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			// No wrapper, no explicit storage — should still work
 			const { result } = renderHook(() =>
-				useWorkflow("inline-fallback", workflow),
+				useWorkflow("inline-fallback", w),
 			);
 
 			await waitFor(() => {
@@ -297,12 +294,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("compacts storage after inline workflow completes", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			renderHook(() => useWorkflow("test-compact", workflow, { storage }));
+			renderHook(() => useWorkflow("test-compact", w, { storage }));
 
 			await waitFor(async () => {
 				const events = await storage.load("test-compact");
@@ -316,14 +313,14 @@ describe("useWorkflow", () => {
 
 		it("round-trips through compaction: run, compact, remount, fast path", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			const { result: result1, unmount } = renderHook(() =>
-				useWorkflow("test-roundtrip", workflow, { storage }),
+				useWorkflow("test-roundtrip", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -341,7 +338,7 @@ describe("useWorkflow", () => {
 
 			// Remount — should hit fast path, activity NOT re-called
 			const { result: result2 } = renderHook(() =>
-				useWorkflow("test-roundtrip", workflow, { storage }),
+				useWorkflow("test-roundtrip", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -353,16 +350,16 @@ describe("useWorkflow", () => {
 		});
 
 		it("persists events incrementally so intermediate state survives remount", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const email = yield* ctx.receive<string>("email");
 				const password = yield* ctx.receive<string>("password");
 				return `${email}:${password}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			const { result: result1, unmount } = renderHook(() =>
-				useWorkflow("test-7", workflow, { storage }),
+				useWorkflow("test-7", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -383,7 +380,7 @@ describe("useWorkflow", () => {
 			expect(events.length).toBeGreaterThan(0);
 
 			const { result: result2 } = renderHook(() =>
-				useWorkflow("test-7", workflow, { storage }),
+				useWorkflow("test-7", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -396,13 +393,13 @@ describe("useWorkflow", () => {
 	describe("layer mode (without workflowFn)", () => {
 		it("auto-starts the layer workflow on mount", async () => {
 			let started = false;
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				started = true;
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ greet: workflow }, storage);
+			const layer = createLayer({ greet: w }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
@@ -415,12 +412,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("returns completed state and result", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ greet: workflow }, storage);
+			const layer = createLayer({ greet: w }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
@@ -436,13 +433,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("sends signals to the layer workflow", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ form: workflow }, storage);
+			const layer = createLayer({ form: w }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
@@ -467,14 +464,14 @@ describe("useWorkflow", () => {
 		});
 
 		it("state reactively updates as layer workflow progresses", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const a = yield* ctx.receive<string>("step1");
 				const b = yield* ctx.receive<string>("step2");
 				return `${a}:${b}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ multi: workflow }, storage);
+			const layer = createLayer({ multi: w }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
@@ -507,13 +504,13 @@ describe("useWorkflow", () => {
 
 		it("reset() restarts a layer workflow", async () => {
 			let runCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				runCount++;
 				return yield* ctx.activity("count", async () => runCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ counter: workflow }, storage);
+			const layer = createLayer({ counter: w }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(WorkflowLayerProvider, { layer }, children);
@@ -546,19 +543,14 @@ describe("useWorkflow", () => {
 
 	describe("published", () => {
 		it("published is undefined before publish, then set after", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("pub-1", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("pub-1", w, { storage: new MemoryStorage() }),
 			);
 
 			await waitFor(() => {
@@ -580,18 +572,18 @@ describe("useWorkflow", () => {
 	describe("cancellation", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				yield* ctx.activity("after", async () => {
 					activityResolved = true;
 					return "done";
 				});
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const { result, unmount } = renderHook(() =>
-				useWorkflow("cancel-1", workflow, { storage }),
+				useWorkflow("cancel-1", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -607,13 +599,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("cancel() function is exposed and works", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("cancel-2", workflow, { storage: new MemoryStorage() }),
+				useWorkflow("cancel-2", w, { storage: new MemoryStorage() }),
 			);
 
 			await waitFor(() => {
@@ -631,15 +623,15 @@ describe("useWorkflow", () => {
 
 		it("reset() cancels before restarting", async () => {
 			let runCount = 0;
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				runCount++;
 				const data = yield* ctx.receive<string>("submit");
 				return `run${runCount}: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const { result } = renderHook(() =>
-				useWorkflow("cancel-3", workflow, { storage }),
+				useWorkflow("cancel-3", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -669,18 +661,14 @@ describe("useWorkflow", () => {
 
 	describe("cross-workflow dependencies", () => {
 		it("inline workflow can use join with layer workflows", async () => {
-			const loginWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const loginWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("login", async () => "user-123");
-			};
+			});
 
-			const localWorkflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ login: string }
-			> = function* (ctx) {
+			const localWorkflow = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
 				const user = yield* ctx.join("login");
 				return `local got: ${user}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const layer = createLayer({ login: loginWorkflow }, storage);
@@ -700,26 +688,19 @@ describe("useWorkflow", () => {
 		});
 
 		it("signal then join then activity completes", async () => {
-			const profileWorkflow: WorkflowFunction<
-				{ name: string },
-				{ profile: { name: string } }
-			> = function* (ctx) {
+			const profileWorkflow = workflow(function* (ctx: WorkflowContext<{ profile: { name: string } }>) {
 				const profile = yield* ctx.receive("profile");
 				return profile;
-			};
+			});
 
-			const checkoutWorkflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ profile: { name: string } }
-			> = function* (ctx) {
+			const checkoutWorkflow = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: { name: string } }>) {
 				const payment = yield* ctx.receive("payment");
 				const profile = yield* ctx.join("profile");
 				const order = yield* ctx.activity("place-order", async () => {
 					return `${profile.name}:${payment}`;
 				});
 				return order;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const layer = createLayer({ profile: profileWorkflow }, storage);
@@ -764,19 +745,12 @@ describe("useWorkflow", () => {
 		});
 
 		it("debug panel shows all events for all() with signal + workflow dep", async () => {
-			const profileWorkflow: WorkflowFunction<
-				{ name: string },
-				{ profile: { name: string } }
-			> = function* (ctx) {
+			const profileWorkflow = workflow(function* (ctx: WorkflowContext<{ profile: { name: string } }>) {
 				const profile = yield* ctx.receive("profile");
 				return profile;
-			};
+			});
 
-			const checkoutWf: WorkflowFunction<
-				string,
-				{ payment: string },
-				{ profile: { name: string } }
-			> = function* (ctx) {
+			const checkoutWf = workflow(function* (ctx: WorkflowContext<{ payment: string }, { profile: { name: string } }>) {
 				const [payment, profile] = yield* ctx.all(
 					ctx.receive("payment"),
 					ctx.workflow("profile"),
@@ -785,7 +759,7 @@ describe("useWorkflow", () => {
 					return `${profile.name}:${payment}`;
 				});
 				return order;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const layer = createLayer({ profile: profileWorkflow }, storage);
@@ -852,13 +826,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("local workflow events appear in useWorkflowEvents", async () => {
-			const globalWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const globalWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
-			const localWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const localWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("compute", async () => "result");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const layer = createLayer({ global: globalWorkflow }, storage);
@@ -899,16 +873,16 @@ describe("useWorkflow", () => {
 	describe("versioning (inline mode)", () => {
 		it("inline workflow with version change wipes and restarts", async () => {
 			let callCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				callCount++;
 				return yield* ctx.activity("count", async () => callCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			// First run with version 1
 			const { result: result1, unmount } = renderHook(() =>
-				useWorkflow("ver-test", workflow, { storage, version: 1 }),
+				useWorkflow("ver-test", w, { storage, version: 1 }),
 			);
 
 			await waitFor(() => {
@@ -920,7 +894,7 @@ describe("useWorkflow", () => {
 
 			// Second run with version 2 — should wipe and restart
 			const { result: result2 } = renderHook(() =>
-				useWorkflow("ver-test", workflow, { storage, version: 2 }),
+				useWorkflow("ver-test", w, { storage, version: 2 }),
 			);
 
 			await waitFor(() => {
@@ -931,15 +905,15 @@ describe("useWorkflow", () => {
 
 		it("inline workflow without version behaves as before", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			// First run without version
 			const { result: result1, unmount } = renderHook(() =>
-				useWorkflow("no-ver", workflow, { storage }),
+				useWorkflow("no-ver", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -951,7 +925,7 @@ describe("useWorkflow", () => {
 
 			// Second run without version — should replay
 			const { result: result2 } = renderHook(() =>
-				useWorkflow("no-ver", workflow, { storage }),
+				useWorkflow("no-ver", w, { storage }),
 			);
 
 			await waitFor(() => {
@@ -965,14 +939,14 @@ describe("useWorkflow", () => {
 
 	describe("snapshot hydration (SSR)", () => {
 		it("initializes with snapshot state and result instead of defaults", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
-			const snapshot = await runWorkflow("snap-1", workflow);
+			const snapshot = await runWorkflow("snap-1", w);
 
 			const { result } = renderHook(() =>
-				useWorkflow("snap-1", workflow, {
+				useWorkflow("snap-1", w, {
 					storage: new MemoryStorage(),
 					snapshot,
 				}),
@@ -985,15 +959,15 @@ describe("useWorkflow", () => {
 
 		it("does not start interpreter for completed snapshot", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
-			const snapshot = await runWorkflow("snap-2", workflow);
+			const snapshot = await runWorkflow("snap-2", w);
 			activityFn.mockClear();
 
 			const { result } = renderHook(() =>
-				useWorkflow("snap-2", workflow, {
+				useWorkflow("snap-2", w, {
 					storage: new MemoryStorage(),
 					snapshot,
 				}),
@@ -1008,18 +982,18 @@ describe("useWorkflow", () => {
 		});
 
 		it("seeds events and continues execution for partial snapshot", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				const name = yield* ctx.receive("name");
 				return `hello ${name}`;
-			};
+			});
 
 			// Run on "server" — blocks on signal, returns waiting snapshot
-			const snapshot = await runWorkflow("snap-3", workflow);
+			const snapshot = await runWorkflow("snap-3", w);
 			expect(snapshot.state).toBe("waiting");
 
 			// Hydrate on "client" — seeds events, interpreter should resume from waiting
 			const { result } = renderHook(() =>
-				useWorkflow("snap-3", workflow, {
+				useWorkflow("snap-3", w, {
 					storage: new MemoryStorage(),
 					snapshot,
 				}),
@@ -1041,20 +1015,15 @@ describe("useWorkflow", () => {
 		});
 
 		it("initializes published value from snapshot", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				Record<string, never>,
-				string
-			> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
 				yield* ctx.publish("progress");
 				return yield* ctx.activity("work", async () => "done");
-			};
+			});
 
-			const snapshot = await runWorkflow("snap-4", workflow);
+			const snapshot = await runWorkflow("snap-4", w);
 
 			const { result } = renderHook(() =>
-				useWorkflow("snap-4", workflow, {
+				useWorkflow("snap-4", w, {
 					storage: new MemoryStorage(),
 					snapshot,
 				}),
@@ -1066,16 +1035,16 @@ describe("useWorkflow", () => {
 		});
 
 		it("initializes error from failed snapshot", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("fail", async () => {
 					throw new Error("boom");
 				});
-			};
+			});
 
-			const snapshot = await runWorkflow("snap-5", workflow);
+			const snapshot = await runWorkflow("snap-5", w);
 
 			const { result } = renderHook(() =>
-				useWorkflow("snap-5", workflow, {
+				useWorkflow("snap-5", w, {
 					storage: new MemoryStorage(),
 					snapshot,
 				}),
@@ -1089,12 +1058,12 @@ describe("useWorkflow", () => {
 	describe("onEvent observer (inline mode)", () => {
 		it("fires observer for each event during workflow execution", async () => {
 			const observed: Array<{ workflowId: string; event: WorkflowEvent }> = [];
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const w = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const { result } = renderHook(() =>
-				useWorkflow("obs-test", workflow, {
+				useWorkflow("obs-test", w, {
 					storage: new MemoryStorage(),
 					onEvent: (wid, event) => observed.push({ workflowId: wid, event }),
 				}),

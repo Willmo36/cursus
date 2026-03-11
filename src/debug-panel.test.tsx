@@ -10,11 +10,12 @@ import { WorkflowDebugPanel } from "./debug-panel";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction } from "./types";
+import { workflow } from "./types";
+import type { AnyWorkflowFunction, WorkflowContext } from "./types";
 import { useWorkflow } from "./use-workflow";
 
 function createWrapper(
-	workflows: Record<string, WorkflowFunction<unknown>>,
+	workflows: Record<string, AnyWorkflowFunction>,
 	storage: MemoryStorage,
 ) {
 	const layer = createLayer(workflows, storage);
@@ -24,12 +25,12 @@ function createWrapper(
 
 describe("WorkflowDebugPanel", () => {
 	it("renders collapsed by default with toggle button", () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: workflow }, storage);
+		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
 
 		render(createElement(Wrapper, null, createElement(WorkflowDebugPanel)));
 
@@ -37,12 +38,12 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("shows event table when expanded", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: workflow }, storage);
+		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -67,12 +68,12 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("calls onClear when clear button is clicked", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: workflow }, storage);
+		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
 		const onClear = vi.fn();
 
 		function TestApp() {
@@ -99,12 +100,12 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("renders Events and Timeline tabs when expanded, defaults to Events", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: workflow }, storage);
+		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -129,12 +130,12 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("switches to Timeline tab and back to Events", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: workflow }, storage);
+		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -174,12 +175,12 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("displays events for multiple workflows", async () => {
-		const workflowA: WorkflowFunction<string> = function* (ctx) {
+		const workflowA = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("a", async () => "alpha");
-		};
-		const workflowB: WorkflowFunction<string> = function* (ctx) {
+		});
+		const workflowB = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("b", async () => "beta");
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const Wrapper = createWrapper(
@@ -212,12 +213,12 @@ describe("WorkflowDebugPanel", () => {
 
 describe("TimelineView rendering", () => {
 	it("renders workflow rows with spans and markers", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => "data");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: workflow }, storage);
+		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -255,12 +256,12 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders multiple workflow rows", async () => {
-		const workflowA: WorkflowFunction<string> = function* (ctx) {
+		const workflowA = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("a", async () => "alpha");
-		};
-		const workflowB: WorkflowFunction<string> = function* (ctx) {
+		});
+		const workflowB = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("b", async () => "beta");
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const Wrapper = createWrapper(
@@ -291,12 +292,12 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders time axis with tick labels", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => "data");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: workflow }, storage);
+		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -323,12 +324,12 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("shows span name as inline label", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => "data");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: workflow }, storage);
+		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -353,12 +354,12 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders a color legend", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => "data");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: workflow }, storage);
+		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -386,12 +387,12 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("shows tooltip content on span hover", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => "data");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: workflow }, storage);
+		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");

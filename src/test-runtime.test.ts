@@ -3,16 +3,17 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import type { WorkflowFunction } from "./types";
+import { workflow } from "./types";
+import type { WorkflowContext } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const greeting = yield* ctx.activity("greet", async () => "real");
 			return greeting;
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			activities: {
 				greet: () => "mocked hello",
 			},
@@ -22,12 +23,12 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs a workflow with pre-queued signals", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			signals: [{ name: "submit", payload: "test-data" }],
 		});
 
@@ -35,14 +36,14 @@ describe("createTestRuntime", () => {
 	});
 
 	it("handles multiple activities and signals together", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const user = yield* ctx.activity("fetchUser", async () => "real-user");
 			const input = yield* ctx.receive<string>("confirm");
 			const saved = yield* ctx.activity("save", async () => "real-save");
 			return `${user}:${input}:${saved}`;
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			activities: {
 				fetchUser: () => "mock-user",
 				save: () => "mock-save",
@@ -54,35 +55,32 @@ describe("createTestRuntime", () => {
 	});
 
 	it("falls through to real activity when no mock is provided", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const result = yield* ctx.activity("real", async () => "actual-result");
 			return result;
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {});
+		const result = await createTestRuntime(wf, {});
 
 		expect(result).toBe("actual-result");
 	});
 
 	it("throws if workflow fails", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fail", async () => {
 				throw new Error("boom");
 			});
-		};
+		});
 
-		await expect(createTestRuntime(workflow, {})).rejects.toThrow("boom");
+		await expect(createTestRuntime(wf, {})).rejects.toThrow("boom");
 	});
 
 	it("runs a workflow with all and pre-queued signals", async () => {
-		const workflow: WorkflowFunction<
-			[string, string],
-			{ email: string; password: string }
-		> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext<{ email: string; password: string }>) {
 			return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			signals: [
 				{ name: "email", payload: "test@example.com" },
 				{ name: "password", payload: "secret123" },
@@ -93,13 +91,13 @@ describe("createTestRuntime", () => {
 	});
 
 	it("supports multiple sequential signals", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const email = yield* ctx.receive<string>("email");
 			const password = yield* ctx.receive<string>("password");
 			return `${email}:${password}`;
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			signals: [
 				{ name: "email", payload: "test@example.com" },
 				{ name: "password", payload: "secret123" },
@@ -110,14 +108,10 @@ describe("createTestRuntime", () => {
 	});
 
 	it("mocks join with workflowResults", async () => {
-		const wf: WorkflowFunction<
-			string,
-			Record<string, unknown>,
-			{ login: string }
-		> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
 			const user = yield* ctx.join("login");
 			return `got: ${user}`;
-		};
+		});
 
 		const result = await createTestRuntime(wf, {
 			workflowResults: {
@@ -129,16 +123,12 @@ describe("createTestRuntime", () => {
 	});
 
 	it("workflowResults works alongside activities and signals", async () => {
-		const wf: WorkflowFunction<
-			string,
-			Record<string, unknown>,
-			{ login: string }
-		> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
 			const user = yield* ctx.join("login");
 			const greeting = yield* ctx.activity("greet", async () => "real");
 			const confirm = yield* ctx.receive("confirm");
 			return `${user}:${greeting}:${confirm}`;
-		};
+		});
 
 		const result = await createTestRuntime(wf, {
 			workflowResults: { login: "mock-user" },
@@ -150,7 +140,7 @@ describe("createTestRuntime", () => {
 	});
 
 	it("handles workflow that catches activity error", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			try {
 				yield* ctx.activity("fail", async () => {
 					throw new Error("boom");
@@ -160,9 +150,9 @@ describe("createTestRuntime", () => {
 				const result = yield* ctx.activity("recover", async () => "recovered");
 				return result;
 			}
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			activities: {
 				recover: () => "mock-recovered",
 			},
@@ -172,13 +162,9 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs mixed all with signals and workflowResults", async () => {
-		const wf: WorkflowFunction<
-			unknown,
-			Record<string, unknown>,
-			{ profile: unknown }
-		> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
 			return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
-		};
+		});
 
 		const result = await createTestRuntime(wf, {
 			signals: [{ name: "payment", payload: { card: "1234" } }],
@@ -189,16 +175,15 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs a workflow with race and pre-queued signals", async () => {
-		const workflow: WorkflowFunction<string, { a: string; b: string }> =
-			function* (ctx) {
-				const { winner, value } = yield* ctx.race(
-					ctx.receive("a"),
-					ctx.receive("b"),
-				);
-				return winner === 0 ? `a:${value}` : `b:${value}`;
-			};
+		const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
+			const { winner, value } = yield* ctx.race(
+				ctx.receive("a"),
+				ctx.receive("b"),
+			);
+			return winner === 0 ? `a:${value}` : `b:${value}`;
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			signals: [{ name: "b", payload: "bee" }],
 		});
 
@@ -206,10 +191,7 @@ describe("createTestRuntime", () => {
 	});
 
 	it("runs an on/done loop with pre-queued signals", async () => {
-		const workflow: WorkflowFunction<
-			number,
-			{ inc: undefined; finish: undefined }
-		> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined; finish: undefined }>) {
 			let count = 0;
 			return yield* ctx.handle<number>({
 				inc: function* () {
@@ -219,9 +201,9 @@ describe("createTestRuntime", () => {
 					yield* done(count);
 				},
 			});
-		};
+		});
 
-		const result = await createTestRuntime(workflow, {
+		const result = await createTestRuntime(wf, {
 			signals: [
 				{ name: "inc", payload: undefined },
 				{ name: "inc", payload: undefined },
@@ -234,13 +216,13 @@ describe("createTestRuntime", () => {
 
 	describe("mock propagation into child workflows", () => {
 		it("activity mocks apply inside child workflows", async () => {
-			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "real");
-			};
+			});
 
-			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.child("sub", childWorkflow);
-			};
+			});
 
 			const result = await createTestRuntime(parentWorkflow, {
 				activities: { greet: () => "mocked" },
@@ -250,17 +232,17 @@ describe("createTestRuntime", () => {
 		});
 
 		it("activity mocks apply inside nested grandchild workflows", async () => {
-			const grandchild: WorkflowFunction<string> = function* (ctx) {
+			const grandchild = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("fetch", async () => "real-data");
-			};
+			});
 
-			const child: WorkflowFunction<string> = function* (ctx) {
+			const child = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.child("grandchild", grandchild);
-			};
+			});
 
-			const parent: WorkflowFunction<string> = function* (ctx) {
+			const parent = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.child("child", child);
-			};
+			});
 
 			const result = await createTestRuntime(parent, {
 				activities: { fetch: () => "mock-data" },
@@ -270,15 +252,15 @@ describe("createTestRuntime", () => {
 		});
 
 		it("unmocked activities fall through to real implementation in children", async () => {
-			const childWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
 				const a = yield* ctx.activity("mocked", async () => "real-a");
 				const b = yield* ctx.activity("unmocked", async () => "real-b");
 				return `${a}:${b}`;
-			};
+			});
 
-			const parentWorkflow: WorkflowFunction<string> = function* (ctx) {
+			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.child("sub", childWorkflow);
-			};
+			});
 
 			const result = await createTestRuntime(parentWorkflow, {
 				activities: { mocked: () => "mock-a" },
@@ -288,17 +270,15 @@ describe("createTestRuntime", () => {
 		});
 
 		it("pre-queued signals work with child workflows", async () => {
-			const childWorkflow: WorkflowFunction<string, { data: string }> =
-				function* (ctx) {
-					const val = yield* ctx.receive("data");
-					const greeting = yield* ctx.activity("greet", async () => "real");
-					return `${greeting}: ${val}`;
-				};
+			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
+				const val = yield* ctx.receive("data");
+				const greeting = yield* ctx.activity("greet", async () => "real");
+				return `${greeting}: ${val}`;
+			});
 
-			const parentWorkflow: WorkflowFunction<string, { data: string }> =
-				function* (ctx) {
-					return yield* ctx.child("sub", childWorkflow);
-				};
+			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
+				return yield* ctx.child("sub", childWorkflow);
+			});
 
 			const result = await createTestRuntime(parentWorkflow, {
 				activities: { greet: () => "mocked" },

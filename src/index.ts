@@ -48,7 +48,6 @@ export type {
 	WorkflowEvent,
 	WorkflowEventLog,
 	WorkflowEventObserver,
-	WorkflowFunction,
 	WorkflowPublishedEvent,
 	WorkflowRegistryInterface,
 	WorkflowState,

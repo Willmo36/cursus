@@ -4,15 +4,14 @@
 import { describe, expect, it } from "vitest";
 import { createLayer } from "./layer";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction } from "./types";
+import { workflow } from "./types";
+import type { WorkflowContext } from "./types";
 
 describe("createLayer", () => {
 	it("returns a layer with workflows and storage", () => {
-		const profileWorkflow: WorkflowFunction<{ name: string }> = function* (
-			ctx,
-		) {
+		const profileWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fetch", async () => ({ name: "Max" }));
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const layer = createLayer({ profile: profileWorkflow }, storage);
@@ -23,12 +22,12 @@ describe("createLayer", () => {
 	});
 
 	it("accepts and preserves versions option", () => {
-		const wfA: WorkflowFunction<string> = function* (ctx) {
+		const wfA = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("a", async () => "a");
-		};
-		const wfB: WorkflowFunction<number> = function* (ctx) {
+		});
+		const wfB = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("b", async () => 42);
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const layer = createLayer<{ alpha: string; beta: number }>(
@@ -41,12 +40,12 @@ describe("createLayer", () => {
 	});
 
 	it("accepts multiple workflows", () => {
-		const wfA: WorkflowFunction<string> = function* (ctx) {
+		const wfA = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("a", async () => "a");
-		};
-		const wfB: WorkflowFunction<number> = function* (ctx) {
+		});
+		const wfB = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("b", async () => 42);
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const layer = createLayer({ alpha: wfA, beta: wfB }, storage);

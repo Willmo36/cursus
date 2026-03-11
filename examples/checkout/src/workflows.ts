@@ -1,6 +1,7 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
 // ABOUTME: The checkout workflow uses all() to wait for payment and the profile workflow.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 // --- Profile workflow (registered globally) ---
 
@@ -13,8 +14,9 @@ type ProfileSignals = {
 	profile: UserProfile;
 };
 
-export const profileWorkflow: WorkflowFunction<UserProfile, ProfileSignals> =
-	function* (ctx) {
+export const profileWorkflow = workflow(function* (
+	ctx: WorkflowContext<ProfileSignals>,
+) {
 		const profile = yield* ctx.receive("profile");
 
 		yield* ctx.activity("validate-email", async () => {
@@ -23,7 +25,7 @@ export const profileWorkflow: WorkflowFunction<UserProfile, ProfileSignals> =
 		});
 
 		return profile;
-	};
+	});
 
 // --- Checkout workflow (local, depends on profile) ---
 
@@ -46,11 +48,9 @@ type OrderConfirmation = {
 	cardLast4: string;
 };
 
-export const checkoutWorkflow: WorkflowFunction<
-	OrderConfirmation,
-	CheckoutSignals,
-	CheckoutDeps
-> = function* (ctx) {
+export const checkoutWorkflow = workflow(function* (
+	ctx: WorkflowContext<CheckoutSignals, CheckoutDeps>,
+) {
 	const [payment, profile] = yield* ctx.all(
 		ctx.receive("payment"),
 		ctx.workflow("profile"),
@@ -67,4 +67,4 @@ export const checkoutWorkflow: WorkflowFunction<
 	});
 
 	return order;
-};
+});

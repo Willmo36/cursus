@@ -359,14 +359,7 @@ export function workflow<F extends (...args: any[]) => Generator<any, any, unkno
 	return fn;
 }
 
-export type WorkflowFunction<
-	T,
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-	WorkflowMap extends Record<string, unknown> = Record<string, never>,
-	PublishType = never,
-> = (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Workflow<T, Requirement>;
-
-// Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
+// Accepts any workflow function regardless of its result type, signal map, or workflow map.
 // Uses `any` to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage

@@ -1,6 +1,7 @@
 // ABOUTME: SSO OAuth flow workflow: initiate, wait for callback, exchange token.
 // ABOUTME: Demonstrates the activity-waitFor-activity pattern.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 type SsoSignals = {
 	"sso-callback": string;
@@ -12,8 +13,8 @@ type SsoSession = {
 	accessToken: string;
 };
 
-export const ssoWorkflow: WorkflowFunction<SsoSession, SsoSignals> = function* (
-	ctx,
+export const ssoWorkflow = workflow(function* (
+	ctx: WorkflowContext<SsoSignals>,
 ) {
 	const _authUrl = yield* ctx.activity("initiate-sso", async () => {
 		await new Promise((r) => setTimeout(r, 1000));
@@ -32,4 +33,4 @@ export const ssoWorkflow: WorkflowFunction<SsoSession, SsoSignals> = function* (
 	});
 
 	return session;
-};
+});

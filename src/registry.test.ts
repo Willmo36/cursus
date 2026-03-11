@@ -6,21 +6,22 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
+import { workflow } from "./types";
 import type {
+	WorkflowContext,
 	WorkflowEvent,
 	WorkflowEventObserver,
-	WorkflowFunction,
 } from "./types";
 import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
 describe("WorkflowRegistry", () => {
 	it("start() runs a registered workflow to completion", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		const state = registry.getState("greet");
@@ -28,12 +29,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("waitFor() returns the result of a completed workflow", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		const result = await registry.waitFor<string>("greet");
@@ -41,24 +42,24 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("waitFor() auto-starts an unstarted workflow (start: true)", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		const result = await registry.waitFor<string>("greet", { start: true });
 		expect(result).toBe("hello");
 	});
 
 	it("waitFor() with start: false waits until started by something else", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		let resolved = false;
 		const waitPromise = registry
@@ -81,12 +82,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("multiple waiters on same workflow all get the result", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		// Two waiters before starting
 		const wait1 = registry.waitFor<string>("greet", { start: false });
@@ -100,12 +101,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("waitFor() on already-completed workflow returns immediately", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		// Should resolve immediately
@@ -132,12 +133,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("persists events to storage", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		const events = await storage.load("greet");
@@ -148,12 +149,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("compacts storage after workflow completes", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		const events = await storage.load("greet");
@@ -165,14 +166,14 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("compacts storage after workflow fails", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fail", async () => {
 				throw new Error("boom");
 			});
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ fail: workflow }, storage);
+		const registry = new WorkflowRegistry({ fail: wf }, storage);
 		await registry.start("fail");
 
 		const events = await storage.load("fail");
@@ -184,14 +185,14 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("failed workflow rejects waiters", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("fail", async () => {
 				throw new Error("boom");
 			});
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ fail: workflow }, storage);
+		const registry = new WorkflowRegistry({ fail: wf }, storage);
 
 		const waitPromise = registry.waitFor<string>("fail");
 		await expect(waitPromise).rejects.toThrow("boom");
@@ -199,13 +200,13 @@ describe("WorkflowRegistry", () => {
 
 	it("start() is idempotent — second call is a no-op", async () => {
 		let callCount = 0;
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			callCount++;
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		await registry.start("greet");
 		await registry.start("greet");
@@ -214,13 +215,13 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("signal() delegates to the interpreter", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ form: workflow }, storage);
+		const registry = new WorkflowRegistry({ form: wf }, storage);
 
 		const startPromise = registry.start("form");
 
@@ -236,12 +237,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("onStateChange notifies subscribers", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		const states: string[] = [];
 		registry.onStateChange("greet", () => {
@@ -256,15 +257,15 @@ describe("WorkflowRegistry", () => {
 
 	describe("observe/unobserve", () => {
 		it("observe() makes a local interpreter's events visible via getEvents()", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 			await interpreter.run();
 
 			registry.observe("local", interpreter);
@@ -280,15 +281,15 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("observe() makes the ID visible via getWorkflowIds()", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ global: workflow }, storage);
+			const registry = new WorkflowRegistry({ global: wf }, storage);
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 
 			registry.observe("local", interpreter);
 
@@ -298,16 +299,16 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("observe() does not override an existing global workflow", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
 			const log = new EventLog();
-			const fakeInterpreter = new Interpreter(workflow, log);
+			const fakeInterpreter = new Interpreter(wf, log);
 
 			registry.observe("greet", fakeInterpreter);
 
@@ -317,15 +318,15 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("unobserve() removes the entry", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 
 			registry.observe("local", interpreter);
 			expect(registry.getWorkflowIds()).toContain("local");
@@ -335,22 +336,22 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("re-observe() replaces interpreter for previously observed entries", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
 
 			const log1 = new EventLog();
-			const interpreter1 = new Interpreter(workflow, log1);
+			const interpreter1 = new Interpreter(wf, log1);
 			interpreter1.run();
 
 			registry.observe("local", interpreter1);
 
 			const log2 = new EventLog();
-			const interpreter2 = new Interpreter(workflow, log2);
+			const interpreter2 = new Interpreter(wf, log2);
 			interpreter2.run();
 
 			registry.observe("local", interpreter2);
@@ -371,16 +372,16 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("observe() wires interpreter state changes to entry listeners", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
@@ -401,9 +402,9 @@ describe("WorkflowRegistry", () => {
 
 	describe("onWorkflowsChange", () => {
 		it("fires when observe is called", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
@@ -412,22 +413,22 @@ describe("WorkflowRegistry", () => {
 			registry.onWorkflowsChange(() => calls.push("changed"));
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 			registry.observe("local", interpreter);
 
 			expect(calls).toEqual(["changed"]);
 		});
 
 		it("fires when unobserve is called", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 			registry.observe("local", interpreter);
 
 			const calls: string[] = [];
@@ -439,9 +440,9 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("returns an unsubscribe function", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({}, storage);
@@ -452,7 +453,7 @@ describe("WorkflowRegistry", () => {
 			unsub();
 
 			const log = new EventLog();
-			const interpreter = new Interpreter(workflow, log);
+			const interpreter = new Interpreter(wf, log);
 			registry.observe("local", interpreter);
 
 			expect(calls).toEqual([]);
@@ -460,16 +461,16 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("getWorkflowIds() returns all registered workflow IDs", () => {
-		const workflowA: WorkflowFunction<string> = function* (ctx) {
+		const wfA = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("a", async () => "a");
-		};
-		const workflowB: WorkflowFunction<string> = function* (ctx) {
+		});
+		const wfB = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("b", async () => "b");
-		};
+		});
 
 		const storage = new MemoryStorage();
 		const registry = new WorkflowRegistry(
-			{ alpha: workflowA, beta: workflowB },
+			{ alpha: wfA, beta: wfB },
 			storage,
 		);
 
@@ -480,12 +481,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("getEvents() returns events for a started workflow", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 		await registry.start("greet");
 
 		const events = registry.getEvents("greet");
@@ -498,13 +499,13 @@ describe("WorkflowRegistry", () => {
 	describe("reset", () => {
 		it("reset() cancels, clears storage, and allows restart", async () => {
 			let runCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				runCount++;
 				return yield* ctx.activity("count", async () => runCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ counter: workflow }, storage);
+			const registry = new WorkflowRegistry({ counter: wf }, storage);
 
 			await registry.start("counter");
 			expect(registry.getState("counter")).toBe("completed");
@@ -526,13 +527,13 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("reset() cancels a waiting workflow", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ form: workflow }, storage);
+			const registry = new WorkflowRegistry({ form: wf }, storage);
 
 			const startPromise = registry.start("form");
 			await new Promise((r) => setTimeout(r, 10));
@@ -547,13 +548,13 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("reset() notifies state change listeners", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				const data = yield* ctx.receive<string>("submit");
 				return `got: ${data}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ form: workflow }, storage);
+			const registry = new WorkflowRegistry({ form: wf }, storage);
 
 			const startPromise = registry.start("form");
 			await new Promise((r) => setTimeout(r, 10));
@@ -578,12 +579,12 @@ describe("WorkflowRegistry", () => {
 	});
 
 	it("getEvents() returns empty array for an unstarted workflow", () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 		const events = registry.getEvents("greet");
 		expect(events).toEqual([]);
@@ -591,25 +592,17 @@ describe("WorkflowRegistry", () => {
 
 	describe("circular dependency detection", () => {
 		it("detects a direct cycle (A → B → A)", async () => {
-			const workflowA: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ B: string }
-			> = function* (ctx) {
+			const wfA = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { B: string }>) {
 				return yield* ctx.join("B");
-			};
+			});
 
-			const workflowB: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ A: string }
-			> = function* (ctx) {
+			const wfB = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { A: string }>) {
 				return yield* ctx.join("A");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ A: workflowA, B: workflowB },
+				{ A: wfA, B: wfB },
 				storage,
 			);
 
@@ -623,33 +616,21 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("detects a transitive cycle (A → B → C → A)", async () => {
-			const workflowA: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ B: string }
-			> = function* (ctx) {
+			const wfA = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { B: string }>) {
 				return yield* ctx.join("B");
-			};
+			});
 
-			const workflowB: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ C: string }
-			> = function* (ctx) {
+			const wfB = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { C: string }>) {
 				return yield* ctx.join("C");
-			};
+			});
 
-			const workflowC: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ A: string }
-			> = function* (ctx) {
+			const wfC = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { A: string }>) {
 				return yield* ctx.join("A");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ A: workflowA, B: workflowB, C: workflowC },
+				{ A: wfA, B: wfB, C: wfC },
 				storage,
 			);
 
@@ -664,29 +645,21 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("does not false-positive when two workflows depend on the same target", async () => {
-			const workflowTarget: WorkflowFunction<string> = function* (ctx) {
+			const wfTarget = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
-			const workflowA: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ target: string }
-			> = function* (ctx) {
+			const wfA = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { target: string }>) {
 				return yield* ctx.join("target");
-			};
+			});
 
-			const workflowC: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ target: string }
-			> = function* (ctx) {
+			const wfC = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { target: string }>) {
 				return yield* ctx.join("target");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ target: workflowTarget, A: workflowA, C: workflowC },
+				{ target: wfTarget, A: wfA, C: wfC },
 				storage,
 			);
 
@@ -700,26 +673,18 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("detects a cycle through all() with workflow refs", async () => {
-			const workflowA: WorkflowFunction<
-				unknown,
-				Record<string, unknown>,
-				{ B: string }
-			> = function* (ctx) {
+			const wfA = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { B: string }>) {
 				const [result] = yield* ctx.all(ctx.workflow("B"));
 				return result;
-			};
+			});
 
-			const workflowB: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ A: string }
-			> = function* (ctx) {
+			const wfB = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { A: string }>) {
 				return yield* ctx.join("A");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ A: workflowA, B: workflowB },
+				{ A: wfA, B: wfB },
 				storage,
 			);
 
@@ -731,29 +696,21 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("cleans up dependency edges after workflow completes", async () => {
-			const workflowA: WorkflowFunction<string> = function* (ctx) {
+			const wfA = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
-			const workflowB: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ A: string }
-			> = function* (ctx) {
+			const wfB = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { A: string }>) {
 				return yield* ctx.join("A");
-			};
+			});
 
-			const workflowC: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ B: string }
-			> = function* (ctx) {
+			const wfC = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { B: string }>) {
 				return yield* ctx.join("B");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ A: workflowA, B: workflowB, C: workflowC },
+				{ A: wfA, B: wfB, C: wfC },
 				storage,
 			);
 
@@ -773,12 +730,12 @@ describe("WorkflowRegistry", () => {
 			const observer: WorkflowEventObserver = (wid, event) =>
 				observed.push({ workflowId: wid, event });
 
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage, [
+			const registry = new WorkflowRegistry({ greet: wf }, storage, [
 				observer,
 			]);
 			await registry.start("greet");
@@ -795,13 +752,13 @@ describe("WorkflowRegistry", () => {
 
 	describe("versioning", () => {
 		it("versioned workflow starts fresh normally", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ greet: workflow },
+				{ greet: wf },
 				storage,
 				undefined,
 				{ greet: 1 },
@@ -814,15 +771,15 @@ describe("WorkflowRegistry", () => {
 
 		it("versioned workflow with same version replays from storage", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", activityFn);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			// First run — stores events + version
 			const registry1 = new WorkflowRegistry(
-				{ greet: workflow },
+				{ greet: wf },
 				storage,
 				undefined,
 				{ greet: 1 },
@@ -832,7 +789,7 @@ describe("WorkflowRegistry", () => {
 
 			// Second run — same version, should replay without re-running activity
 			const registry2 = new WorkflowRegistry(
-				{ greet: workflow },
+				{ greet: wf },
 				storage,
 				undefined,
 				{ greet: 1 },
@@ -844,16 +801,16 @@ describe("WorkflowRegistry", () => {
 
 		it("versioned workflow with different version wipes and restarts", async () => {
 			let callCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				callCount++;
 				return yield* ctx.activity("count", async () => callCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			// First run with version 1
 			const registry1 = new WorkflowRegistry(
-				{ counter: workflow },
+				{ counter: wf },
 				storage,
 				undefined,
 				{ counter: 1 },
@@ -863,7 +820,7 @@ describe("WorkflowRegistry", () => {
 
 			// Second run with version 2 — should wipe and restart
 			const registry2 = new WorkflowRegistry(
-				{ counter: workflow },
+				{ counter: wf },
 				storage,
 				undefined,
 				{ counter: 2 },
@@ -874,16 +831,16 @@ describe("WorkflowRegistry", () => {
 
 		it("versioned workflow after compaction with different version wipes and restarts", async () => {
 			let callCount = 0;
-			const workflow: WorkflowFunction<number> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				callCount++;
 				return yield* ctx.activity("count", async () => callCount);
-			};
+			});
 
 			const storage = new MemoryStorage();
 
 			// First run — compacts to terminal event
 			const registry1 = new WorkflowRegistry(
-				{ counter: workflow },
+				{ counter: wf },
 				storage,
 				undefined,
 				{ counter: 1 },
@@ -897,7 +854,7 @@ describe("WorkflowRegistry", () => {
 
 			// Second run with different version — should wipe compacted data
 			const registry2 = new WorkflowRegistry(
-				{ counter: workflow },
+				{ counter: wf },
 				storage,
 				undefined,
 				{ counter: 2 },
@@ -907,9 +864,9 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("unversioned workflow ignores version check", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
 			await storage.saveVersion("greet", 99);
@@ -922,20 +879,20 @@ describe("WorkflowRegistry", () => {
 			]);
 
 			// No versions passed — should replay from storage
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 			expect(await registry.waitFor("greet")).toBe("old-result");
 		});
 	});
 
 	it("onStateChange returns unsubscribe function", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const wf = workflow(function* (ctx: WorkflowContext) {
 			const data = yield* ctx.receive<string>("submit");
 			return `got: ${data}`;
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ form: workflow }, storage);
+		const registry = new WorkflowRegistry({ form: wf }, storage);
 
 		const states: string[] = [];
 		const unsubscribe = registry.onStateChange("form", () => {
@@ -960,20 +917,15 @@ describe("WorkflowRegistry", () => {
 
 	describe("publish", () => {
 		it("publish() resolves existing waiters", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				// Keep running — don't return yet
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 
 			// Start session workflow (it will wait for login)
 			const startPromise = registry.start("session");
@@ -999,19 +951,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitFor returns published value immediately after publish", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1026,12 +973,12 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitFor returns completed value for non-publishing workflows", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
 			const result = await registry.waitFor<string>("greet");
@@ -1039,29 +986,20 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("integration: published() gets published value from another workflow", async () => {
-			const sessionWorkflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const sessionWf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
-			const checkoutWorkflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ session: { user: string } }
-			> = function* (ctx) {
+			const checkoutWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { session: { user: string } }>) {
 				const account = yield* ctx.published("session");
 				return `checkout for ${account.user}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ session: sessionWorkflow, checkout: checkoutWorkflow },
+				{ session: sessionWf, checkout: checkoutWf },
 				storage,
 			);
 
@@ -1082,19 +1020,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("reset clears published state", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1118,19 +1051,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("compaction preserves workflow_published event alongside terminal event", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1151,19 +1079,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("reload from compacted storage restores published state for waitFor", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry1 = new WorkflowRegistry({ session: workflow }, storage);
+			const registry1 = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry1.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1171,7 +1094,7 @@ describe("WorkflowRegistry", () => {
 			await startPromise;
 
 			// Create a fresh registry loading from the same (compacted) storage
-			const registry2 = new WorkflowRegistry({ session: workflow }, storage);
+			const registry2 = new WorkflowRegistry({ session: wf }, storage);
 			const result = await registry2.waitFor<{ user: string }>("session");
 
 			// waitFor should return the published value, not the completed value
@@ -1181,19 +1104,14 @@ describe("WorkflowRegistry", () => {
 
 	describe("waitForPublished / waitForCompletion", () => {
 		it("waitForPublished() returns published value", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1215,19 +1133,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitForCompletion() returns result value, not published value", async () => {
-			const workflow: WorkflowFunction<
-				string,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				return `done for ${user}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1247,20 +1160,15 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("publish resolves only publishedWaiters, not completionWaiters", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				// Keep running
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1285,12 +1193,12 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("completion resolves completionWaiters with result", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 			const completionPromise = registry.waitForCompletion<string>("greet");
 			const result = await completionPromise;
@@ -1298,14 +1206,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("failure rejects both published and completion waiters", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("fail", async () => {
 					throw new Error("boom");
 				});
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ fail: workflow }, storage);
+			const registry = new WorkflowRegistry({ fail: wf }, storage);
 
 			const publishedPromise = registry.waitForPublished("fail");
 			const completionPromise = registry.waitForCompletion("fail");
@@ -1315,19 +1223,14 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitForPublished returns immediately when already published", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ login: { user: string } },
-				Record<string, never>,
-				{ user: string }
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ login: { user: string } }, Record<string, never>, { user: string }>) {
 				const { user } = yield* ctx.receive("login");
 				yield* ctx.publish({ user });
 				yield* ctx.receive("login");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: workflow }, storage);
+			const registry = new WorkflowRegistry({ session: wf }, storage);
 			const startPromise = registry.start("session");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1341,12 +1244,12 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitForCompletion returns immediately when already completed", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
 			const result = await registry.waitForCompletion<string>("greet");
@@ -1358,20 +1261,15 @@ describe("WorkflowRegistry", () => {
 		it("waitForPublished skips value that does not match where", async () => {
 			type UserState = { status: "loading" } | { status: "ready"; user: string };
 
-			const workflow: WorkflowFunction<
-				void,
-				{ go: undefined },
-				Record<string, never>,
-				UserState
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ go: undefined }, Record<string, never>, UserState>) {
 				yield* ctx.publish({ status: "loading" });
 				yield* ctx.receive("go");
 				yield* ctx.publish({ status: "ready", user: "max" });
 				yield* ctx.receive("go");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ user: workflow }, storage);
+			const registry = new WorkflowRegistry({ user: wf }, storage);
 			const startPromise = registry.start("user");
 
 			await new Promise((r) => setTimeout(r, 10));
@@ -1402,18 +1300,13 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("waitForPublished resolves immediately when where matches current value", async () => {
-			const workflow: WorkflowFunction<
-				void,
-				{ go: undefined },
-				Record<string, never>,
-				string
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ go: undefined }, Record<string, never>, string>) {
 				yield* ctx.publish("hello");
 				yield* ctx.receive("go");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ dep: workflow }, storage);
+			const registry = new WorkflowRegistry({ dep: wf }, storage);
 			const startPromise = registry.start("dep");
 			await new Promise((r) => setTimeout(r, 10));
 
@@ -1427,12 +1320,7 @@ describe("WorkflowRegistry", () => {
 		it("publish re-evaluates where waiters on each publish", async () => {
 			type State = { count: number };
 
-			const workflow: WorkflowFunction<
-				void,
-				{ inc: undefined },
-				Record<string, never>,
-				State
-			> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext<{ inc: undefined }, Record<string, never>, State>) {
 				let count = 0;
 				yield* ctx.publish({ count });
 				yield* ctx.handle<void>({
@@ -1441,10 +1329,10 @@ describe("WorkflowRegistry", () => {
 						yield* ctx.publish({ count });
 					},
 				});
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ counter: workflow }, storage);
+			const registry = new WorkflowRegistry({ counter: wf }, storage);
 			const startPromise = registry.start("counter");
 			await new Promise((r) => setTimeout(r, 10));
 
@@ -1481,26 +1369,16 @@ describe("WorkflowRegistry", () => {
 		it("runs callback each time dependency publishes a new value", async () => {
 			const fetchCalls: number[] = [];
 
-			const accountWorkflow: WorkflowFunction<
-				void,
-				{ update: { name: string } },
-				Record<string, never>,
-				{ name: string }
-			> = function* (ctx) {
+			const accountWf = workflow(function* (ctx: WorkflowContext<{ update: { name: string } }, Record<string, never>, { name: string }>) {
 				yield* ctx.publish({ name: "max" });
 				yield* ctx.handle<void>({
 					update: function* (_ctx, payload) {
 						yield* ctx.publish(payload);
 					},
 				});
-			};
+			});
 
-			const pointsWorkflow: WorkflowFunction<
-				void,
-				Record<string, unknown>,
-				{ account: { name: string } },
-				number
-			> = function* (ctx) {
+			const pointsWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { account: { name: string } }, number>) {
 				let callCount = 0;
 				yield* ctx.subscribe("account", {}, function* (ctx, account) {
 					callCount++;
@@ -1511,11 +1389,11 @@ describe("WorkflowRegistry", () => {
 					);
 					yield* ctx.publish(points);
 				});
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ account: accountWorkflow, points: pointsWorkflow },
+				{ account: accountWf, points: pointsWf },
 				storage,
 			);
 
@@ -1538,26 +1416,16 @@ describe("WorkflowRegistry", () => {
 		it("runs body to completion before waiting for next publish", async () => {
 			const bodyCalls: number[] = [];
 
-			const sourceWorkflow: WorkflowFunction<
-				void,
-				{ bump: undefined },
-				Record<string, never>,
-				number
-			> = function* (ctx) {
+			const sourceWf = workflow(function* (ctx: WorkflowContext<{ bump: undefined }, Record<string, never>, number>) {
 				yield* ctx.publish(1);
 				yield* ctx.handle<void>({
 					bump: function* (_ctx, _payload) {
 						yield* ctx.publish(2);
 					},
 				});
-			};
+			});
 
-			const reactiveWorkflow: WorkflowFunction<
-				void,
-				Record<string, unknown>,
-				{ source: number },
-				string
-			> = function* (ctx) {
+			const reactiveWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { source: number }, string>) {
 				yield* ctx.subscribe("source", {}, function* (ctx, value) {
 					const result = yield* ctx.activity(
 						"fetch",
@@ -1566,11 +1434,11 @@ describe("WorkflowRegistry", () => {
 					bodyCalls.push(value as number);
 					yield* ctx.publish(result);
 				});
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ source: sourceWorkflow, reactive: reactiveWorkflow },
+				{ source: sourceWf, reactive: reactiveWf },
 				storage,
 			);
 
@@ -1593,23 +1461,14 @@ describe("WorkflowRegistry", () => {
 			type UserState = { status: "loading" } | { status: "ready"; user: string };
 			const receivedUsers: string[] = [];
 
-			const userWorkflow: WorkflowFunction<
-				void,
-				{ go: undefined },
-				Record<string, never>,
-				UserState
-			> = function* (ctx) {
+			const userWf = workflow(function* (ctx: WorkflowContext<{ go: undefined }, Record<string, never>, UserState>) {
 				yield* ctx.publish({ status: "loading" as const });
 				yield* ctx.receive("go");
 				yield* ctx.publish({ status: "ready" as const, user: "max" });
 				yield* ctx.receive("go");
-			};
+			});
 
-			const consumerWorkflow: WorkflowFunction<
-				void,
-				Record<string, unknown>,
-				{ user: UserState }
-			> = function* (ctx) {
+			const consumerWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { user: UserState }>) {
 				yield* ctx.subscribe(
 					"user",
 					{
@@ -1620,11 +1479,11 @@ describe("WorkflowRegistry", () => {
 						receivedUsers.push(state.user);
 					},
 				);
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ user: userWorkflow, consumer: consumerWorkflow },
+				{ user: userWf, consumer: consumerWf },
 				storage,
 			);
 
@@ -1644,25 +1503,16 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("done() exits the subscribe loop and returns a value", async () => {
-			const sourceWorkflow: WorkflowFunction<
-				void,
-				{ bump: undefined },
-				Record<string, never>,
-				number
-			> = function* (ctx) {
+			const sourceWf = workflow(function* (ctx: WorkflowContext<{ bump: undefined }, Record<string, never>, number>) {
 				yield* ctx.publish(1);
 				yield* ctx.handle<void>({
 					bump: function* (_ctx, _payload) {
 						yield* ctx.publish(2);
 					},
 				});
-			};
+			});
 
-			const consumerWorkflow: WorkflowFunction<
-				string,
-				Record<string, unknown>,
-				{ source: number }
-			> = function* (ctx) {
+			const consumerWf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { source: number }>) {
 				const result = yield* ctx.subscribe(
 					"source",
 					{},
@@ -1673,11 +1523,11 @@ describe("WorkflowRegistry", () => {
 					},
 				);
 				return `result: ${result}`;
-			};
+			});
 
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry(
-				{ source: sourceWorkflow, consumer: consumerWorkflow },
+				{ source: sourceWf, consumer: consumerWf },
 				storage,
 			);
 
@@ -1698,12 +1548,12 @@ describe("WorkflowRegistry", () => {
 
 	describe("getTrace", () => {
 		it("returns correct envelope shape", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
 			const trace = registry.getTrace("greet");
@@ -1714,12 +1564,12 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("includes all events from the workflow", async () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
 			const trace = registry.getTrace("greet");
@@ -1728,12 +1578,12 @@ describe("WorkflowRegistry", () => {
 		});
 
 		it("returns empty events array for un-started workflow", () => {
-			const workflow: WorkflowFunction<string> = function* (ctx) {
+			const wf = workflow(function* (ctx: WorkflowContext) {
 				return yield* ctx.activity("greet", async () => "hello");
-			};
+			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: workflow }, storage);
+			const registry = new WorkflowRegistry({ greet: wf }, storage);
 
 			const trace = registry.getTrace("greet");
 			expect(trace.events).toEqual([]);

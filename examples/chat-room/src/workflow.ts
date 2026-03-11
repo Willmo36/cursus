@@ -1,6 +1,7 @@
 // ABOUTME: Chat room workflow that accumulates messages in a loop until closed.
 // ABOUTME: Demonstrates waitFor in a loop with discriminated union events.
-import type { WorkflowFunction } from "cursus";
+import { workflow } from "cursus";
+import type { WorkflowContext } from "cursus";
 
 export type ChatMessage = {
 	username: string;
@@ -16,8 +17,9 @@ type ChatSignals = {
 	"chat-event": ChatEvent;
 };
 
-export const chatWorkflow: WorkflowFunction<ChatMessage[], ChatSignals> =
-	function* (ctx) {
+export const chatWorkflow = workflow(function* (
+	ctx: WorkflowContext<ChatSignals>,
+) {
 		const messages: ChatMessage[] = [];
 
 		for (;;) {
@@ -33,4 +35,4 @@ export const chatWorkflow: WorkflowFunction<ChatMessage[], ChatSignals> =
 				timestamp: Date.now(),
 			});
 		}
-	};
+	});

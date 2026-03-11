@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import eventSchema from "./event-schema.json";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import type { WorkflowEvent, WorkflowFunction } from "./types";
+import { workflow } from "./types";
+import type { WorkflowContext, WorkflowEvent } from "./types";
 import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
 function createValidator() {
@@ -16,12 +17,12 @@ function createValidator() {
 
 describe("event schema", () => {
 	it("validates a complete WorkflowTrace from a real workflow run", async () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: workflow }, storage);
+		const registry = new WorkflowRegistry({ greet: greetWorkflow }, storage);
 		await registry.start("greet");
 
 		const trace = registry.getTrace("greet");

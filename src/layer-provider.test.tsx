@@ -8,16 +8,17 @@ import { createLayer } from "./layer";
 import { useLayerRegistry, WorkflowLayerProvider } from "./layer-provider";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import type { WorkflowFunction } from "./types";
+import { workflow } from "./types";
+import type { WorkflowContext } from "./types";
 
 describe("WorkflowLayerProvider", () => {
 	it("makes registry available via context", () => {
-		const workflow: WorkflowFunction<string> = function* (ctx) {
+		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
 			return yield* ctx.activity("greet", async () => "hello");
-		};
+		});
 
 		const storage = new MemoryStorage();
-		const layer = createLayer({ greet: workflow }, storage);
+		const layer = createLayer({ greet: greetWorkflow }, storage);
 
 		const wrapper = ({ children }: { children: ReactNode }) => (
 			<WorkflowLayerProvider layer={layer}>{children}</WorkflowLayerProvider>
