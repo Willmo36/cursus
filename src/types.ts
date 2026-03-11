@@ -349,6 +349,16 @@ export type ResultOf<
 
 export type Workflow<A, R extends Requirement = never> = Generator<Command & Step<R>, A, unknown>;
 
+// Wraps a generator function into a workflow with inferred requirements.
+// At runtime, this is the identity function — the magic is at the type level,
+// where TypeScript infers R from all yield* calls in the body.
+// biome-ignore lint/suspicious/noExplicitAny: preserves the full function type including parameter types
+export function workflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
+	fn: F,
+): F {
+	return fn;
+}
+
 export type WorkflowFunction<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,

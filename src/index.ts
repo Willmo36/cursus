@@ -55,5 +55,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { CancelledError } from "./types";
+export { CancelledError, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";

@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
+import { workflow } from "./types";
 import type { Command, Dependency, Publishes, Requirements, Signal, WorkflowContext, WorkflowFunction } from "./types";
 
 /**
@@ -264,6 +265,26 @@ describe("Monad laws", () => {
 			> = true;
 			void _check;
 			void workflow;
+		});
+
+		it("workflow() constructor enables inference and works at runtime", async () => {
+			const w = workflow(function* (ctx: WorkflowContext<{ greet: string }>) {
+				const name = yield* ctx.receive("greet");
+				const msg = yield* ctx.activity("format", async () => `Hello ${name}`);
+				return msg;
+			});
+
+			// Type-level: Requirements are inferred
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"greet", string>> = true;
+			void _check;
+
+			// Runtime: workflow() output is usable with createTestRuntime
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "greet", payload: "Max" }],
+				activities: { format: () => "Hello Max" },
+			});
+			expect(result).toBe("Hello Max");
 		});
 	});
 });
