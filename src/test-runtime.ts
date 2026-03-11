@@ -5,36 +5,91 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import type {
 	AnyWorkflowFunction,
-	WorkflowContext,
+	Descriptor,
 	WorkflowRegistryInterface,
 } from "./types";
-
-// Extracts the SignalMap from a workflow function's context parameter
-type ExtractSignalMap<F> =
-	F extends (ctx: WorkflowContext<infer S, any, any>) => any ? S : Record<string, unknown>;
 
 // Extracts the return value type from a workflow function's generator
 type ExtractResult<F> =
 	F extends (...args: any[]) => Generator<any, infer A, any> ? A : unknown;
 
-type TestRuntimeOptions<
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
-> = {
+type TestRuntimeOptions = {
 	activities?: Record<string, (...args: unknown[]) => unknown>;
-	signals?: Array<
-		{
-			[K in keyof SignalMap & string]: { name: K; payload: SignalMap[K] };
-		}[keyof SignalMap & string]
-	>;
+	signals?: Array<{ name: string; payload: unknown }>;
 	workflowResults?: Record<string, unknown>;
 };
+
+function wrapWithMocks(
+	workflowFn: AnyWorkflowFunction,
+	activities: Record<string, (...args: unknown[]) => unknown>,
+): AnyWorkflowFunction {
+	return function* (ctx) {
+		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
+		const gen = (workflowFn as AnyWorkflowFunction)(ctx as any);
+		let input: unknown = undefined;
+		let threw = false;
+		let thrownValue: unknown = undefined;
+
+		for (;;) {
+			const next = threw ? gen.throw(thrownValue) : gen.next(input);
+			threw = false;
+
+			if (next.done) {
+				return next.value;
+			}
+
+			const descriptor = next.value as Descriptor;
+
+			// Intercept activity descriptors to substitute mocks by name
+			if (descriptor.type === "activity") {
+				const mockFn = activities[descriptor.name];
+				if (mockFn) {
+					const mockedDescriptor: Descriptor = {
+						...descriptor,
+						fn: async () => mockFn(),
+					};
+					try {
+						input = yield mockedDescriptor;
+					} catch (err) {
+						threw = true;
+						thrownValue = err;
+					}
+					continue;
+				}
+			}
+
+			// Intercept child descriptors to wrap the child workflow with mocks too
+			if (descriptor.type === "child") {
+				const wrappedChild = wrapWithMocks(descriptor.workflow, activities);
+				const wrappedDescriptor: Descriptor = {
+					...descriptor,
+					workflow: wrappedChild,
+				};
+				try {
+					input = yield wrappedDescriptor;
+				} catch (err) {
+					threw = true;
+					thrownValue = err;
+				}
+				continue;
+			}
+
+			try {
+				input = yield descriptor;
+			} catch (err) {
+				threw = true;
+				thrownValue = err;
+			}
+		}
+	};
+}
 
 export async function createTestRuntime<
 	// biome-ignore lint/suspicious/noExplicitAny: infers from any workflow function shape
 	F extends (...args: any[]) => Generator<any, any, unknown>,
 >(
 	workflowFn: F,
-	options: TestRuntimeOptions<ExtractSignalMap<F>>,
+	options: TestRuntimeOptions,
 ): Promise<ExtractResult<F>> {
 	const { activities = {}, signals = [], workflowResults } = options;
 	const signalQueue = [...signals];
@@ -71,54 +126,9 @@ export async function createTestRuntime<
 		};
 	}
 
-	function wrapContext(
-		ctx: WorkflowContext<
-			Record<string, unknown>,
-			Record<string, unknown>,
-			Record<string, unknown>
-		>,
-	): WorkflowContext<
-		Record<string, unknown>,
-		Record<string, unknown>,
-		Record<string, unknown>
-	> {
-		return {
-			...ctx,
-			activity: <U>(name: string, fn: (signal: AbortSignal) => Promise<U>) => {
-				const mockFn = activities[name];
-				if (mockFn) {
-					return ctx.activity(name, async () => mockFn() as U);
-				}
-				return ctx.activity(name, fn);
-			},
-			child: <U, CS extends Record<string, unknown>>(
-				name: string,
-				workflow: AnyWorkflowFunction,
-			) => {
-				const wrappedChild: AnyWorkflowFunction = function* (childCtx) {
-					const wrappedChildCtx = wrapContext(
-						childCtx as unknown as WorkflowContext<
-							Record<string, unknown>,
-							Record<string, unknown>,
-							Record<string, unknown>
-						>,
-					);
-					// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
-					return yield* (workflow as AnyWorkflowFunction)(
-						wrappedChildCtx as any,
-					);
-				};
-				return ctx.child(name, wrappedChild);
-			},
-		};
-	}
-
-	// Wrap the workflow to intercept activity calls with mocks
-	const wrappedWorkflow: AnyWorkflowFunction = function* (ctx) {
-		const wrappedCtx = wrapContext(ctx);
-		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
-		return yield* (workflowFn as AnyWorkflowFunction)(wrappedCtx as any);
-	};
+	const wrappedWorkflow = Object.keys(activities).length > 0
+		? wrapWithMocks(workflowFn as AnyWorkflowFunction, activities)
+		: workflowFn as AnyWorkflowFunction;
 
 	const log = new EventLog();
 	const interpreter = new Interpreter(wrappedWorkflow, log, mockRegistry);

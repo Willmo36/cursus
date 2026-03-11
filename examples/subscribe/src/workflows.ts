@@ -1,6 +1,6 @@
 // ABOUTME: Account and points store workflows demonstrating subscribe with takeLatest.
 // ABOUTME: Points store reactively refetches whenever the account changes.
-import { workflow } from "cursus";
+import { activity, publish, receive, workflow } from "cursus";
 import type { WorkflowContext } from "cursus";
 
 type Account = { id: string; name: string; tier: string };
@@ -21,11 +21,11 @@ type WorkflowMap = {
 export const accountWorkflow = workflow(function* (
 	ctx: WorkflowContext<AccountSignals, Record<string, never>, AccountState>,
 ) {
-	yield* ctx.publish({ status: "loading" as const });
+	yield* publish({ status: "loading" as const });
 
-	const { name } = yield* ctx.receive("login");
+	const { name } = yield* receive<{ name: string }, "login">("login");
 
-	const account: Account = yield* ctx.activity(
+	const account: Account = yield* activity(
 		"authenticate",
 		async () => ({
 			id: "user-1",
@@ -34,15 +34,15 @@ export const accountWorkflow = workflow(function* (
 		}),
 	);
 
-	yield* ctx.publish({ status: "ready" as const, account });
+	yield* publish({ status: "ready" as const, account });
 
 	yield* ctx.handle<never>({
 		upgrade: function* (ctx, { tier }) {
-			const updated = yield* ctx.activity(
+			const updated = yield* activity(
 				"apply-upgrade",
 				async () => ({ ...account, tier }),
 			);
-			yield* ctx.publish({ status: "ready" as const, account: updated });
+			yield* publish({ status: "ready" as const, account: updated });
 		},
 	});
 });
@@ -50,7 +50,7 @@ export const accountWorkflow = workflow(function* (
 export const pointsWorkflow = workflow(function* (
 	ctx: WorkflowContext<Record<string, unknown>, WorkflowMap, number | null>,
 ) {
-	yield* ctx.publish(null);
+	yield* publish(null);
 
 	yield* ctx.subscribe(
 		"account",
@@ -59,11 +59,11 @@ export const pointsWorkflow = workflow(function* (
 				s.status === "ready",
 		},
 		function* (ctx, { account }) {
-			const points = yield* ctx.activity(
+			const points = yield* activity(
 				"fetch-points",
 				async () => account.tier === "pro" ? 500 : 100,
 			);
-			yield* ctx.publish(points);
+			yield* publish(points);
 		},
 	);
 });

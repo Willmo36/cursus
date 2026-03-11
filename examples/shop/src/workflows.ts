@@ -1,6 +1,6 @@
 // ABOUTME: Workflow definitions for the shop example.
 // ABOUTME: Catalog fetches products, cart manages items via signals, checkout coordinates login and cart.
-import { workflow } from "cursus";
+import { activity, all, join, publish, receive, workflow } from "cursus";
 import type { WorkflowContext } from "cursus";
 import {
 	type ApiFetch,
@@ -13,11 +13,9 @@ import type { CartItem, Order, Product } from "./types";
 
 // --- Catalog workflow ---
 
-type CatalogSignals = Record<string, never>;
-
 export function createCatalogWorkflow(apiFetch: ApiFetch) {
-	return workflow(function* (ctx: WorkflowContext<CatalogSignals>) {
-		const products = yield* ctx.activity("fetch-products", (signal) =>
+	return workflow(function* () {
+		const products = yield* activity("fetch-products", (signal) =>
 			fetchProducts(apiFetch, signal),
 		);
 		return products;
@@ -40,16 +38,16 @@ export function createCartWorkflow(apiFetch: ApiFetch) {
 
 		const res = yield* ctx.handle<CartItem[]>({
 			add: function* (ctx, productId: string) {
-				items = yield* ctx.activity("add-to-cart", (signal) =>
+				items = yield* activity("add-to-cart", (signal) =>
 					addToCart(apiFetch, productId, signal),
 				);
-				yield* ctx.publish(items);
+				yield* publish(items);
 			},
 			remove: function* (ctx, productId: string) {
-				items = yield* ctx.activity("remove-from-cart", (signal) =>
+				items = yield* activity("remove-from-cart", (signal) =>
 					removeFromCart(apiFetch, productId, signal),
 				);
-				yield* ctx.publish(items);
+				yield* publish(items);
 			},
 			checkout: function* (_ctx, _payload, done) {
 				yield* done(items);
@@ -65,24 +63,18 @@ type CheckoutSignals = {
 	login: { email: string; password: string };
 };
 
-type CheckoutWorkflowMap = {
-	cart: CartItem[];
-};
-
 export function createCheckoutWorkflow(apiFetch: ApiFetch) {
-	return workflow(function* (
-		ctx: WorkflowContext<CheckoutSignals, CheckoutWorkflowMap>,
-	) {
-		const [credentials, items] = yield* ctx.all(
-			ctx.receive("login"),
-			ctx.workflow("cart"),
+	return workflow(function* () {
+		const [credentials, items] = yield* all(
+			receive<{ email: string; password: string }, "login">("login"),
+			join<CartItem[], "cart">("cart"),
 		);
 
-		const user = yield* ctx.activity("authenticate", (signal) =>
+		const user = yield* activity("authenticate", (signal) =>
 			login(apiFetch, credentials.email, credentials.password, signal),
 		);
 
-		const order = yield* ctx.activity("place-order", async () => {
+		const order = yield* activity("place-order", async () => {
 			const total = items.reduce(
 				(sum, item) => sum + item.price * item.quantity,
 				0,

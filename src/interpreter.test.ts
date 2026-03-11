@@ -4,14 +4,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { workflow } from "./types";
+import { activity, all, child, join, publish, published, race, receive, sleep, workflow } from "./types";
 import type { WorkflowContext, WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
 	describe("Phase A: basic activity execution", () => {
 		it("runs a workflow that yields one activity and gets the result", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const result = yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				const result = yield* activity("greet", async () => "hello");
 				return result;
 			});
 
@@ -23,9 +23,9 @@ describe("Interpreter", () => {
 		});
 
 		it("runs a workflow that yields two sequential activities", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const a = yield* ctx.activity("first", async () => "one");
-				const b = yield* ctx.activity("second", async () => "two");
+			const wf = workflow(function* () {
+				const a = yield* activity("first", async () => "one");
+				const b = yield* activity("second", async () => "two");
 				return `${a}-${b}`;
 			});
 
@@ -36,8 +36,8 @@ describe("Interpreter", () => {
 		});
 
 		it("records activity events in the log", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const log = new EventLog();
@@ -63,8 +63,8 @@ describe("Interpreter", () => {
 		});
 
 		it("propagates activity failure to workflow", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("fail", async () => {
+			const wf = workflow(function* () {
+				return yield* activity("fail", async () => {
 					throw new Error("boom");
 				});
 			});
@@ -90,8 +90,8 @@ describe("Interpreter", () => {
 		});
 
 		it("preserves stack trace on activity_failed and workflow_failed events", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("fail", async () => {
+			const wf = workflow(function* () {
+				return yield* activity("fail", async () => {
 					throw new Error("boom");
 				});
 			});
@@ -118,8 +118,8 @@ describe("Interpreter", () => {
 		});
 
 		it("handles non-Error throws without stack", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("fail", async () => {
+			const wf = workflow(function* () {
+				return yield* activity("fail", async () => {
 					throw "string error";
 				});
 			});
@@ -140,8 +140,8 @@ describe("Interpreter", () => {
 	describe("Phase B: replay", () => {
 		it("replays a workflow from a pre-populated event log without executing activities", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", activityFn);
+			const wf = workflow(function* () {
+				return yield* activity("greet", activityFn);
 			});
 
 			const log = new EventLog([
@@ -160,9 +160,9 @@ describe("Interpreter", () => {
 
 		it("transitions from replay to live execution when log is exhausted", async () => {
 			const liveFn = vi.fn().mockResolvedValue("live-result");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const a = yield* ctx.activity("first", async () => "replayed");
-				const b = yield* ctx.activity("second", liveFn);
+			const wf = workflow(function* () {
+				const a = yield* activity("first", async () => "replayed");
+				const b = yield* activity("second", liveFn);
 				return `${a}-${b}`;
 			});
 
@@ -185,8 +185,8 @@ describe("Interpreter", () => {
 		});
 
 		it("detects non-determinism when command does not match event", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("different-name", async () => "x");
+			const wf = workflow(function* () {
+				return yield* activity("different-name", async () => "x");
 			});
 
 			const log = new EventLog([
@@ -210,8 +210,8 @@ describe("Interpreter", () => {
 
 	describe("Phase C: signals (receive)", () => {
 		it("pauses on receive and resumes when signal is received", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const data = yield* ctx.receive<string>("submit");
+			const wf = workflow(function* () {
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -232,8 +232,8 @@ describe("Interpreter", () => {
 		});
 
 		it("replays signal from event log", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const data = yield* ctx.receive<string>("submit");
+			const wf = workflow(function* () {
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -256,9 +256,9 @@ describe("Interpreter", () => {
 		});
 
 		it("handles multiple sequential receive calls", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const email = yield* ctx.receive<string>("email");
-				const password = yield* ctx.receive<string>("password");
+			const wf = workflow(function* () {
+				const email = yield* receive<string>("email");
+				const password = yield* receive<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -286,8 +286,8 @@ describe("Interpreter", () => {
 		it("pauses for the specified duration then resumes", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				yield* ctx.sleep(1000);
+			const wf = workflow(function* () {
+				yield* sleep(1000);
 				return "done";
 			});
 
@@ -321,8 +321,8 @@ describe("Interpreter", () => {
 		});
 
 		it("fires immediately during replay if duration has elapsed", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				yield* ctx.sleep(1000);
+			const wf = workflow(function* () {
+				yield* sleep(1000);
 				return "done";
 			});
 
@@ -342,10 +342,10 @@ describe("Interpreter", () => {
 
 	describe("Phase E: parallel activities via all()", () => {
 		it("runs multiple activities concurrently and returns all results", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(
-					ctx.activity("a", async () => "one"),
-					ctx.activity("b", async () => "two"),
+			const wf = workflow(function* () {
+				return yield* all(
+					activity("a", async () => "one"),
+					activity("b", async () => "two"),
 				);
 			});
 
@@ -359,8 +359,8 @@ describe("Interpreter", () => {
 			const fnA = vi.fn().mockResolvedValue("one");
 			const fnB = vi.fn().mockResolvedValue("two");
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(ctx.activity("a", fnA), ctx.activity("b", fnB));
+			const wf = workflow(function* () {
+				return yield* all(activity("a", fnA), activity("b", fnB));
 			});
 
 			// seq 1 = activity "a", seq 2 = activity "b", seq 3 = all command
@@ -390,10 +390,10 @@ describe("Interpreter", () => {
 		});
 
 		it("fails the whole all() if one activity fails", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(
-					ctx.activity("ok", async () => "fine"),
-					ctx.activity("bad", async () => {
+			const wf = workflow(function* () {
+				return yield* all(
+					activity("ok", async () => "fine"),
+					activity("bad", async () => {
 						throw new Error("oops");
 					}),
 				);
@@ -409,8 +409,8 @@ describe("Interpreter", () => {
 
 	describe("Phase F: all() with signals", () => {
 		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ email: string; password: string }>) {
-				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
+			const wf = workflow(function* () {
+				return yield* all(receive("email"), receive("password"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -437,8 +437,8 @@ describe("Interpreter", () => {
 		});
 
 		it("records all_started and all_completed events", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+				return yield* all(receive("a"), receive("b"));
 			});
 
 			const log = new EventLog();
@@ -474,8 +474,8 @@ describe("Interpreter", () => {
 		});
 
 		it("replays all() from event log", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ name: string; age: number }>) {
-				return yield* ctx.all(ctx.receive("name"), ctx.receive("age"));
+			const wf = workflow(function* () {
+				return yield* all(receive("name"), receive("age"));
 			});
 
 			// seq 1 = receive "name", seq 2 = receive "age", seq 3 = all command
@@ -507,8 +507,8 @@ describe("Interpreter", () => {
 		});
 
 		it("exposes waitingForAll with remaining signal names", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ email: string; password: string }>) {
-				return yield* ctx.all(ctx.receive("email"), ctx.receive("password"));
+			const wf = workflow(function* () {
+				return yield* all(receive("email"), receive("password"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -535,8 +535,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -567,8 +567,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const log = new EventLog();
@@ -611,8 +611,8 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without registry when all() has join items", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -631,8 +631,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			// seq 1 = receive "payment", seq 2 = join "profile", seq 3 = all command
@@ -678,8 +678,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -714,8 +714,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -734,8 +734,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const log = new EventLog();
@@ -768,8 +768,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -788,9 +788,9 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { profile: unknown }>) {
+			const wf = workflow(function* () {
 				try {
-					yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+					yield* all(receive("payment"), join("profile"));
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -815,12 +815,12 @@ describe("Interpreter", () => {
 
 	describe("Phase G: child workflows", () => {
 		it("runs a child workflow and returns its result to the parent", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("childTask", async () => "child-result");
+			const childWorkflow = workflow(function* () {
+				return yield* activity("childTask", async () => "child-result");
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				const childResult = yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				const childResult = yield* child("sub", childWorkflow);
 				return `parent got: ${childResult}`;
 			});
 
@@ -832,12 +832,12 @@ describe("Interpreter", () => {
 		});
 
 		it("child workflow has its own event log", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("childTask", async () => "child-result");
+			const childWorkflow = workflow(function* () {
+				return yield* activity("childTask", async () => "child-result");
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("sub", childWorkflow);
 			});
 
 			const parentLog = new EventLog();
@@ -866,13 +866,13 @@ describe("Interpreter", () => {
 		it("replays child workflow from parent event log", async () => {
 			const childFn = vi.fn();
 
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
+			const childWorkflow = workflow(function* () {
 				childFn();
-				return yield* ctx.activity("childTask", async () => "child-result");
+				return yield* activity("childTask", async () => "child-result");
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("sub", childWorkflow);
 			});
 
 			const log = new EventLog([
@@ -903,14 +903,14 @@ describe("Interpreter", () => {
 		});
 
 		it("preserves stack trace on child_failed event", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("explode", async () => {
+			const childWorkflow = workflow(function* () {
+				return yield* activity("explode", async () => {
 					throw new Error("child boom");
 				});
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.child("kid", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("kid", childWorkflow);
 			});
 
 			const log = new EventLog();
@@ -930,8 +930,8 @@ describe("Interpreter", () => {
 
 	describe("onStateChange", () => {
 		it("supports multiple listeners", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -948,8 +948,8 @@ describe("Interpreter", () => {
 		});
 
 		it("returns an unsubscribe function", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const data = yield* ctx.receive<string>("submit");
+			const wf = workflow(function* () {
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -980,9 +980,9 @@ describe("Interpreter", () => {
 
 	describe("error recovery", () => {
 		it("workflow catches activity error and returns fallback value", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
+			const wf = workflow(function* () {
 				try {
-					yield* ctx.activity("fail", async () => {
+					yield* activity("fail", async () => {
 						throw new Error("boom");
 					});
 					return "unreachable";
@@ -999,14 +999,14 @@ describe("Interpreter", () => {
 		});
 
 		it("workflow catches error, does a second activity, returns its result", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
+			const wf = workflow(function* () {
 				try {
-					yield* ctx.activity("fail", async () => {
+					yield* activity("fail", async () => {
 						throw new Error("boom");
 					});
 					return "unreachable";
 				} catch {
-					const result = yield* ctx.activity(
+					const result = yield* activity(
 						"recover",
 						async () => "recovered",
 					);
@@ -1041,12 +1041,12 @@ describe("Interpreter", () => {
 			const failFn = vi.fn().mockRejectedValue(new Error("boom"));
 			const recoverFn = vi.fn().mockResolvedValue("recovered");
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
+			const wf = workflow(function* () {
 				try {
-					yield* ctx.activity("fail", failFn as () => Promise<string>);
+					yield* activity("fail", failFn as () => Promise<string>);
 					return "unreachable";
 				} catch {
-					const result = yield* ctx.activity(
+					const result = yield* activity(
 						"recover",
 						recoverFn as () => Promise<string>,
 					);
@@ -1095,8 +1095,8 @@ describe("Interpreter", () => {
 	describe("compacted fast path", () => {
 		it("returns result immediately from compacted workflow_completed event", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", activityFn);
+			const wf = workflow(function* () {
+				return yield* activity("greet", activityFn);
 			});
 
 			const log = new EventLog([
@@ -1114,8 +1114,8 @@ describe("Interpreter", () => {
 
 		it("sets failed state from compacted workflow_failed event", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", activityFn);
+			const wf = workflow(function* () {
+				return yield* activity("greet", activityFn);
 			});
 
 			const log = new EventLog([
@@ -1134,8 +1134,8 @@ describe("Interpreter", () => {
 
 	describe("events getter", () => {
 		it("returns the event log entries", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1157,8 +1157,8 @@ describe("Interpreter", () => {
 
 	describe("published getter", () => {
 		it("returns undefined before any publish", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1176,8 +1176,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ submit: string }, Record<string, never>, { user: string }>) {
-				yield* ctx.publish({ user: "max" });
+			const wf = workflow(function* () {
+				yield* publish({ user: "max" });
 				return "done";
 			});
 
@@ -1208,8 +1208,8 @@ describe("Interpreter", () => {
 				},
 			]);
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, { user: string }>) {
-				yield* ctx.publish({ user: "max" });
+			const wf = workflow(function* () {
+				yield* publish({ user: "max" });
 				return "done";
 			});
 
@@ -1230,8 +1230,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				const user = yield* ctx.join("login");
+			const wf = workflow(function* () {
+				const user = yield* join("login");
 				return `got: ${user}`;
 			});
 
@@ -1254,8 +1254,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login", { start: false });
+			const wf = workflow(function* () {
+				return yield* join("login", { start: false });
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -1268,8 +1268,8 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without a registry", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1288,8 +1288,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const log = new EventLog();
@@ -1325,8 +1325,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const log = new EventLog();
@@ -1360,8 +1360,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const log = new EventLog([
@@ -1405,9 +1405,9 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
+			const wf = workflow(function* () {
 				try {
-					yield* ctx.join("login");
+					yield* join("login");
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -1439,8 +1439,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				const user = yield* ctx.join("login");
+			const wf = workflow(function* () {
+				const user = yield* join("login");
 				return `got: ${user}`;
 			});
 
@@ -1484,8 +1484,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { session: { user: string } }>) {
-				const account = yield* ctx.published("session");
+			const wf = workflow(function* () {
+				const account = yield* published("session");
 				return `got: ${account}`;
 			});
 
@@ -1508,8 +1508,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.published("login");
+			const wf = workflow(function* () {
+				return yield* published("login");
 			});
 
 			const log = new EventLog();
@@ -1543,8 +1543,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				const user = yield* ctx.published("login");
+			const wf = workflow(function* () {
+				const user = yield* published("login");
 				return `got: ${user}`;
 			});
 
@@ -1578,8 +1578,8 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without a registry", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.published("login");
+			const wf = workflow(function* () {
+				return yield* published("login");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1598,8 +1598,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.published("login", { start: false });
+			const wf = workflow(function* () {
+				return yield* published("login", { start: false });
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -1622,11 +1622,11 @@ describe("Interpreter", () => {
 
 			type UserState = { status: "loading" } | { status: "ready"; user: string };
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { user: UserState }>) {
-				const state = yield* ctx.published("user", {
+			const wf = workflow(function* () {
+				const state = yield* published<UserState>("user", {
 					where: (s): s is { status: "ready"; user: string } => s.status === "ready",
 				});
-				return `got: ${state.user}`;
+				return `got: ${(state as { status: "ready"; user: string }).user}`;
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -1649,8 +1649,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { dep: string }>) {
-				return yield* ctx.published("dep", { afterSeq: 5 });
+			const wf = workflow(function* () {
+				return yield* published("dep", { afterSeq: 5 });
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -1674,8 +1674,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { task: string }>) {
-				const result = yield* ctx.join("task");
+			const wf = workflow(function* () {
+				const result = yield* join("task");
 				return `joined: ${result}`;
 			});
 
@@ -1698,8 +1698,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const log = new EventLog();
@@ -1733,8 +1733,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				const user = yield* ctx.join("login");
+			const wf = workflow(function* () {
+				const user = yield* join("login");
 				return `got: ${user}`;
 			});
 
@@ -1768,8 +1768,8 @@ describe("Interpreter", () => {
 		});
 
 		it("throws without a registry", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { login: string }>) {
-				return yield* ctx.join("login");
+			const wf = workflow(function* () {
+				return yield* join("login");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1788,8 +1788,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { task: string }>) {
-				return yield* ctx.join("task");
+			const wf = workflow(function* () {
+				return yield* join("task");
 			});
 
 			const log = new EventLog();
@@ -1811,8 +1811,8 @@ describe("Interpreter", () => {
 	describe("cancellation", () => {
 		it("cancel() aborts in-flight activity and sets cancelled state", async () => {
 			let activityStarted = false;
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity(
+			const wf = workflow(function* () {
+				return yield* activity(
 					"slow",
 					() =>
 						new Promise((resolve) => {
@@ -1837,8 +1837,8 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel() breaks out of receive and sets cancelled state", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const data = yield* ctx.receive<string>("submit");
+			const wf = workflow(function* () {
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -1859,8 +1859,8 @@ describe("Interpreter", () => {
 		it("cancel() breaks out of sleep and sets cancelled state", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				yield* ctx.sleep(60000);
+			const wf = workflow(function* () {
+				yield* sleep(60000);
 				return "done";
 			});
 
@@ -1880,8 +1880,8 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel() is a no-op on completed workflows", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1896,8 +1896,8 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel() is a no-op on failed workflows", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("fail", async () => {
+			const wf = workflow(function* () {
+				return yield* activity("fail", async () => {
 					throw new Error("boom");
 				});
 			});
@@ -1914,8 +1914,8 @@ describe("Interpreter", () => {
 		});
 
 		it("cancelled workflow logs workflow_cancelled event", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const data = yield* ctx.receive<string>("submit");
+			const wf = workflow(function* () {
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -1938,8 +1938,8 @@ describe("Interpreter", () => {
 
 		it("compacted fast path handles workflow_cancelled", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", activityFn);
+			const wf = workflow(function* () {
+				return yield* activity("greet", activityFn);
 			});
 
 			const log = new EventLog([{ type: "workflow_cancelled", timestamp: 4 }]);
@@ -1953,8 +1953,8 @@ describe("Interpreter", () => {
 
 		it("activity receives AbortSignal that fires on cancel", async () => {
 			let receivedSignal: AbortSignal | undefined;
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity(
+			const wf = workflow(function* () {
+				return yield* activity(
 					"slow",
 					(signal) =>
 						new Promise((resolve) => {
@@ -1983,10 +1983,10 @@ describe("Interpreter", () => {
 
 	describe("Phase I: race with signals", () => {
 		it("pauses and resumes when any matching signal arrives", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ add: string; remove: string }>) {
-				const result = yield* ctx.race(
-					ctx.receive("add"),
-					ctx.receive("remove"),
+			const wf = workflow(function* () {
+				const result = yield* race(
+					receive("add"),
+					receive("remove"),
 				);
 				return result.winner === 0
 					? `add:${result.value}`
@@ -2008,8 +2008,8 @@ describe("Interpreter", () => {
 		});
 
 		it("returns { winner, value } with correct discriminant", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: number }>) {
-				return yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+				return yield* race(receive("a"), receive("b"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2026,8 +2026,8 @@ describe("Interpreter", () => {
 		});
 
 		it("ignores signals not in the race", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string; c: string }>) {
-				const { winner } = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+				const { winner } = yield* race(receive("a"), receive("b"));
 				return winner === 0 ? "a" : "b";
 			});
 
@@ -2045,10 +2045,10 @@ describe("Interpreter", () => {
 		});
 
 		it("exposes waitingForAny getter", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const { winner } = yield* ctx.race(
-						ctx.receive("a"),
-						ctx.receive("b"),
+			const wf = workflow(function* () {
+					const { winner } = yield* race(
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -2063,8 +2063,8 @@ describe("Interpreter", () => {
 		});
 
 		it("replays from event log", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const result = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+					const result = yield* race(receive("a"), receive("b"));
 					return result.winner === 0
 						? `a:${result.value}`
 						: `b:${result.value}`;
@@ -2100,9 +2100,9 @@ describe("Interpreter", () => {
 		});
 
 		it("multiple sequential calls replay correctly", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const first = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
-					const second = yield* ctx.race(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+					const first = yield* race(receive("a"), receive("b"));
+					const second = yield* race(receive("a"), receive("b"));
 					const firstName = first.winner === 0 ? "a" : "b";
 					const secondName = second.winner === 0 ? "a" : "b";
 					return `${firstName}-${secondName}`;
@@ -2152,10 +2152,10 @@ describe("Interpreter", () => {
 		});
 
 		it("records race_started and race_completed events", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const { winner } = yield* ctx.race(
-						ctx.receive("a"),
-						ctx.receive("b"),
+			const wf = workflow(function* () {
+					const { winner } = yield* race(
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -2188,10 +2188,10 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel breaks out of waiting", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const { winner } = yield* ctx.race(
-						ctx.receive("a"),
-						ctx.receive("b"),
+			const wf = workflow(function* () {
+					const { winner } = yield* race(
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -2448,13 +2448,13 @@ describe("Interpreter", () => {
 
 	describe("Phase G.2: child signal routing", () => {
 		it("delegates signal to child workflow", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("data");
 					return `child got: ${val}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const result = yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					const result = yield* child("sub", childWorkflow);
 					return `parent got: ${result}`;
 				});
 
@@ -2473,13 +2473,13 @@ describe("Interpreter", () => {
 		});
 
 		it("parent reports child's receiving", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ info: string }>) {
-					const val = yield* ctx.receive("info");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("info");
 					return `got: ${val}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ info: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					return yield* child("sub", childWorkflow);
 				});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -2492,12 +2492,12 @@ describe("Interpreter", () => {
 		});
 
 		it("parent reports child's waitingForAll", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
+			const childWorkflow = workflow(function* () {
+				return yield* all(receive("a"), receive("b"));
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-				return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("sub", childWorkflow);
 			});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -2510,16 +2510,16 @@ describe("Interpreter", () => {
 		});
 
 		it("parent reports child's waitingForAny", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ x: string; y: string }>) {
-					const { winner, value } = yield* ctx.race(
-						ctx.receive("x"),
-						ctx.receive("y"),
+			const childWorkflow = workflow(function* () {
+					const { winner, value } = yield* race(
+						receive("x"),
+						receive("y"),
 					);
 					return winner === 0 ? `x:${value}` : `y:${value}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ x: string; y: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					return yield* child("sub", childWorkflow);
 				});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -2532,17 +2532,17 @@ describe("Interpreter", () => {
 		});
 
 		it("delegates signal through nested grandchild", async () => {
-			const grandchild = workflow(function* (ctx: WorkflowContext<{ deep: string }>) {
-				const val = yield* ctx.receive("deep");
+			const grandchild = workflow(function* () {
+				const val = yield* receive("deep");
 				return `grandchild: ${val}`;
 			});
 
-			const child = workflow(function* (ctx: WorkflowContext<{ deep: string }>) {
-				return yield* ctx.child("grandchild", grandchild);
+			const childWf = workflow(function* () {
+				return yield* child("grandchild", grandchild);
 			});
 
-			const parent = workflow(function* (ctx: WorkflowContext<{ deep: string }>) {
-				return yield* ctx.child("child", child);
+			const parent = workflow(function* () {
+				return yield* child("child", childWf);
 			});
 
 			const interpreter = new Interpreter(parent, new EventLog());
@@ -2560,13 +2560,13 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel propagates to active child", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("data");
 					return `got: ${val}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					return yield* child("sub", childWorkflow);
 				});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -2584,8 +2584,8 @@ describe("Interpreter", () => {
 
 		it("signal is harmless when child is running an activity", async () => {
 			let resolveActivity: ((value: string) => void) | undefined;
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity(
+			const childWorkflow = workflow(function* () {
+				return yield* activity(
 					"slow",
 					() =>
 						new Promise<string>((resolve) => {
@@ -2594,8 +2594,8 @@ describe("Interpreter", () => {
 				);
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("sub", childWorkflow);
 			});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -2620,10 +2620,10 @@ describe("Interpreter", () => {
 		it("resolves with the activity when it beats the sleep", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity("fast", async () => "data"),
-					ctx.sleep(5000),
+			const wf = workflow(function* () {
+				return yield* race(
+					activity("fast", async () => "data"),
+					sleep(5000),
 				);
 			});
 
@@ -2639,9 +2639,9 @@ describe("Interpreter", () => {
 		it("resolves with the sleep when the activity is slow", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity(
+			const wf = workflow(function* () {
+				return yield* race(
+					activity(
 						"slow",
 						(signal) =>
 							new Promise<string>((resolve, reject) => {
@@ -2656,7 +2656,7 @@ describe("Interpreter", () => {
 								);
 							}),
 					),
-					ctx.sleep(100),
+					sleep(100),
 				);
 			});
 
@@ -2673,10 +2673,10 @@ describe("Interpreter", () => {
 		});
 
 		it("records race_started and race_completed events", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity("fetch", async () => "data"),
-					ctx.sleep(5000),
+			const wf = workflow(function* () {
+				return yield* race(
+					activity("fetch", async () => "data"),
+					sleep(5000),
 				);
 			});
 
@@ -2706,10 +2706,10 @@ describe("Interpreter", () => {
 			const activityFn = vi
 				.fn<(signal: AbortSignal) => Promise<string>>()
 				.mockResolvedValue("data");
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity("fetch", activityFn),
-					ctx.sleep(5000),
+			const wf = workflow(function* () {
+				return yield* race(
+					activity("fetch", activityFn),
+					sleep(5000),
 				);
 			});
 
@@ -2746,9 +2746,9 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			let receivedSignal: AbortSignal | undefined;
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity(
+			const wf = workflow(function* () {
+				return yield* race(
+					activity(
 						"slow",
 						(signal) =>
 							new Promise<string>((resolve, reject) => {
@@ -2764,7 +2764,7 @@ describe("Interpreter", () => {
 								);
 							}),
 					),
-					ctx.sleep(100),
+					sleep(100),
 				);
 			});
 
@@ -2781,16 +2781,16 @@ describe("Interpreter", () => {
 		});
 
 		it("races activity against receive signal", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ manual: string }>) {
-				return yield* ctx.race(
-					ctx.activity(
+			const wf = workflow(function* () {
+				return yield* race(
+					activity(
 						"auto",
 						() =>
 							new Promise<string>((resolve) =>
 								setTimeout(() => resolve("auto-result"), 5000),
 							),
 					),
-					ctx.receive("manual"),
+					receive("manual"),
 				);
 			});
 
@@ -2808,10 +2808,10 @@ describe("Interpreter", () => {
 		});
 
 		it("workflow can branch on winner index", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				const result = yield* ctx.race(
-					ctx.activity("fetch", async () => "data"),
-					ctx.sleep(5000),
+			const wf = workflow(function* () {
+				const result = yield* race(
+					activity("fetch", async () => "data"),
+					sleep(5000),
 				);
 				if (result.winner === 0) {
 					return `ok: ${result.value}`;
@@ -2829,9 +2829,9 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			let activitySignal: AbortSignal | undefined;
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.activity(
+			const wf = workflow(function* () {
+				return yield* race(
+					activity(
 						"slow",
 						(signal) =>
 							new Promise<string>((resolve) => {
@@ -2839,7 +2839,7 @@ describe("Interpreter", () => {
 								setTimeout(() => resolve("done"), 10000);
 							}),
 					),
-					ctx.sleep(5000),
+					sleep(5000),
 				);
 			});
 
@@ -2858,8 +2858,8 @@ describe("Interpreter", () => {
 		});
 
 		it("races two receive branches — first signal received wins", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string; reject: string }>) {
-				return yield* ctx.race(ctx.receive("approve"), ctx.receive("reject"));
+			const wf = workflow(function* () {
+				return yield* race(receive("approve"), receive("reject"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2877,11 +2877,11 @@ describe("Interpreter", () => {
 		});
 
 		it("races three receive branches — third signal wins", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ single: string; optA: string; optB: string }>) {
-				return yield* ctx.race(
-					ctx.receive("single"),
-					ctx.receive("optA"),
-					ctx.receive("optB"),
+			const wf = workflow(function* () {
+				return yield* race(
+					receive("single"),
+					receive("optA"),
+					receive("optB"),
 				);
 			});
 
@@ -2902,21 +2902,21 @@ describe("Interpreter", () => {
 		});
 
 		it("races activity against child (child waits for signal)", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("data");
 					return `child got: ${val}`;
 				});
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-				return yield* ctx.race(
-					ctx.activity(
+			const wf = workflow(function* () {
+				return yield* race(
+					activity(
 						"slow",
 						() =>
 							new Promise<string>((resolve) =>
 								setTimeout(() => resolve("auto"), 10000),
 							),
 					),
-					ctx.child("sub", childWorkflow),
+					child("sub", childWorkflow),
 				);
 			});
 
@@ -2939,13 +2939,13 @@ describe("Interpreter", () => {
 		it("races all against sleep", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.race(
-					ctx.all(
-						ctx.activity("a", async () => "one"),
-						ctx.activity("b", async () => "two"),
+			const wf = workflow(function* () {
+				return yield* race(
+					all(
+						activity("a", async () => "one"),
+						activity("b", async () => "two"),
 					),
-					ctx.sleep(5000),
+					sleep(5000),
 				);
 			});
 
@@ -2968,8 +2968,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, { dep: string }>) {
-				return yield* ctx.race(ctx.join("dep"), ctx.sleep(5000));
+			const wf = workflow(function* () {
+				return yield* race(join("dep"), sleep(5000));
 			});
 
 			const interpreter = new Interpreter(
@@ -2985,15 +2985,15 @@ describe("Interpreter", () => {
 		});
 
 		it("cancel cleans up child in race", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("data");
 					return `got: ${val}`;
 				});
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-				return yield* ctx.race(
-					ctx.sleep(5000),
-					ctx.child("sub", childWorkflow),
+			const wf = workflow(function* () {
+				return yield* race(
+					sleep(5000),
+					child("sub", childWorkflow),
 				);
 			});
 
@@ -3011,8 +3011,8 @@ describe("Interpreter", () => {
 		});
 
 		it("exposes all signal names via waitingForAny during multi-signal race", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string; reject: string }>) {
-				return yield* ctx.race(ctx.receive("approve"), ctx.receive("reject"));
+			const wf = workflow(function* () {
+				return yield* race(receive("approve"), receive("reject"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3029,8 +3029,8 @@ describe("Interpreter", () => {
 		it("races receive against sleep — signal wins", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string }>) {
-				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(5000));
+			const wf = workflow(function* () {
+				return yield* race(receive("approve"), sleep(5000));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3052,8 +3052,8 @@ describe("Interpreter", () => {
 		it("races receive against sleep — timeout wins", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string }>) {
-				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(100));
+			const wf = workflow(function* () {
+				return yield* race(receive("approve"), sleep(100));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3071,8 +3071,8 @@ describe("Interpreter", () => {
 		it("races receive against sleep — replays from event log", async () => {
 			vi.useFakeTimers();
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string }>) {
-				return yield* ctx.race(ctx.receive("approve"), ctx.sleep(5000));
+			const wf = workflow(function* () {
+				return yield* race(receive("approve"), sleep(5000));
 			});
 
 			// First run: signal wins
@@ -3102,8 +3102,8 @@ describe("Interpreter", () => {
 
 	describe("Profunctor: signal routing through combinators", () => {
 		it("handle handler calling ctx.child with receive receives signal", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ input: string }>) {
-					const val = yield* ctx.receive("input");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("input");
 					return `child: ${val}`;
 				});
 
@@ -3139,10 +3139,10 @@ describe("Interpreter", () => {
 		});
 
 		it("race with multiple receive routes signal to correct branch", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ approve: string; reject: string }>) {
-				const { winner, value } = yield* ctx.race(
-					ctx.receive("approve"),
-					ctx.receive("reject"),
+			const wf = workflow(function* () {
+				const { winner, value } = yield* race(
+					receive("approve"),
+					receive("reject"),
 				);
 				return winner === 0 ? `approved: ${value}` : `rejected: ${value}`;
 			});
@@ -3161,13 +3161,13 @@ describe("Interpreter", () => {
 		});
 
 		it("test runtime delivers signals into child workflows", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					const val = yield* ctx.receive("data");
+			const childWorkflow = workflow(function* () {
+					const val = yield* receive("data");
 					return `child: ${val}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ data: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					return yield* child("sub", childWorkflow);
 				});
 
 			const log = new EventLog();
@@ -3186,19 +3186,19 @@ describe("Interpreter", () => {
 		});
 
 		it("nested child in on handler routes signals through full chain", async () => {
-			const grandchild = workflow(function* (ctx: WorkflowContext<{ value: string }>) {
-					const val = yield* ctx.receive("value");
+			const grandchild = workflow(function* () {
+					const val = yield* receive("value");
 					return `deep: ${val}`;
 				});
 
-			const child = workflow(function* (ctx: WorkflowContext<{ value: string }>) {
-				return yield* ctx.child("grandchild", grandchild);
+			const childWf = workflow(function* () {
+				return yield* child("grandchild", grandchild);
 			});
 
 			const wf = workflow(function* (ctx: WorkflowContext<{ start: undefined; value: string }>) {
 				return yield* ctx.handle<string>({
 					start: function* (ctx, _payload, done) {
-						const result = yield* ctx.child("child", child);
+						const result = yield* ctx.child("child", childWf);
 						yield* done(result);
 					},
 				});
@@ -3225,16 +3225,16 @@ describe("Interpreter", () => {
 		});
 
 		it("child with race routes correct signal", async () => {
-			const childWorkflow = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					const { winner, value } = yield* ctx.race(
-						ctx.receive("a"),
-						ctx.receive("b"),
+			const childWorkflow = workflow(function* () {
+					const { winner, value } = yield* race(
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? `a:${value}` : `b:${value}`;
 				});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-					return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+					return yield* child("sub", childWorkflow);
 				});
 
 			const interpreter = new Interpreter(parentWorkflow, new EventLog());
@@ -3254,8 +3254,8 @@ describe("Interpreter", () => {
 
 	describe("Phase L: all", () => {
 		it("collects multiple signals and returns tuple in order", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string }>) {
-				return yield* ctx.all(ctx.receive("a"), ctx.receive("b"));
+			const wf = workflow(function* () {
+				return yield* all(receive("a"), receive("b"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3280,10 +3280,10 @@ describe("Interpreter", () => {
 		});
 
 		it("runs concurrent activities and returns all results", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(
-					ctx.activity("a", async () => "one"),
-					ctx.activity("b", async () => "two"),
+			const wf = workflow(function* () {
+				return yield* all(
+					activity("a", async () => "one"),
+					activity("b", async () => "two"),
 				);
 			});
 
@@ -3295,10 +3295,10 @@ describe("Interpreter", () => {
 		});
 
 		it("mixes signal and activity in same all() call", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ name: string }>) {
-					return yield* ctx.all(
-						ctx.receive("name"),
-						ctx.activity("greet", async () => "hello"),
+			const wf = workflow(function* () {
+					return yield* all(
+						receive("name"),
+						activity("greet", async () => "hello"),
 					);
 				});
 
@@ -3316,10 +3316,10 @@ describe("Interpreter", () => {
 		});
 
 		it("records all_started and all_completed events", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(
-					ctx.activity("a", async () => "one"),
-					ctx.activity("b", async () => "two"),
+			const wf = workflow(function* () {
+				return yield* all(
+					activity("a", async () => "one"),
+					activity("b", async () => "two"),
 				);
 			});
 
@@ -3346,8 +3346,8 @@ describe("Interpreter", () => {
 			const fnA = vi.fn().mockResolvedValue("one");
 			const fnB = vi.fn().mockResolvedValue("two");
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(ctx.activity("a", fnA), ctx.activity("b", fnB));
+			const wf = workflow(function* () {
+				return yield* all(activity("a", fnA), activity("b", fnB));
 			});
 
 			// seq 1 = activity "a", seq 2 = activity "b", seq 3 = all command
@@ -3382,10 +3382,10 @@ describe("Interpreter", () => {
 
 		it("cancel cleans up all branches", async () => {
 			let activityStarted = false;
-			const wf = workflow(function* (ctx: WorkflowContext<{ sig: string }>) {
-					return yield* ctx.all(
-						ctx.receive("sig"),
-						ctx.activity(
+			const wf = workflow(function* () {
+					return yield* all(
+						receive("sig"),
+						activity(
 							"slow",
 							() =>
 								new Promise<string>((resolve) => {
@@ -3418,8 +3418,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<{ payment: string }, { profile: unknown }>) {
-				return yield* ctx.all(ctx.receive("payment"), ctx.join("profile"));
+			const wf = workflow(function* () {
+				return yield* all(receive("payment"), join("profile"));
 			});
 
 			const interpreter = new Interpreter(
@@ -3441,11 +3441,11 @@ describe("Interpreter", () => {
 		});
 
 		it("signals reach the correct receive branch", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ a: string; b: string; c: string }>) {
-				return yield* ctx.all(
-					ctx.receive("a"),
-					ctx.receive("b"),
-					ctx.receive("c"),
+			const wf = workflow(function* () {
+				return yield* all(
+					receive("a"),
+					receive("b"),
+					receive("c"),
 				);
 			});
 
@@ -3476,8 +3476,8 @@ describe("Interpreter", () => {
 		});
 
 		it("exposes waitingForAll with remaining signal names", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<{ x: string; y: string }>) {
-				return yield* ctx.all(ctx.receive("x"), ctx.receive("y"));
+			const wf = workflow(function* () {
+				return yield* all(receive("x"), receive("y"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3496,10 +3496,10 @@ describe("Interpreter", () => {
 		});
 
 		it("fails the whole all() when one activity fails", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.all(
-					ctx.activity("ok", async () => "fine"),
-					ctx.activity("bad", async () => {
+			const wf = workflow(function* () {
+				return yield* all(
+					activity("ok", async () => "fine"),
+					activity("bad", async () => {
 						throw new Error("oops");
 					}),
 				);
@@ -3518,8 +3518,8 @@ describe("Interpreter", () => {
 			const observed: import("./types").WorkflowEvent[] = [];
 			const log = new EventLog([], (event) => observed.push(event));
 
-			const wf = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("greet", async () => "hello");
+			const wf = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
 			const interpreter = new Interpreter(wf, log);
@@ -3543,12 +3543,12 @@ describe("Interpreter", () => {
 			const observer = (wid: string, event: import("./types").WorkflowEvent) =>
 				observed.push({ workflowId: wid, event });
 
-			const childWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.activity("childTask", async () => "child-result");
+			const childWorkflow = workflow(function* () {
+				return yield* activity("childTask", async () => "child-result");
 			});
 
-			const parentWorkflow = workflow(function* (ctx: WorkflowContext) {
-				return yield* ctx.child("sub", childWorkflow);
+			const parentWorkflow = workflow(function* () {
+				return yield* child("sub", childWorkflow);
 			});
 
 			const log = new EventLog();
@@ -3581,8 +3581,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-				yield* ctx.publish("account-123");
+			const wf = workflow(function* () {
+				yield* publish("account-123");
 				return "done";
 			});
 
@@ -3615,8 +3615,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-				yield* ctx.publish("account-123");
+			const wf = workflow(function* () {
+				yield* publish("account-123");
 				return "done";
 			});
 
@@ -3640,9 +3640,9 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-				yield* ctx.publish("account-123");
-				const result = yield* ctx.activity("doMore", async () => "extra");
+			const wf = workflow(function* () {
+				yield* publish("account-123");
+				const result = yield* activity("doMore", async () => "extra");
 				return result;
 			});
 
@@ -3668,8 +3668,8 @@ describe("Interpreter", () => {
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-				yield* ctx.publish("account-123");
+			const wf = workflow(function* () {
+				yield* publish("account-123");
 				return "done";
 			});
 
@@ -3697,8 +3697,8 @@ describe("Interpreter", () => {
 		});
 
 		it("works without registry (sets published value locally)", async () => {
-			const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-				yield* ctx.publish("account-123");
+			const wf = workflow(function* () {
+				yield* publish("account-123");
 				return "done";
 			});
 

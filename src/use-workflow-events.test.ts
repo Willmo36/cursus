@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
-import { workflow } from "./types";
-import type { AnyWorkflowFunction, WorkflowContext } from "./types";
+import { activity, receive, workflow } from "./types";
+import type { AnyWorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -24,8 +24,8 @@ function createWrapper(
 
 describe("useWorkflowEvents", () => {
 	it("returns empty events array before workflows start", () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -39,8 +39,8 @@ describe("useWorkflowEvents", () => {
 	});
 
 	it("returns events in realtime as workflow progresses", async () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -69,8 +69,8 @@ describe("useWorkflowEvents", () => {
 	});
 
 	it("updates events when a signal is sent to a waiting workflow", async () => {
-		const formWorkflow = workflow(function* (ctx: WorkflowContext) {
-			const data = yield* ctx.receive<string>("submit");
+		const formWorkflow = workflow(function* () {
+			const data = yield* receive<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -115,8 +115,8 @@ describe("useWorkflowEvents", () => {
 	});
 
 	it("shows all events for a local workflow that completes", async () => {
-		const localWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("compute", async () => "result");
+		const localWorkflow = workflow(function* () {
+			return yield* activity("compute", async () => "result");
 		});
 
 		const storage = new MemoryStorage();
@@ -151,9 +151,9 @@ describe("useWorkflowEvents", () => {
 	});
 
 	it("shows all events for a local workflow that completes with signals", async () => {
-		const localWorkflow = workflow(function* (ctx: WorkflowContext) {
-			const data = yield* ctx.receive<string>("submit");
-			return yield* ctx.activity("process", async () => `processed: ${data}`);
+		const localWorkflow = workflow(function* () {
+			const data = yield* receive<string>("submit");
+			return yield* activity("process", async () => `processed: ${data}`);
 		});
 
 		const storage = new MemoryStorage();

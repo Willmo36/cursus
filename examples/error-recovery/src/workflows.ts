@@ -1,16 +1,11 @@
 // ABOUTME: Payment and order workflows demonstrating dependency error recovery.
 // ABOUTME: The payment workflow always fails; the order workflow catches the failure gracefully.
-import { withRetry, workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+import { activity, join, receive, withRetry, workflow } from "cursus";
 
 // --- Payment workflow (registered in layer, always fails) ---
 
 type CardInfo = {
 	number: string;
-};
-
-type PaymentSignals = {
-	card: CardInfo;
 };
 
 type Receipt = {
@@ -26,27 +21,17 @@ const charge = withRetry<Receipt>(
 	{ maxAttempts: 3, initialDelayMs: 500 },
 );
 
-export const paymentWorkflow = workflow(function* (
-	ctx: WorkflowContext<PaymentSignals>,
-) {
-		const card = yield* ctx.receive("card");
-		const receipt = yield* ctx.activity("charge", charge);
-		return receipt;
-	});
+export const paymentWorkflow = workflow(function* () {
+	const card = yield* receive<CardInfo, "card">("card");
+	const receipt = yield* activity("charge", charge);
+	return receipt;
+});
 
 // --- Order workflow (inline, catches payment failure) ---
 
 type ShippingInfo = {
 	name: string;
 	address: string;
-};
-
-type OrderSignals = {
-	shipping: ShippingInfo;
-};
-
-type OrderDeps = {
-	payment: Receipt;
 };
 
 export type OrderResult =
@@ -59,12 +44,10 @@ export type OrderResult =
 	  }
 	| { status: "payment-failed"; name: string; address: string; error: string };
 
-export const orderWorkflow = workflow(function* (
-	ctx: WorkflowContext<OrderSignals, OrderDeps>,
-) {
-	const shipping = yield* ctx.receive("shipping");
+export const orderWorkflow = workflow(function* () {
+	const shipping = yield* receive<ShippingInfo, "shipping">("shipping");
 	try {
-		const receipt = yield* ctx.join("payment");
+		const receipt = yield* join<Receipt, "payment">("payment");
 		return {
 			status: "confirmed" as const,
 			...shipping,

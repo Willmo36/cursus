@@ -4,13 +4,12 @@
 import { describe, expect, it } from "vitest";
 import { createLayer } from "./layer";
 import { MemoryStorage } from "./storage";
-import { workflow } from "./types";
-import type { WorkflowContext } from "./types";
+import { activity, workflow } from "./types";
 
 describe("createLayer", () => {
 	it("returns a layer with workflows and storage", () => {
-		const profileWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => ({ name: "Max" }));
+		const profileWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => ({ name: "Max" }));
 		});
 
 		const storage = new MemoryStorage();
@@ -22,11 +21,11 @@ describe("createLayer", () => {
 	});
 
 	it("accepts and preserves versions option", () => {
-		const wfA = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("a", async () => "a");
+		const wfA = workflow(function* () {
+			return yield* activity("a", async () => "a");
 		});
-		const wfB = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("b", async () => 42);
+		const wfB = workflow(function* () {
+			return yield* activity("b", async () => 42);
 		});
 
 		const storage = new MemoryStorage();
@@ -40,11 +39,11 @@ describe("createLayer", () => {
 	});
 
 	it("accepts multiple workflows", () => {
-		const wfA = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("a", async () => "a");
+		const wfA = workflow(function* () {
+			return yield* activity("a", async () => "a");
 		});
-		const wfB = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("b", async () => 42);
+		const wfB = workflow(function* () {
+			return yield* activity("b", async () => 42);
 		});
 
 		const storage = new MemoryStorage();

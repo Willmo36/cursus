@@ -1,7 +1,6 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
 // ABOUTME: The checkout workflow uses all() to wait for payment and the profile workflow.
-import { workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+import { activity, all, join, receive, workflow } from "cursus";
 
 // --- Profile workflow (registered globally) ---
 
@@ -10,35 +9,21 @@ export type UserProfile = {
 	email: string;
 };
 
-type ProfileSignals = {
-	profile: UserProfile;
-};
+export const profileWorkflow = workflow(function* () {
+	const profile = yield* receive<UserProfile, "profile">("profile");
 
-export const profileWorkflow = workflow(function* (
-	ctx: WorkflowContext<ProfileSignals>,
-) {
-		const profile = yield* ctx.receive("profile");
-
-		yield* ctx.activity("validate-email", async () => {
-			await new Promise((r) => setTimeout(r, 500));
-			return profile.email.includes("@");
-		});
-
-		return profile;
+	yield* activity("validate-email", async () => {
+		await new Promise((r) => setTimeout(r, 500));
+		return profile.email.includes("@");
 	});
+
+	return profile;
+});
 
 // --- Checkout workflow (local, depends on profile) ---
 
 type PaymentInfo = {
 	cardLast4: string;
-};
-
-type CheckoutSignals = {
-	payment: PaymentInfo;
-};
-
-type CheckoutDeps = {
-	profile: UserProfile;
 };
 
 type OrderConfirmation = {
@@ -48,15 +33,13 @@ type OrderConfirmation = {
 	cardLast4: string;
 };
 
-export const checkoutWorkflow = workflow(function* (
-	ctx: WorkflowContext<CheckoutSignals, CheckoutDeps>,
-) {
-	const [payment, profile] = yield* ctx.all(
-		ctx.receive("payment"),
-		ctx.workflow("profile"),
+export const checkoutWorkflow = workflow(function* () {
+	const [payment, profile] = yield* all(
+		receive<PaymentInfo, "payment">("payment"),
+		join<UserProfile, "profile">("profile"),
 	);
 
-	const order = yield* ctx.activity("place-order", async () => {
+	const order = yield* activity("place-order", async () => {
 		await new Promise((r) => setTimeout(r, 1000));
 		return {
 			orderId: `ORD-${Date.now().toString(36).toUpperCase()}`,

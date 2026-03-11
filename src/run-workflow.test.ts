@@ -4,13 +4,12 @@
 import { describe, expect, it } from "vitest";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
-import { workflow } from "./types";
-import type { WorkflowContext } from "./types";
+import { activity, publish, receive, workflow } from "./types";
 
 describe("runWorkflow", () => {
 	it("returns snapshot with completed state and result", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const wf = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const snapshot = await runWorkflow("test-1", wf);
@@ -22,8 +21,8 @@ describe("runWorkflow", () => {
 	});
 
 	it("returns snapshot with events array", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const wf = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const snapshot = await runWorkflow("test-2", wf);
@@ -37,9 +36,9 @@ describe("runWorkflow", () => {
 	});
 
 	it("captures published value in snapshot", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, string>) {
-			yield* ctx.publish("intermediate");
-			return yield* ctx.activity("work", async () => "done");
+		const wf = workflow(function* () {
+			yield* publish("intermediate");
+			return yield* activity("work", async () => "done");
 		});
 
 		const snapshot = await runWorkflow("test-3", wf);
@@ -50,8 +49,8 @@ describe("runWorkflow", () => {
 	});
 
 	it("returns failed state when workflow throws", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fail", async () => {
+		const wf = workflow(function* () {
+			return yield* activity("fail", async () => {
 				throw new Error("boom");
 			});
 		});
@@ -64,8 +63,8 @@ describe("runWorkflow", () => {
 	});
 
 	it("returns waiting state when workflow blocks on signal", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext) {
-			const data = yield* ctx.receive("submit");
+		const wf = workflow(function* () {
+			const data = yield* receive("submit");
 			return `got: ${data}`;
 		});
 
@@ -79,9 +78,9 @@ describe("runWorkflow", () => {
 	});
 
 	it("includes receiving in snapshot for SSR hydration", async () => {
-		const wf = workflow(function* (ctx: WorkflowContext<{ confirm: boolean }>) {
-			yield* ctx.activity("prep", async () => "prepared");
-			const confirmed = yield* ctx.receive("confirm");
+		const wf = workflow(function* () {
+			yield* activity("prep", async () => "prepared");
+			const confirmed = yield* receive("confirm");
 			return confirmed ? "confirmed" : "denied";
 		});
 
@@ -95,8 +94,8 @@ describe("runWorkflow", () => {
 
 	it("uses provided storage", async () => {
 		const storage = new MemoryStorage();
-		const wf = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const wf = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const snapshot = await runWorkflow("test-6", wf, { storage });

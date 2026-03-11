@@ -1,7 +1,6 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
-// ABOUTME: Demonstrates sequential waitFor calls with a final submission activity.
-import { workflow } from "cursus";
-import type { WorkflowContext } from "cursus";
+// ABOUTME: Demonstrates sequential receive calls with a final submission activity.
+import { activity, receive, workflow } from "cursus";
 
 type PersonalInfo = {
 	name: string;
@@ -13,24 +12,17 @@ type Education = {
 	degree: string;
 };
 
-type ApplicationSignals = {
-	"personal-info": PersonalInfo;
-	education: Education;
-};
-
 type Application = {
 	personalInfo: PersonalInfo;
 	education: Education;
 	confirmationId: string;
 };
 
-export const applicationWorkflow = workflow(function* (
-	ctx: WorkflowContext<ApplicationSignals>,
-) {
-	const personalInfo = yield* ctx.receive("personal-info");
-	const education = yield* ctx.receive("education");
+export const applicationWorkflow = workflow(function* () {
+	const personalInfo = yield* receive<PersonalInfo, "personal-info">("personal-info");
+	const education = yield* receive<Education, "education">("education");
 
-	const confirmationId = yield* ctx.activity("submit", async () => {
+	const confirmationId = yield* activity("submit", async () => {
 		await new Promise((r) => setTimeout(r, 1500));
 		return `APP-${Date.now().toString(36).toUpperCase()}`;
 	});

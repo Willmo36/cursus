@@ -10,8 +10,8 @@ import { WorkflowDebugPanel } from "./debug-panel";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
-import { workflow } from "./types";
-import type { AnyWorkflowFunction, WorkflowContext } from "./types";
+import { activity, workflow } from "./types";
+import type { AnyWorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
 
 function createWrapper(
@@ -25,8 +25,8 @@ function createWrapper(
 
 describe("WorkflowDebugPanel", () => {
 	it("renders collapsed by default with toggle button", () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -38,8 +38,8 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("shows event table when expanded", async () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -68,8 +68,8 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("calls onClear when clear button is clicked", async () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -100,8 +100,8 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("renders Events and Timeline tabs when expanded, defaults to Events", async () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -130,8 +130,8 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("switches to Timeline tab and back to Events", async () => {
-		const greetWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("greet", async () => "hello");
+		const greetWorkflow = workflow(function* () {
+			return yield* activity("greet", async () => "hello");
 		});
 
 		const storage = new MemoryStorage();
@@ -175,11 +175,11 @@ describe("WorkflowDebugPanel", () => {
 	});
 
 	it("displays events for multiple workflows", async () => {
-		const workflowA = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("a", async () => "alpha");
+		const workflowA = workflow(function* () {
+			return yield* activity("a", async () => "alpha");
 		});
-		const workflowB = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("b", async () => "beta");
+		const workflowB = workflow(function* () {
+			return yield* activity("b", async () => "beta");
 		});
 
 		const storage = new MemoryStorage();
@@ -213,8 +213,8 @@ describe("WorkflowDebugPanel", () => {
 
 describe("TimelineView rendering", () => {
 	it("renders workflow rows with spans and markers", async () => {
-		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => "data");
+		const fetchWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => "data");
 		});
 
 		const storage = new MemoryStorage();
@@ -256,11 +256,11 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders multiple workflow rows", async () => {
-		const workflowA = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("a", async () => "alpha");
+		const workflowA = workflow(function* () {
+			return yield* activity("a", async () => "alpha");
 		});
-		const workflowB = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("b", async () => "beta");
+		const workflowB = workflow(function* () {
+			return yield* activity("b", async () => "beta");
 		});
 
 		const storage = new MemoryStorage();
@@ -292,8 +292,8 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders time axis with tick labels", async () => {
-		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => "data");
+		const fetchWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => "data");
 		});
 
 		const storage = new MemoryStorage();
@@ -324,8 +324,8 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("shows span name as inline label", async () => {
-		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => "data");
+		const fetchWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => "data");
 		});
 
 		const storage = new MemoryStorage();
@@ -354,8 +354,8 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("renders a color legend", async () => {
-		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => "data");
+		const fetchWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => "data");
 		});
 
 		const storage = new MemoryStorage();
@@ -387,8 +387,8 @@ describe("TimelineView rendering", () => {
 	});
 
 	it("shows tooltip content on span hover", async () => {
-		const fetchWorkflow = workflow(function* (ctx: WorkflowContext) {
-			return yield* ctx.activity("fetch", async () => "data");
+		const fetchWorkflow = workflow(function* () {
+			return yield* activity("fetch", async () => "data");
 		});
 
 		const storage = new MemoryStorage();
