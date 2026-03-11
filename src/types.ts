@@ -373,6 +373,125 @@ export function workflow<F extends (...args: any[]) => Generator<any, any, unkno
 	return fn;
 }
 
+// --- Free functions (context-free workflow primitives) ---
+
+export function activity<T>(
+	name: string,
+	fn: (signal: AbortSignal) => Promise<T>,
+): Workflow<T> {
+	return (function* () {
+		const result = yield { type: "activity" as const, name, fn } as Descriptor & Step<never>;
+		return result as T;
+	})();
+}
+
+export function receive<V, K extends string = string>(
+	signal: K,
+): Workflow<V, Signal<K, V>> {
+	return (function* () {
+		const result = yield { type: "receive" as const, signal } as Descriptor & Step<Signal<K, V>>;
+		return result as V;
+	})();
+}
+
+export function sleep(durationMs: number): Workflow<void> {
+	return (function* () {
+		yield { type: "sleep" as const, durationMs } as Descriptor & Step<never>;
+	})();
+}
+
+export function child<T>(
+	name: string,
+	workflowFn: AnyWorkflowFunction,
+): Workflow<T> {
+	return (function* () {
+		const result = yield {
+			type: "child" as const,
+			name,
+			workflow: workflowFn,
+		} as Descriptor & Step<never>;
+		return result as T;
+	})();
+}
+
+export function publish<V>(value: V): Workflow<void, Publishes<V>> {
+	return (function* () {
+		yield { type: "publish" as const, value } as Descriptor & Step<Publishes<V>>;
+	})();
+}
+
+export function published<V, K extends string = string>(
+	workflowId: K,
+	options?: { start?: boolean; where?: (value: V) => boolean; afterSeq?: number },
+): Workflow<V, Dependency<K, V>> {
+	const start = options?.start ?? true;
+	return (function* () {
+		const result = yield {
+			type: "published" as const,
+			workflowId,
+			start,
+			where: options?.where as ((value: unknown) => boolean) | undefined,
+			afterSeq: options?.afterSeq,
+		} as Descriptor & Step<Dependency<K, V>>;
+		return result as V;
+	})();
+}
+
+export function join<V, K extends string = string>(
+	workflowId: K,
+	options?: { start?: boolean },
+): Workflow<V, Dependency<K, V>> {
+	const start = options?.start ?? true;
+	return (function* () {
+		const result = yield {
+			type: "join" as const,
+			workflowId,
+			start,
+		} as Descriptor & Step<Dependency<K, V>>;
+		return result as V;
+	})();
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function race<A, B>(a: Workflow<A, any>, b: Workflow<B, any>): Workflow<RaceResult<[A, B]>, Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function race<A, B, C>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>): Workflow<RaceResult<[A, B, C]>, Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function race(...branches: Workflow<unknown, any>[]): Workflow<{ winner: number; value: unknown }, Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function race(...branches: Workflow<unknown, any>[]): Workflow<{ winner: number; value: unknown }, Requirement> {
+	const items: Descriptor[] = branches.map((gen) => {
+		const result = gen.next();
+		if (result.done) throw new Error("Race branch yielded no command");
+		return result.value as Descriptor;
+	});
+	return (function* () {
+		const result = yield { type: "race" as const, items } as Descriptor & Step<Requirement>;
+		return result as { winner: number; value: unknown };
+	})();
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function all<A, B>(a: Workflow<A, any>, b: Workflow<B, any>): Workflow<[A, B], Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function all<A, B, C>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>): Workflow<[A, B, C], Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function all<A, B, C, D>(a: Workflow<A, any>, b: Workflow<B, any>, c: Workflow<C, any>, d: Workflow<D, any>): Workflow<[A, B, C, D], Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function all(...branches: Workflow<unknown, any>[]): Workflow<unknown[], Requirement>;
+// biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
+export function all(...branches: Workflow<unknown, any>[]): Workflow<unknown[], Requirement> {
+	const items: Descriptor[] = branches.map((gen) => {
+		const result = gen.next();
+		if (result.done) throw new Error("All branch yielded no command");
+		return result.value as Descriptor;
+	});
+	return (function* () {
+		const result = yield { type: "all" as const, items } as Descriptor & Step<Requirement>;
+		return result as unknown[];
+	})();
+}
+
 // Accepts any workflow function regardless of its result type, signal map, or workflow map.
 // Uses `any` to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.

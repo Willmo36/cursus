@@ -64,5 +64,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { CancelledError, workflow } from "./types";
+export { activity, all, CancelledError, child, join, publish, published, race, receive, sleep, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";

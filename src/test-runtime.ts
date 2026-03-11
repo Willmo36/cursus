@@ -31,7 +31,7 @@ type TestRuntimeOptions<
 
 export async function createTestRuntime<
 	// biome-ignore lint/suspicious/noExplicitAny: infers from any workflow function shape
-	F extends (ctx: any) => Generator<any, any, unknown>,
+	F extends (...args: any[]) => Generator<any, any, unknown>,
 >(
 	workflowFn: F,
 	options: TestRuntimeOptions<ExtractSignalMap<F>>,

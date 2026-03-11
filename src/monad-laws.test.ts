@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { workflow } from "./types";
+import { activity, all, child, publish, race, receive, sleep, workflow } from "./types";
 import type { Dependency, Publishes, Requirements, Signal, Workflow, WorkflowContext } from "./types";
 
 /**
@@ -189,8 +189,9 @@ describe("Monad laws", () => {
 		});
 	});
 
+	type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
+
 	describe("Requirement inference", () => {
-		type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
 
 		it("activity-only workflow has no requirements", () => {
 			const w = workflow(function* (ctx: WorkflowContext) {
@@ -280,6 +281,122 @@ describe("Monad laws", () => {
 				activities: { format: () => "Hello Max" },
 			});
 			expect(result).toBe("Hello Max");
+		});
+	});
+
+	describe("Free functions", () => {
+		it("activity free function works at runtime", async () => {
+			const w = workflow(function* () {
+				const result = yield* activity("greet", async () => "hello");
+				return result;
+			});
+
+			const result = await createTestRuntime(w, {
+				activities: { greet: () => "hello" },
+			});
+			expect(result).toBe("hello");
+		});
+
+		it("receive free function carries Signal requirement", async () => {
+			const w = workflow(function* () {
+				const name = yield* receive<string, "login">("login");
+				return `Hello ${name}`;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"login", string>> = true;
+			void _check;
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "login", payload: "Max" }],
+			});
+			expect(result).toBe("Hello Max");
+		});
+
+		it("sleep free function works at runtime", async () => {
+			const w = workflow(function* () {
+				yield* sleep(10);
+				return "done";
+			});
+
+			const result = await createTestRuntime(w, {});
+			expect(result).toBe("done");
+		});
+
+		it("free functions compose with precise yield types", async () => {
+			const w = workflow(function* () {
+				const name = yield* receive<string, "greet">("greet");
+				const msg = yield* activity("format", async () => `Hello ${name}`);
+				yield* sleep(10);
+				return msg;
+			});
+
+			// Only Signal<"greet", string> — no Dependency or Publishes
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"greet", string>> = true;
+			void _check;
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "greet", payload: "Max" }],
+				activities: { format: () => "Hello Max" },
+			});
+			expect(result).toBe("Hello Max");
+		});
+
+		it("child free function delegates to sub-workflow", async () => {
+			const childWf = workflow(function* () {
+				return yield* activity("fetch", async () => "child-data");
+			});
+
+			const parentWf = workflow(function* () {
+				const result = yield* child<string>("sub", childWf);
+				return `parent: ${result}`;
+			});
+
+			const result = await createTestRuntime(parentWf, {
+				activities: { fetch: () => "child-data" },
+			});
+			expect(result).toBe("parent: child-data");
+		});
+
+		it("publish free function carries Publishes requirement", async () => {
+			const w = workflow(function* () {
+				yield* publish(42);
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Publishes<number>> = true;
+			void _check;
+		});
+
+		it("race free function picks first completing branch", async () => {
+			const w = workflow(function* () {
+				const result = yield* race(
+					activity("fast", async () => "fast-result"),
+					sleep(10000),
+				);
+				return result;
+			});
+
+			const result = await createTestRuntime(w, {
+				activities: { fast: () => "fast-result" },
+			});
+			expect(result).toEqual({ winner: 0, value: "fast-result" });
+		});
+
+		it("all free function waits for all branches", async () => {
+			const w = workflow(function* () {
+				const [a, b] = yield* all(
+					activity("first", async () => "one"),
+					activity("second", async () => "two"),
+				);
+				return `${a}-${b}`;
+			});
+
+			const result = await createTestRuntime(w, {
+				activities: { first: () => "one", second: () => "two" },
+			});
+			expect(result).toBe("one-two");
 		});
 	});
 });
