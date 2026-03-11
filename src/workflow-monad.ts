@@ -1,208 +1,191 @@
 // ABOUTME: Prototype for monadic workflow types with requirement propagation.
 // ABOUTME: Requirements accumulate through yield* like Effect-TS Effect.gen.
 
-// --- Requirements ---
+// --- Requirement tags ---
 
-type SignalReq<K extends string = string, V = unknown> = {
-	readonly _tag: "signals";
-	readonly signals: { readonly [P in K]: V };
+// Declares that a workflow receives signal K with payload V
+export type Signal<K extends string = string, V = unknown> = {
+	readonly _tag: "signal";
+	readonly signal: { readonly [P in K]: V };
 };
 
-type DepReq<K extends string = string, V = unknown> = {
-	readonly _tag: "deps";
-	readonly deps: { readonly [P in K]: V };
+// Declares that a workflow reads published value V from workflow K
+export type Dependency<K extends string = string, V = unknown> = {
+	readonly _tag: "dependency";
+	readonly dependency: { readonly [P in K]: V };
 };
 
-type PublishReq<V = unknown> = {
-	readonly _tag: "publish";
-	readonly publish: V;
+// Declares that a workflow publishes values of type V
+export type Publishes<V = unknown> = {
+	readonly _tag: "publishes";
+	readonly publishes: V;
 };
 
-type Req = SignalReq | DepReq | PublishReq;
+// Union of all requirement tags
+export type Requirement = Signal | Dependency | Publishes;
 
-// --- Branded Command ---
+// --- Step (internal yield carrier) ---
 
-// A command that carries its requirement as a phantom type.
-// At runtime this is just a Command. The R is erased.
-type Cmd<A, R extends Req = never> = Generator<CmdYield<R>, A, unknown>;
-
-// The yield type carries the requirement brand
-type CmdYield<R extends Req = never> = {
-	readonly __req?: R;
-	readonly __cmd: true;
+// Branded type that carries a requirement through the generator's Yield parameter.
+// Users never reference this directly — they just yield* it.
+type Step<R extends Requirement = never> = {
+	readonly __requirement?: R;
+	readonly __step: true;
 };
 
 // --- Workflow ---
 
-// A workflow is a generator that yields branded commands.
-// The Yield union accumulates all requirements.
-type Workflow<A, R extends Req = never> = Generator<CmdYield<R>, A, unknown>;
+// The monad. A generator that yields Steps and returns A.
+// R accumulates as a union of all yielded Steps' requirements.
+export type Workflow<A, R extends Requirement = never> = Generator<Step<R>, A, unknown>;
 
-// --- Workflow constructor (our Effect.gen) ---
+// --- Requirements (extractor) ---
 
-// Extracts R from the yield type union
-type ExtractReq<Eff> = Eff extends CmdYield<infer R> ? R : never;
+// Extracts the accumulated requirements from a Workflow or Step union
+export type Requirements<W> =
+	W extends Workflow<unknown, infer R> ? R :
+	W extends Step<infer R> ? R :
+	never;
 
-// The workflow() wrapper infers R from the generator's yield type
-declare function workflow<Eff extends CmdYield<Req>, A>(
+// --- workflow() constructor ---
+
+// Wraps a generator function into a Workflow, inferring R from all yields.
+// This is our Effect.gen equivalent.
+declare function workflow<Eff extends Step<Requirement>, A>(
 	f: () => Generator<Eff, A, unknown>,
-): Workflow<A, ExtractReq<Eff>>;
+): Workflow<A, Requirements<Eff>>;
 
-// --- Context methods (return branded Cmds) ---
+// --- Context ---
 
-type Ctx = {
+// Context provided to workflow generators. Each method returns a
+// Workflow (single-step) branded with its requirement.
+type Context<
+	Signals extends Record<string, unknown> = Record<string, unknown>,
+	Deps extends Record<string, unknown> = Record<string, never>,
+	Pub = never,
+> = {
 	activity: <T>(
 		name: string,
-		fn: () => Promise<T>,
-	) => Cmd<T, never>;
+		fn: (signal: AbortSignal) => Promise<T>,
+	) => Workflow<T, never>;
 
-	sleep: (durationMs: number) => Cmd<void, never>;
+	sleep: (durationMs: number) => Workflow<void, never>;
 
-	receive: <K extends string, V>(
+	receive: <K extends keyof Signals & string>(
 		signal: K,
-	) => Cmd<V, SignalReq<K, V>>;
+	) => Workflow<Signals[K], Signal<K, Signals[K]>>;
 
-	published: <K extends string, V>(
+	published: <K extends keyof Deps & string>(
 		workflowId: K,
-	) => Cmd<V, DepReq<K, V>>;
+	) => Workflow<Deps[K], Dependency<K, Deps[K]>>;
 
-	publish: <V>(value: V) => Cmd<void, PublishReq<V>>;
+	publish: (value: Pub) => Workflow<void, Publishes<Pub>>;
 };
 
-// --- Test: does inference work? ---
+// --- Combinators ---
 
-declare const ctx: Ctx;
-
-// Test 1: single requirement
-const w1 = workflow(function* () {
-	const user = yield* ctx.receive<"login", { name: string }>("login");
-	return user.name;
-});
-// Expected: Workflow<string, SignalReq<"login", { name: string }>>
-
-// Test 2: multiple requirements accumulate
-const w2 = workflow(function* () {
-	const config = yield* ctx.published<"config", { url: string }>("config");
-	const creds = yield* ctx.receive<"login", { name: string }>("login");
-	const result = yield* ctx.activity("fetch", async () => "data");
-	return result;
-});
-// Expected: Workflow<string, DepReq<"config", { url: string }> | SignalReq<"login", { name: string }>>
-// (activity adds never, which drops out of the union)
-
-// Test 3: race should merge requirements
 declare function race<
-	EffA extends CmdYield<Req>,
+	EffA extends Step<Requirement>,
 	A,
-	EffB extends CmdYield<Req>,
+	EffB extends Step<Requirement>,
 	B,
 >(
 	a: Generator<EffA, A, unknown>,
 	b: Generator<EffB, B, unknown>,
-): Cmd<{ winner: 0; value: A } | { winner: 1; value: B }, ExtractReq<EffA> | ExtractReq<EffB>>;
+): Workflow<
+	{ winner: 0; value: A } | { winner: 1; value: B },
+	Requirements<EffA> | Requirements<EffB>
+>;
+
+// --- Tests ---
+
+type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
+
+// Test 1: Single requirement
+declare const ctx1: Context<{ login: { name: string } }>;
+
+const w1 = workflow(function* () {
+	const user = yield* ctx1.receive("login");
+	return user.name;
+});
+
+type T1 = AssertEqual<
+	Requirements<typeof w1>,
+	Signal<"login", { name: string }>
+>;
+const _t1: T1 = true;
+
+// Test 2: Multiple requirements accumulate
+declare const ctx2: Context<
+	{ login: { name: string } },
+	{ config: { url: string } },
+	number
+>;
+
+const w2 = workflow(function* () {
+	const config = yield* ctx2.published("config");
+	const creds = yield* ctx2.receive("login");
+	yield* ctx2.publish(42);
+	const data = yield* ctx2.activity("fetch", async () => "data");
+	return `${config.url}-${creds.name}-${data}`;
+});
+
+type T2 = AssertEqual<
+	Requirements<typeof w2>,
+	| Dependency<"config", { url: string }>
+	| Signal<"login", { name: string }>
+	| Publishes<number>
+>;
+const _t2: T2 = true;
+
+// Test 3: Race merges requirements
+declare const ctx3: Context<{ payment: number; cancel: void }>;
 
 const w3 = workflow(function* () {
-	const result = yield* race(
-		ctx.receive<"payment", number>("payment"),
-		ctx.receive<"cancel", void>("cancel"),
+	return yield* race(
+		ctx3.receive("payment"),
+		ctx3.receive("cancel"),
 	);
-	return result;
 });
-// Expected: Workflow<..., SignalReq<"payment", number> | SignalReq<"cancel", void>>
 
-// Test 4: nested workflow requirements propagate
-declare function sub<Eff extends CmdYield<Req>, A>(
+type T3 = AssertEqual<
+	Requirements<typeof w3>,
+	Signal<"payment", number> | Signal<"cancel", void>
+>;
+const _t3: T3 = true;
+
+// Test 4: Nested workflow requirements propagate
+declare function embed<Eff extends Step<Requirement>, A>(
 	w: Generator<Eff, A, unknown>,
-): Cmd<A, ExtractReq<Eff>>;
+): Workflow<A, Requirements<Eff>>;
+
+declare const ctxInner: Context<{ inner: string }>;
+declare const ctxOuter: Context<{ outer: number }>;
 
 const inner = workflow(function* () {
-	return yield* ctx.receive<"inner", string>("inner");
+	return yield* ctxInner.receive("inner");
 });
 
 const w4 = workflow(function* () {
-	const a = yield* ctx.receive<"outer", number>("outer");
-	const b = yield* sub(inner);
+	const a = yield* ctxOuter.receive("outer");
+	const b = yield* embed(inner);
 	return `${a}-${b}`;
 });
-// Expected: Workflow<string, SignalReq<"outer", number> | SignalReq<"inner", string>>
 
-// --- Test 5: Realistic ctx with typed maps ---
+type T4 = AssertEqual<
+	Requirements<typeof w4>,
+	Signal<"outer", number> | Signal<"inner", string>
+>;
+const _t4: T4 = true;
 
-type TypedCtx<
-	Signals extends Record<string, unknown>,
-	Deps extends Record<string, unknown>,
-	Pub,
-> = {
-	activity: <T>(
-		name: string,
-		fn: () => Promise<T>,
-	) => Cmd<T, never>;
-
-	sleep: (durationMs: number) => Cmd<void, never>;
-
-	receive: <K extends keyof Signals & string>(
-		signal: K,
-	) => Cmd<Signals[K], SignalReq<K, Signals[K]>>;
-
-	published: <K extends keyof Deps & string>(
-		workflowId: K,
-	) => Cmd<Deps[K], DepReq<K, Deps[K]>>;
-
-	publish: (value: Pub) => Cmd<void, PublishReq<Pub>>;
-};
-
-type MySignals = { login: { user: string }; logout: void };
-type MyDeps = { config: { url: string } };
-
-declare const typedCtx: TypedCtx<MySignals, MyDeps, number>;
+// Test 5: Activity-only workflow has no requirements
+declare const ctx5: Context;
 
 const w5 = workflow(function* () {
-	const config = yield* typedCtx.published("config");
-	//    ^? should be { url: string }
-	const creds = yield* typedCtx.receive("login");
-	//    ^? should be { user: string }
-	yield* typedCtx.publish(42);
-	const data = yield* typedCtx.activity("fetch", async () => "hello");
-	return `${config.url}-${creds.user}-${data}`;
+	const a = yield* ctx5.activity("fetch", async () => 42);
+	const b = yield* ctx5.activity("save", async () => "ok");
+	return `${a}-${b}`;
 });
 
-type Test5 = AssertEqual<
-	ReqOf<typeof w5>,
-	| DepReq<"config", { url: string }>
-	| SignalReq<"login", { user: string }>
-	| PublishReq<number>
->;
-
-// --- Type-level tests ---
-
-// Helper to check types at compile time
-type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
-
-// Extract the requirement from a workflow
-type ReqOf<W> = W extends Workflow<unknown, infer R> ? R : never;
-
-// Test assertions
-type Test1 = AssertEqual<ReqOf<typeof w1>, SignalReq<"login", { name: string }>>;
-type Test2 = AssertEqual<
-	ReqOf<typeof w2>,
-	DepReq<"config", { url: string }> | SignalReq<"login", { name: string }>
->;
-type Test3 = AssertEqual<
-	ReqOf<typeof w3>,
-	SignalReq<"payment", number> | SignalReq<"cancel", void>
->;
-
-type Test4 = AssertEqual<
-	ReqOf<typeof w4>,
-	SignalReq<"outer", number> | SignalReq<"inner", string>
->;
-
-// These will error if the type assertions are false
-const _test1: Test1 = true;
-const _test2: Test2 = true;
-const _test3: Test3 = true;
-const _test4: Test4 = true;
-const _test5: Test5 = true;
-
-// Export to prevent unused warnings
-export type { Cmd, CmdYield, Ctx, Req, Workflow, Test1, Test2, Test3 };
+type T5 = AssertEqual<Requirements<typeof w5>, never>;
+const _t5: T5 = true;

@@ -18,6 +18,47 @@ export class CancelledError extends Error {
 	}
 }
 
+// --- Requirement tags ---
+
+// Declares that a workflow receives signal K with payload V
+export type Signal<K extends string = string, V = unknown> = {
+	readonly _tag: "signal";
+	readonly signal: { readonly [P in K]: V };
+};
+
+// Declares that a workflow reads published value V from workflow K
+export type Dependency<K extends string = string, V = unknown> = {
+	readonly _tag: "dependency";
+	readonly dependency: { readonly [P in K]: V };
+};
+
+// Declares that a workflow publishes values of type V
+export type Publishes<V = unknown> = {
+	readonly _tag: "publishes";
+	readonly publishes: V;
+};
+
+// Union of all requirement tags
+export type Requirement = Signal | Dependency | Publishes;
+
+// --- Step (internal yield carrier) ---
+
+// Branded type that carries a requirement through the generator's Yield parameter.
+// Users never reference this directly — they just yield* it.
+// At runtime, the yielded value is a Command object; Step's fields are phantom.
+export type Step<R extends Requirement = never> = {
+	readonly __requirement?: R;
+	readonly __step?: true;
+};
+
+// --- Requirements (extractor) ---
+
+// Extracts the accumulated requirements from a Workflow or Step union
+export type Requirements<W> =
+	W extends Workflow<unknown, infer R> ? R :
+	W extends Step<infer R> ? R :
+	never;
+
 // --- Commands (yielded by workflow generators) ---
 
 export type ActivityCommand = {
@@ -301,20 +342,20 @@ export type ResultOf<
 
 // --- Workflow types ---
 
-export type Workflow<T> = Generator<Command, T, unknown>;
+export type Workflow<A, R extends Requirement = never> = Generator<Command & Step<R>, A, unknown>;
 
 export type WorkflowFunction<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 	WorkflowMap extends Record<string, unknown> = Record<string, never>,
 	PublishType = never,
-> = (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Workflow<T>;
+> = (ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>) => Workflow<T, Requirement>;
 
 // Accepts any WorkflowFunction regardless of its result type, signal map, or workflow map.
-// Uses `any` for SignalMap/WorkflowMap to bypass contravariance — safe because the registry
+// Uses `any` to bypass contravariance — safe because the registry
 // only forwards the context it constructs, never reads SignalMap/WorkflowMap directly.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
-export type AnyWorkflowFunction = WorkflowFunction<any, any, any, any>;
+export type AnyWorkflowFunction = (ctx: any) => Generator<any, any, any>;
 
 export type WorkflowState =
 	| "running"
@@ -354,8 +395,8 @@ export type SignalHandlers<
 	[K in keyof SignalMap & string]?: (
 		ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 		payload: SignalMap[K],
-		done: <T>(value: T) => Generator<Command, never, unknown>,
-	) => Generator<Command, void, unknown>;
+		done: <T>(value: T) => Workflow<never>,
+	) => Workflow<void, Requirement>;
 };
 
 export type WorkflowContext<
@@ -366,76 +407,76 @@ export type WorkflowContext<
 	activity: <T>(
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
-	) => Generator<Command, T, unknown>;
+	) => Workflow<T>;
 	receive: <K extends keyof SignalMap & string>(
 		signal: K,
-	) => Generator<Command, SignalMap[K], unknown>;
+	) => Workflow<SignalMap[K], Signal<K, SignalMap[K]>>;
 	handle: <T>(
 		handlers: SignalHandlers<SignalMap, WorkflowMap, PublishType>,
-	) => Generator<Command, T, unknown>;
-	sleep: (durationMs: number) => Generator<Command, void, unknown>;
+	) => Workflow<T, Requirement>;
+	sleep: (durationMs: number) => Workflow<void>;
 	child: <T, CS extends Record<string, unknown> = Record<string, unknown>>(
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
-	) => Generator<Command, T, unknown>;
+	) => Workflow<T>;
 	all: {
 		<A, B>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-		): Generator<Command, [A, B], unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+		): Workflow<[A, B], Requirement>;
 		<A, B, C>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-			c: Generator<Command, C, unknown>,
-		): Generator<Command, [A, B, C], unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+			c: Workflow<C, Requirement>,
+		): Workflow<[A, B, C], Requirement>;
 		<A, B, C, D>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-			c: Generator<Command, C, unknown>,
-			d: Generator<Command, D, unknown>,
-		): Generator<Command, [A, B, C, D], unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+			c: Workflow<C, Requirement>,
+			d: Workflow<D, Requirement>,
+		): Workflow<[A, B, C, D], Requirement>;
 		(
-			...branches: Generator<Command, unknown, unknown>[]
-		): Generator<Command, unknown[], unknown>;
+			...branches: Workflow<unknown, Requirement>[]
+		): Workflow<unknown[], Requirement>;
 	};
 	race: {
 		<A, B>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-		): Generator<Command, RaceResult<[A, B]>, unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+		): Workflow<RaceResult<[A, B]>, Requirement>;
 		<A, B, C>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-			c: Generator<Command, C, unknown>,
-		): Generator<Command, RaceResult<[A, B, C]>, unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+			c: Workflow<C, Requirement>,
+		): Workflow<RaceResult<[A, B, C]>, Requirement>;
 		<A, B, C, D>(
-			a: Generator<Command, A, unknown>,
-			b: Generator<Command, B, unknown>,
-			c: Generator<Command, C, unknown>,
-			d: Generator<Command, D, unknown>,
-		): Generator<Command, RaceResult<[A, B, C, D]>, unknown>;
+			a: Workflow<A, Requirement>,
+			b: Workflow<B, Requirement>,
+			c: Workflow<C, Requirement>,
+			d: Workflow<D, Requirement>,
+		): Workflow<RaceResult<[A, B, C, D]>, Requirement>;
 		(
-			...branches: Generator<Command, unknown, unknown>[]
-		): Generator<Command, { winner: number; value: unknown }, unknown>;
+			...branches: Workflow<unknown, Requirement>[]
+		): Workflow<{ winner: number; value: unknown }, Requirement>;
 	};
 	published: {
 		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K]>(
 			workflowId: K,
 			options: { start?: boolean; where: (value: WorkflowMap[K]) => value is S; afterSeq?: number },
-		): Generator<Command, S, unknown>;
+		): Workflow<S, Dependency<K, WorkflowMap[K]>>;
 		<K extends keyof WorkflowMap & string>(
 			workflowId: K,
 			options?: { start?: boolean; where?: (value: WorkflowMap[K]) => boolean; afterSeq?: number },
-		): Generator<Command, WorkflowMap[K], unknown>;
+		): Workflow<WorkflowMap[K], Dependency<K, WorkflowMap[K]>>;
 	};
 	join: <K extends keyof WorkflowMap & string>(
 		workflowId: K,
 		options?: { start?: boolean },
-	) => Generator<Command, WorkflowMap[K], unknown>;
+	) => Workflow<WorkflowMap[K], Dependency<K, WorkflowMap[K]>>;
 	workflow: <K extends keyof WorkflowMap & string>(
 		id: K,
-	) => Generator<Command, WorkflowMap[K], unknown>;
-	publish: (value: PublishType) => Generator<Command, void, unknown>;
+	) => Workflow<WorkflowMap[K], Dependency<K, WorkflowMap[K]>>;
+	publish: (value: PublishType) => Workflow<void, Publishes<PublishType>>;
 	subscribe: {
 		<K extends keyof WorkflowMap & string, S extends WorkflowMap[K], T = never>(
 			workflowId: K,
@@ -443,18 +484,18 @@ export type WorkflowContext<
 			body: (
 				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 				value: S,
-				done: <D>(value: D) => Generator<Command, never, unknown>,
-			) => Generator<Command, void, unknown>,
-		): Generator<Command, T, unknown>;
+				done: <D>(value: D) => Workflow<never>,
+			) => Workflow<void, Requirement>,
+		): Workflow<T, Dependency<K, WorkflowMap[K]>>;
 		<K extends keyof WorkflowMap & string, T = never>(
 			workflowId: K,
 			options: { start?: boolean; where?: (value: WorkflowMap[K]) => boolean },
 			body: (
 				ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
 				value: WorkflowMap[K],
-				done: <D>(value: D) => Generator<Command, never, unknown>,
-			) => Generator<Command, void, unknown>,
-		): Generator<Command, T, unknown>;
+				done: <D>(value: D) => Workflow<never>,
+			) => Workflow<void, Requirement>,
+		): Workflow<T, Dependency<K, WorkflowMap[K]>>;
 	};
 };
 
@@ -465,48 +506,48 @@ export type InternalWorkflowContext = {
 	activity: <T>(
 		name: string,
 		fn: (signal: AbortSignal) => Promise<T>,
-	) => Generator<Command, T, unknown>;
-	receive: (signal: string) => Generator<Command, unknown, unknown>;
+	) => Workflow<T>;
+	receive: (signal: string) => Workflow<unknown, Requirement>;
 	handle: <T>(
 		handlers: Record<
 			string,
 			(
 				ctx: InternalWorkflowContext,
 				payload: unknown,
-				done: (value: unknown) => Generator<Command, never, unknown>,
-			) => Generator<Command, void, unknown>
+				done: (value: unknown) => Workflow<never>,
+			) => Workflow<void, Requirement>
 		>,
-	) => Generator<Command, T, unknown>;
-	sleep: (durationMs: number) => Generator<Command, void, unknown>;
+	) => Workflow<T, Requirement>;
+	sleep: (durationMs: number) => Workflow<void>;
 	child: <T, CS extends Record<string, unknown>>(
 		name: string,
 		workflow: WorkflowFunction<T, CS>,
-	) => Generator<Command, T, unknown>;
+	) => Workflow<T>;
 	all: (
-		...branches: Generator<Command, unknown, unknown>[]
-	) => Generator<Command, unknown[], unknown>;
+		...branches: Workflow<unknown, Requirement>[]
+	) => Workflow<unknown[], Requirement>;
 	race: (
-		...branches: Generator<Command, unknown, unknown>[]
-	) => Generator<Command, { winner: number; value: unknown }, unknown>;
+		...branches: Workflow<unknown, Requirement>[]
+	) => Workflow<{ winner: number; value: unknown }, Requirement>;
 	published: (
 		workflowId: string,
 		options?: { start?: boolean; where?: (value: unknown) => boolean; afterSeq?: number },
-	) => Generator<Command, unknown, unknown>;
+	) => Workflow<unknown, Requirement>;
 	join: (
 		workflowId: string,
 		options?: { start?: boolean },
-	) => Generator<Command, unknown, unknown>;
-	workflow: (id: string) => Generator<Command, unknown, unknown>;
-	publish: (value: unknown) => Generator<Command, void, unknown>;
+	) => Workflow<unknown, Requirement>;
+	workflow: (id: string) => Workflow<unknown, Requirement>;
+	publish: (value: unknown) => Workflow<void, Requirement>;
 	subscribe: <T>(
 		workflowId: string,
 		options: { start?: boolean; where?: (value: unknown) => boolean },
 		body: (
 			ctx: InternalWorkflowContext,
 			value: unknown,
-			done: (value: unknown) => Generator<Command, never, unknown>,
-		) => Generator<Command, void, unknown>,
-	) => Generator<Command, T, unknown>;
+			done: (value: unknown) => Workflow<never>,
+		) => Workflow<void, Requirement>,
+	) => Workflow<T, Requirement>;
 };
 
 // --- Observers ---
