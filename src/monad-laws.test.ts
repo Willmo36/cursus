@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import type { Command, WorkflowFunction } from "./types";
+import type { Command, Dependency, Publishes, Requirements, Signal, WorkflowContext, WorkflowFunction } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -184,6 +184,86 @@ describe("Monad laws", () => {
 
 			expect(leftResult).toBe(rightResult);
 			expect(leftResult).toBe("[Hello, Max!]");
+		});
+	});
+
+	describe("Requirement inference", () => {
+		// Requirement inference works on unannotated generator functions where
+		// TypeScript infers the yield type from the body. WorkflowFunction's
+		// return type is Workflow<T, Requirement> (the full union), so
+		// Requirements<> on an annotated WorkflowFunction always returns
+		// Requirement. These tests use WorkflowContext directly to verify
+		// the inference mechanism.
+		type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
+
+		it("activity-only workflow has no requirements", () => {
+			function* workflow(ctx: WorkflowContext) {
+				return yield* ctx.activity("fetch", async () => 42);
+			}
+			type R = Requirements<ReturnType<typeof workflow>>;
+			const _check: AssertEqual<R, never> = true;
+			void _check;
+			void workflow;
+		});
+
+		it("receive propagates Signal requirement", () => {
+			function* workflow(ctx: WorkflowContext<{ login: { name: string } }>) {
+				const user = yield* ctx.receive("login");
+				return user.name;
+			}
+			type R = Requirements<ReturnType<typeof workflow>>;
+			const _check: AssertEqual<R, Signal<"login", { name: string }>> = true;
+			void _check;
+			void workflow;
+		});
+
+		it("published propagates Dependency requirement", () => {
+			function* workflow(
+				ctx: WorkflowContext<Record<string, unknown>, { config: { url: string } }>,
+			) {
+				const config = yield* ctx.published("config");
+				return config.url;
+			}
+			type R = Requirements<ReturnType<typeof workflow>>;
+			const _check: AssertEqual<R, Dependency<"config", { url: string }>> = true;
+			void _check;
+			void workflow;
+		});
+
+		it("publish propagates Publishes requirement", () => {
+			function* workflow(
+				ctx: WorkflowContext<Record<string, unknown>, Record<string, never>, number>,
+			) {
+				yield* ctx.publish(42);
+			}
+			type R = Requirements<ReturnType<typeof workflow>>;
+			const _check: AssertEqual<R, Publishes<number>> = true;
+			void _check;
+			void workflow;
+		});
+
+		it("multiple operations accumulate requirements as union", () => {
+			function* workflow(
+				ctx: WorkflowContext<
+					{ login: { name: string } },
+					{ config: { url: string } },
+					number
+				>,
+			) {
+				const config = yield* ctx.published("config");
+				const user = yield* ctx.receive("login");
+				yield* ctx.publish(42);
+				return `${config.url}-${user.name}`;
+			}
+			type R = Requirements<ReturnType<typeof workflow>>;
+			const _check: AssertEqual<
+				R,
+				| Dependency<"config", { url: string }>
+				| Signal<"login", { name: string }>
+				| Publishes<number>
+			> = true;
+			void _check;
+			void workflow;
 		});
 	});
 });

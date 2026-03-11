@@ -53,11 +53,16 @@ export type Step<R extends Requirement = never> = {
 
 // --- Requirements (extractor) ---
 
-// Extracts the accumulated requirements from a Workflow or Step union
+// Extracts the accumulated requirements from a Workflow or Step.
+// Reads the phantom __requirement field from the yield type, filtering
+// through Requirement to strip undefined (from optional fields with never).
 export type Requirements<W> =
-	W extends Workflow<unknown, infer R> ? R :
-	W extends Step<infer R> ? R :
-	never;
+	W extends Generator<infer Y, unknown, unknown>
+		? Y extends { __requirement?: infer R }
+			? R extends Requirement ? R : never
+			: never
+		: W extends Step<infer R> ? R
+		: never;
 
 // --- Commands (yielded by workflow generators) ---
 
