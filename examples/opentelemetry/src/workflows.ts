@@ -16,7 +16,7 @@ export const checkoutWorkflow = workflow(function* () {
 	});
 
 	// Wait for user to confirm payment
-	const { cardLast4 } = yield* receive<{ cardLast4: string }, "confirm">("confirm");
+	const { cardLast4 } = yield* receive("confirm").as<{ cardLast4: string }>();
 
 	// Process payment
 	const payment = yield* activity("charge-card", async () => {

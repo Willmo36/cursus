@@ -14,7 +14,7 @@ export type CookiePreferences = {
 };
 
 export const cookieWorkflow = workflow(function* () {
-	const choice = yield* receive<CookieChoice, "cookie-choice">("cookie-choice");
+	const choice = yield* receive("cookie-choice").as<CookieChoice>();
 
 	switch (choice.type) {
 		case "accept-all":

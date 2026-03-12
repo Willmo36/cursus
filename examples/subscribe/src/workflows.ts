@@ -20,7 +20,7 @@ type WorkflowMap = {
 export const accountWorkflow = workflow(function* () {
 	yield* publish({ status: "loading" as const });
 
-	const { name } = yield* receive<{ name: string }, "login">("login");
+	const { name } = yield* receive("login").as<{ name: string }>();
 
 	const account: Account = yield* activity(
 		"authenticate",

@@ -22,7 +22,7 @@ const charge = withRetry<Receipt>(
 );
 
 export const paymentWorkflow = workflow(function* () {
-	const card = yield* receive<CardInfo, "card">("card");
+	const card = yield* receive("card").as<CardInfo>();
 	const receipt = yield* activity("charge", charge);
 	return receipt;
 });
@@ -45,7 +45,7 @@ export type OrderResult =
 	| { status: "payment-failed"; name: string; address: string; error: string };
 
 export const orderWorkflow = workflow(function* () {
-	const shipping = yield* receive<ShippingInfo, "shipping">("shipping");
+	const shipping = yield* receive("shipping").as<ShippingInfo>();
 	try {
 		const receipt = yield* join<Receipt, "payment">("payment");
 		return {

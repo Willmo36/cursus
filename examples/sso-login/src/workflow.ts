@@ -14,7 +14,7 @@ export const ssoWorkflow = workflow(function* () {
 		return "https://provider.example.com/authorize?client_id=demo&state=abc123";
 	});
 
-	const callbackCode = yield* receive<string, "sso-callback">("sso-callback");
+	const callbackCode = yield* receive("sso-callback").as<string>();
 
 	const session = yield* activity("exchange-token", async () => {
 		await new Promise((r) => setTimeout(r, 1200));

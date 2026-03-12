@@ -15,7 +15,7 @@ type UserProfile = {
 
 export const loginWorkflow = workflow(function* () {
 	for (;;) {
-		const creds = yield* receive<Credentials, "credentials">("credentials");
+		const creds = yield* receive("credentials").as<Credentials>();
 
 		const authenticated = yield* activity("authenticate", async () => {
 			await new Promise((r) => setTimeout(r, 800));

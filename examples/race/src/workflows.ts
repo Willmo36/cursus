@@ -41,7 +41,7 @@ export type ApprovalResult =
 	| { status: "escalated" };
 
 export const approvalWorkflow = workflow(function* () {
-	const result = yield* race(receive<string, "approve">("approve"), sleep(10_000));
+	const result = yield* race(receive("approve").as<string>(), sleep(10_000));
 	if (result.winner === 0) {
 		return { status: "approved" as const, by: result.value };
 	}

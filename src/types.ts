@@ -416,13 +416,21 @@ export function activity<T>(
 	})();
 }
 
+type ReceiveBuilder<K extends string> = Generator<ReceiveDescriptor & Step<Signal<K, unknown>>, unknown, unknown> & {
+	as: <V>() => Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown>;
+};
+
 export function receive<V, K extends string = string>(
 	signal: K,
-): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> {
-	return (function* () {
+): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> & {
+	as: <W>() => Generator<ReceiveDescriptor & Step<Signal<K, W>>, W, unknown>;
+} {
+	const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> {
 		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<K, V>>;
 		return result as V;
 	})();
+	(gen as any).as = <W>() => receive<W, K>(signal);
+	return gen as any;
 }
 
 export function sleep(durationMs: number): Generator<SleepDescriptor & Step<never>, void, unknown> {

@@ -65,7 +65,7 @@ type CheckoutSignals = {
 export function createCheckoutWorkflow(apiFetch: ApiFetch) {
 	return workflow(function* () {
 		const [credentials, items] = yield* all(
-			receive<{ email: string; password: string }, "login">("login"),
+			receive("login").as<{ email: string; password: string }>(),
 			join<CartItem[], "cart">("cart"),
 		);
 

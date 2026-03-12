@@ -15,7 +15,7 @@ type WorkflowMap = {
 };
 
 export const sessionWorkflow = workflow(function* () {
-	const { user } = yield* receive<{ user: string; password: string }, "login">("login");
+	const { user } = yield* receive("login").as<{ user: string; password: string }>();
 
 	const account: Account = yield* activity("authenticate", async () => ({
 		user,
@@ -45,7 +45,7 @@ export const sessionWorkflow = workflow(function* () {
 export const checkoutWorkflow = workflow(function* () {
 	const account = yield* published<Account, "session">("session");
 
-	const payment = yield* receive<{ amount: number }, "pay">("pay");
+	const payment = yield* receive("pay").as<{ amount: number }>();
 
 	const confirmation = yield* activity(
 		"process-payment",

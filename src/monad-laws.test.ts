@@ -185,7 +185,7 @@ describe("Monad laws", () => {
 
 		it("receive propagates Signal requirement", () => {
 			const w = workflow(function* () {
-				const user = yield* receive<{ name: string }, "login">("login");
+				const user = yield* receive("login").as<{ name: string }>();
 				return user.name;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
@@ -218,7 +218,7 @@ describe("Monad laws", () => {
 		it("multiple operations accumulate requirements as union", () => {
 			const w = workflow(function* () {
 				const config = yield* published<{ url: string }, "config">("config");
-				const user = yield* receive<{ name: string }, "login">("login");
+				const user = yield* receive("login").as<{ name: string }>();
 				yield* publish(42);
 				return `${config.url}-${user.name}`;
 			});
@@ -235,7 +235,7 @@ describe("Monad laws", () => {
 
 		it("workflow() constructor enables inference and works at runtime", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive<string, "greet">("greet");
+				const name = yield* receive("greet").as<string>();
 				const msg = yield* activity("format", async () => `Hello ${name}`);
 				return msg;
 			});
@@ -269,7 +269,7 @@ describe("Monad laws", () => {
 
 		it("receive free function carries Signal requirement", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive<string, "login">("login");
+				const name = yield* receive("login").as<string>();
 				return `Hello ${name}`;
 			});
 
@@ -281,6 +281,38 @@ describe("Monad laws", () => {
 				signals: [{ name: "login", payload: "Max" }],
 			});
 			expect(result).toBe("Hello Max");
+		});
+
+		it("receive().as<V>() infers signal name and types payload", async () => {
+			const w = workflow(function* () {
+				const data = yield* receive("pay").as<{ amount: number }>();
+				return data.amount;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"pay", { amount: number }>> = true;
+			void _check;
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "pay", payload: { amount: 42 } }],
+			});
+			expect(result).toBe(42);
+		});
+
+		it("receive() without .as() infers unknown payload", async () => {
+			const w = workflow(function* () {
+				const data = yield* receive("submit");
+				return data;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"submit", unknown>> = true;
+			void _check;
+
+			const result = await createTestRuntime(w, {
+				signals: [{ name: "submit", payload: "hello" }],
+			});
+			expect(result).toBe("hello");
 		});
 
 		it("sleep free function works at runtime", async () => {
@@ -295,7 +327,7 @@ describe("Monad laws", () => {
 
 		it("free functions compose with precise yield types", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive<string, "greet">("greet");
+				const name = yield* receive("greet").as<string>();
 				const msg = yield* activity("format", async () => `Hello ${name}`);
 				yield* sleep(10);
 				return msg;

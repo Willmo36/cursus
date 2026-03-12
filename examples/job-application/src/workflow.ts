@@ -19,8 +19,8 @@ type Application = {
 };
 
 export const applicationWorkflow = workflow(function* () {
-	const personalInfo = yield* receive<PersonalInfo, "personal-info">("personal-info");
-	const education = yield* receive<Education, "education">("education");
+	const personalInfo = yield* receive("personal-info").as<PersonalInfo>();
+	const education = yield* receive("education").as<Education>();
 
 	const confirmationId = yield* activity("submit", async () => {
 		await new Promise((r) => setTimeout(r, 1500));

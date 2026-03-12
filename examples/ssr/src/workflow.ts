@@ -32,7 +32,7 @@ export const productWorkflow = workflow(function* () {
 
 	yield* publish(product);
 
-	const review = yield* receive<string, "review">("review");
+	const review = yield* receive("review").as<string>();
 
 	return { product, review };
 });

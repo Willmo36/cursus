@@ -10,7 +10,7 @@ export type UserProfile = {
 };
 
 export const profileWorkflow = workflow(function* () {
-	const profile = yield* receive<UserProfile, "profile">("profile");
+	const profile = yield* receive("profile").as<UserProfile>();
 
 	yield* activity("validate-email", async () => {
 		await new Promise((r) => setTimeout(r, 500));
@@ -35,7 +35,7 @@ type OrderConfirmation = {
 
 export const checkoutWorkflow = workflow(function* () {
 	const [payment, profile] = yield* all(
-		receive<PaymentInfo, "payment">("payment"),
+		receive("payment").as<PaymentInfo>(),
 		join<UserProfile, "profile">("profile"),
 	);
 

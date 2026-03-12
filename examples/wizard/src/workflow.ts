@@ -9,8 +9,8 @@ type SignupResult = {
 
 export const signupWorkflow = workflow(function* () {
 	const [email, password] = yield* all(
-		receive<string, "email">("email"),
-		receive<string, "password">("password"),
+		receive("email").as<string>(),
+		receive("password").as<string>(),
 	);
 
 	const token = yield* activity("create-account", async () => {

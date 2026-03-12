@@ -16,7 +16,7 @@ export const chatWorkflow = workflow(function* () {
 	const messages: ChatMessage[] = [];
 
 	for (;;) {
-		const event = yield* receive<ChatEvent, "chat-event">("chat-event");
+		const event = yield* receive("chat-event").as<ChatEvent>();
 
 		if (event.type === "close") {
 			return messages;
