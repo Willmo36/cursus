@@ -1,7 +1,7 @@
 // ABOUTME: Presentational product page component shared by server and client.
 // ABOUTME: Renders product details, review form, and debug info from plain props.
 
-import type { WorkflowSnapshot } from "cursus";
+import type { WorkflowSnapshot, WorkflowState } from "cursus";
 import { useState } from "react";
 
 import type { Product, ProductResult } from "./workflow";
@@ -9,9 +9,7 @@ import type { Product, ProductResult } from "./workflow";
 type ProductPageProps = {
 	snapshot: WorkflowSnapshot;
 	product: Product | undefined;
-	state: string;
-	receiving: string | undefined;
-	result: ProductResult | undefined;
+	state: WorkflowState<ProductResult>;
 	onSignal?: (name: string, payload: string) => void;
 	onReset?: () => void;
 };
@@ -20,8 +18,6 @@ export function ProductPage({
 	snapshot,
 	product,
 	state,
-	receiving,
-	result,
 	onSignal,
 	onReset,
 }: ProductPageProps) {
@@ -53,14 +49,14 @@ export function ProductPage({
 				</div>
 			)}
 
-			{state === "waiting" && receiving === "review" && (
+			{state.status === "waiting" && (
 				<ReviewForm onSubmit={(review) => onSignal?.("review", review)} />
 			)}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
 					<p>
-						<strong>Your review:</strong> {result.review}
+						<strong>Your review:</strong> {state.result.review}
 					</p>
 					<button type="button" onClick={onReset}>
 						Start Over
@@ -79,7 +75,7 @@ export function ProductPage({
 			>
 				<strong>Debug</strong>
 				<br />
-				State: <code>{state}</code>
+				State: <code>{state.status}</code>
 				<br />
 				Snapshot state: <code>{snapshot.state}</code>
 				<br />

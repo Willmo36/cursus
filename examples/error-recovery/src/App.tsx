@@ -45,10 +45,10 @@ export function App() {
 }
 
 function PaymentForm() {
-	const { state, receiving, signal } = useWorkflow<unknown>("payment");
+	const { state, signal } = useWorkflow<unknown>("payment");
 	const [card, setCard] = useState("");
 
-	if (state === "completed") {
+	if (state.status === "completed") {
 		return (
 			<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 				<p style={{ margin: 0, color: "#2e7d32" }}>Payment processed</p>
@@ -56,7 +56,7 @@ function PaymentForm() {
 		);
 	}
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div style={{ background: "#ffebee", padding: 16, borderRadius: 8 }}>
 				<p style={{ margin: 0, color: "#c62828" }}>
@@ -66,11 +66,11 @@ function PaymentForm() {
 		);
 	}
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return <StatusMessage text="Processing payment..." />;
 	}
 
-	if (state === "waiting" && receiving === "card") {
+	if (state.status === "waiting") {
 		return (
 			<div>
 				<h2>Payment</h2>
@@ -109,18 +109,18 @@ function PaymentForm() {
 }
 
 function OrderFlow() {
-	const { state, result, receiving, signal } = useWorkflow(
+	const { state, signal } = useWorkflow(
 		"order",
 		orderWorkflow,
 	);
 	const [name, setName] = useState("");
 	const [address, setAddress] = useState("");
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return <StatusMessage text="Starting order..." />;
 	}
 
-	if (state === "waiting" && receiving === "shipping") {
+	if (state.status === "waiting") {
 		return (
 			<div>
 				<h2>Shipping</h2>
@@ -165,19 +165,19 @@ function OrderFlow() {
 		);
 	}
 
-	if (state === "completed" && result) {
-		if (result.status === "confirmed") {
+	if (state.status === "completed") {
+		if (state.result.status === "confirmed") {
 			return (
 				<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 					<h2 style={{ margin: "0 0 8px" }}>Order Confirmed</h2>
 					<p>
-						<strong>Ship to:</strong> {result.name}, {result.address}
+						<strong>Ship to:</strong> {state.result.name}, {state.result.address}
 					</p>
 					<p>
-						<strong>Card:</strong> ****{result.last4}
+						<strong>Card:</strong> ****{state.result.last4}
 					</p>
 					<p>
-						<strong>Amount:</strong> {result.amount}
+						<strong>Amount:</strong> {state.result.amount}
 					</p>
 				</div>
 			);
@@ -189,10 +189,10 @@ function OrderFlow() {
 					Order Could Not Be Completed
 				</h2>
 				<p>
-					<strong>Shipping:</strong> {result.name}, {result.address}
+					<strong>Shipping:</strong> {state.result.name}, {state.result.address}
 				</p>
 				<p style={{ color: "#c62828" }}>
-					<strong>Payment error:</strong> {result.error}
+					<strong>Payment error:</strong> {state.result.error}
 				</p>
 				<p style={{ color: "#666", fontSize: 14 }}>
 					The order workflow caught the payment dependency failure and completed
@@ -203,7 +203,7 @@ function OrderFlow() {
 		);
 	}
 
-	if (state === "waiting") {
+	if (state.status === "waiting") {
 		return <StatusMessage text="Waiting for payment..." />;
 	}
 

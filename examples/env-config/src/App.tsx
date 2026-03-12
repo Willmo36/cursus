@@ -35,22 +35,22 @@ export function App() {
 }
 
 function EnvSection() {
-	const { state, result, error } = useWorkflow<EnvConfig>("env");
+	const { state } = useWorkflow<EnvConfig>("env");
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div style={{ background: "#ffebee", padding: 16, borderRadius: 8 }}>
-				<p style={{ color: "#c62828" }}>Failed to load environment: {error}</p>
+				<p style={{ color: "#c62828" }}>Failed to load environment: {state.error}</p>
 			</div>
 		);
 	}
 
-	if (state === "completed" && result) {
+	if (state.status === "completed") {
 		return (
 			<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>Environment</h2>
 				<p>
-					<strong>Base URL:</strong> {result.baseUrl}
+					<strong>Base URL:</strong> {state.result.baseUrl}
 				</p>
 			</div>
 		);
@@ -60,20 +60,20 @@ function EnvSection() {
 }
 
 function UserSection() {
-	const { state, result, error } = useWorkflow("user", userWorkflow, {
+	const { state } = useWorkflow("user", userWorkflow, {
 		storage,
 	});
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div style={{ background: "#ffebee", padding: 16, borderRadius: 8 }}>
-				<p style={{ color: "#c62828" }}>Failed to load user: {error}</p>
+				<p style={{ color: "#c62828" }}>Failed to load user: {state.error}</p>
 			</div>
 		);
 	}
 
-	if (state === "completed" && result) {
-		const user = result as UserProfile;
+	if (state.status === "completed") {
+		const user = state.result as UserProfile;
 		return (
 			<div style={{ background: "#e3f2fd", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>User Profile</h2>

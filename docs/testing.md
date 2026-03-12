@@ -36,7 +36,7 @@ expect(result).toBe("expected value");
 Provide mock implementations by activity name. Activities not in the map fall through to the real function:
 
 ```ts
-const result = await createTestRuntime(workflow, {
+const result = await createTestRuntime(myWorkflow, {
   activities: {
     "fetch-user": () => ({ name: "Test User" }),
     // "save-user" not mocked — runs the real async function
@@ -50,13 +50,13 @@ Signals are automatically delivered when the workflow enters a waiting state. Th
 
 ```ts
 // Sequential receive calls
-const workflow: WorkflowFunction<string> = function* (ctx) {
-  const email = yield* ctx.receive<string>("email");
-  const password = yield* ctx.receive<string>("password");
+const myWorkflow = workflow(function* () {
+  const email = yield* receive<string>("email");
+  const password = yield* receive<string>("password");
   return `${email}:${password}`;
-};
+});
 
-const result = await createTestRuntime(workflow, {
+const result = await createTestRuntime(myWorkflow, {
   signals: [
     { name: "email", payload: "test@example.com" },
     { name: "password", payload: "secret" },
@@ -64,7 +64,7 @@ const result = await createTestRuntime(workflow, {
 });
 ```
 
-Signals also work with `all`, `race`, and `handle`/`done` loops:
+Signals also work with `all`, `race`, and `handle` loops:
 
 ```ts
 // all — waits for all signals
@@ -80,7 +80,7 @@ const result = await createTestRuntime(raceWorkflow, {
   signals: [{ name: "reject", payload: "no" }],
 });
 
-// handle/done loop
+// handle loop
 const result = await createTestRuntime(counterWorkflow, {
   signals: [
     { name: "inc", payload: undefined },
@@ -95,12 +95,12 @@ const result = await createTestRuntime(counterWorkflow, {
 Mock `join` / `published` results with `workflowResults`:
 
 ```ts
-const workflow: WorkflowFunction<string, {}, { login: string }> = function* (ctx) {
-  const user = yield* ctx.join("login");
+const myWorkflow = workflow(function* () {
+  const user = yield* join("login");
   return `got: ${user}`;
-};
+});
 
-const result = await createTestRuntime(workflow, {
+const result = await createTestRuntime(myWorkflow, {
   workflowResults: { login: "test-user" },
 });
 ```
@@ -108,7 +108,7 @@ const result = await createTestRuntime(workflow, {
 All three options compose freely:
 
 ```ts
-const result = await createTestRuntime(workflow, {
+const result = await createTestRuntime(myWorkflow, {
   activities: { greet: () => "mock-hello" },
   signals: [{ name: "confirm", payload: "yes" }],
   workflowResults: { login: "mock-user" },
@@ -120,15 +120,15 @@ const result = await createTestRuntime(workflow, {
 Activity mocks propagate into child workflows automatically:
 
 ```ts
-const child: WorkflowFunction<string> = function* (ctx) {
-  return yield* ctx.activity("fetch", async () => "real");
-};
+const childWorkflow = workflow(function* () {
+  return yield* activity("fetch", async () => "real");
+});
 
-const parent: WorkflowFunction<string> = function* (ctx) {
-  return yield* ctx.child("sub", child);
-};
+const parentWorkflow = workflow(function* () {
+  return yield* child("sub", childWorkflow);
+});
 
-const result = await createTestRuntime(parent, {
+const result = await createTestRuntime(parentWorkflow, {
   activities: { fetch: () => "mocked" },
 });
 // result === "mocked"
@@ -149,15 +149,15 @@ await expect(
 Workflows that catch errors internally work as expected:
 
 ```ts
-const workflow: WorkflowFunction<string> = function* (ctx) {
+const myWorkflow = workflow(function* () {
   try {
-    yield* ctx.activity("risky", async () => { throw new Error("boom"); });
+    yield* activity("risky", async () => { throw new Error("boom"); });
   } catch {
-    return yield* ctx.activity("recover", async () => "safe");
+    return yield* activity("recover", async () => "safe");
   }
-};
+});
 
-const result = await createTestRuntime(workflow, {
+const result = await createTestRuntime(myWorkflow, {
   activities: { recover: () => "mock-safe" },
 });
 // result === "mock-safe"
@@ -165,12 +165,16 @@ const result = await createTestRuntime(workflow, {
 
 ## Type Safety
 
-Signal payloads are type-checked against your `SignalMap`:
+Signal payloads are type-checked against the signals used by your workflow:
 
 ```ts
-const workflow: WorkflowFunction<string, { email: string; count: number }> = // ...
+const myWorkflow = workflow(function* () {
+  const email = yield* receive<string>("email");
+  const count = yield* receive<number>("count");
+  return `${email}:${count}`;
+});
 
-await createTestRuntime(workflow, {
+await createTestRuntime(myWorkflow, {
   signals: [
     { name: "email", payload: "test@example.com" },  // OK
     { name: "count", payload: 42 },                   // OK

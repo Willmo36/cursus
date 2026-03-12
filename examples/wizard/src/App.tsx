@@ -9,7 +9,7 @@ import { signupWorkflow } from "./workflow";
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		"signup",
 		signupWorkflow,
 		{ storage },
@@ -21,7 +21,7 @@ export function App() {
 		>
 			<h1>Signup Wizard</h1>
 
-			{state === "waiting" && (
+			{state.status === "waiting" && (
 				<SignupForm
 					onSubmit={(email, password) => {
 						signal("email", email);
@@ -30,16 +30,16 @@ export function App() {
 				/>
 			)}
 
-			{state === "running" && <p>Creating your account...</p>}
+			{state.status === "running" && <p>Creating your account...</p>}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
 					<h2>Account Created</h2>
 					<p>
-						Welcome, <strong>{result.email}</strong>
+						Welcome, <strong>{state.result.email}</strong>
 					</p>
 					<p style={{ fontSize: 12, color: "#666", wordBreak: "break-all" }}>
-						Token: {result.token}
+						Token: {state.result.token}
 					</p>
 					<button type="button" onClick={reset}>
 						Start Over

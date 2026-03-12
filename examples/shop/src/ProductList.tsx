@@ -14,7 +14,7 @@ export function ProductList() {
 		() => createCatalogWorkflow(apiFetch),
 		[apiFetch],
 	);
-	const { state, result, error, reset } = useWorkflow(
+	const { state, reset } = useWorkflow(
 		"catalog",
 		catalogWorkflow,
 		{ storage },
@@ -22,14 +22,14 @@ export function ProductList() {
 
 	const cartWorkflow = useWorkflow("cart");
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return <p className="text-gray-500 italic">Loading products...</p>;
 	}
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div className="p-4 bg-red-50 rounded-lg">
-				<p className="text-red-700 mb-3">Failed to load products: {error}</p>
+				<p className="text-red-700 mb-3">Failed to load products: {state.error}</p>
 				<button
 					type="button"
 					onClick={reset}
@@ -41,13 +41,13 @@ export function ProductList() {
 		);
 	}
 
-	if (!result) return null;
+	if (state.status !== "completed") return null;
 
 	return (
 		<div>
 			<h2 className="mt-0 text-xl font-bold">Products</h2>
 			<div className="grid grid-cols-2 gap-4">
-				{result.map((product) => (
+				{state.result.map((product) => (
 					<ProductCard
 						key={product.id}
 						product={product}

@@ -12,9 +12,9 @@ const layer = createLayer(
 );
 
 function Session() {
-	const { state, receiving, signal } = useWorkflow("session");
+	const { state, published, signal } = useWorkflow("session");
 
-	if (receiving === "login") {
+	if (state.status === "waiting" && !published) {
 		return (
 			<div>
 				<h2>Login</h2>
@@ -27,7 +27,7 @@ function Session() {
 		);
 	}
 
-	if (state === "running" || state === "waiting") {
+	if (state.status === "running" || state.status === "waiting") {
 		return (
 			<div>
 				<h2>Session Active</h2>
@@ -46,18 +46,18 @@ function Session() {
 }
 
 function Checkout() {
-	const { state, result, receiving, signal } = useWorkflow<string>("checkout");
+	const { state, signal } = useWorkflow<string>("checkout");
 
-	if (state === "completed") {
+	if (state.status === "completed") {
 		return (
 			<div>
 				<h2>Checkout Complete</h2>
-				<p>{result}</p>
+				<p>{state.result}</p>
 			</div>
 		);
 	}
 
-	if (receiving === "pay") {
+	if (state.status === "waiting") {
 		return (
 			<div>
 				<h2>Checkout</h2>

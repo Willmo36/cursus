@@ -6,43 +6,41 @@ import { useState } from "react";
 import type { Order } from "./types";
 
 export function Checkout({ onBack }: { onBack: () => void }) {
-	const { state, result, error, signal, receivingAll } =
+	const { state, signal } =
 		useWorkflow<Order>("checkout");
 
-	const needsLogin = receivingAll?.includes("login");
-
-	if (state === "completed" && result) {
+	if (state.status === "completed") {
 		return (
 			<div className="max-w-lg mx-auto">
 				<h2 className="text-xl font-bold">Order Confirmed</h2>
 				<div className="bg-green-50 p-4 rounded-lg mb-4">
 					<p>
-						<strong>Order ID:</strong> {result.orderId}
+						<strong>Order ID:</strong> {state.result.orderId}
 					</p>
 					<p>
-						<strong>Customer:</strong> {result.user.name} ({result.user.email})
+						<strong>Customer:</strong> {state.result.user.name} ({state.result.user.email})
 					</p>
 					<h3 className="font-semibold">Items</h3>
-					{result.items.map((item) => (
+					{state.result.items.map((item) => (
 						<div key={item.productId} className="text-sm mb-1">
 							{item.name} x {item.quantity} — $
 							{(item.price * item.quantity).toFixed(2)}
 						</div>
 					))}
 					<div className="mt-3 pt-2 border-t border-green-200 font-bold">
-						Total: ${result.total.toFixed(2)}
+						Total: ${state.result.total.toFixed(2)}
 					</div>
 				</div>
 			</div>
 		);
 	}
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div className="max-w-lg mx-auto">
 				<h2 className="text-xl font-bold">Checkout Failed</h2>
 				<div className="p-4 bg-red-50 rounded-lg">
-					<p className="text-red-700">{error}</p>
+					<p className="text-red-700">{state.error}</p>
 				</div>
 				<button type="button" onClick={onBack} className="mt-4 cursor-pointer">
 					Back to shop
@@ -51,7 +49,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 		);
 	}
 
-	if (needsLogin) {
+	if (state.status === "waiting") {
 		return (
 			<div className="max-w-sm mx-auto">
 				<button

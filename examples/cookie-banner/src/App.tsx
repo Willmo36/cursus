@@ -10,7 +10,7 @@ import { cookieWorkflow } from "./workflow";
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, receiving, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		"cookies",
 		cookieWorkflow,
 		{ storage },
@@ -21,9 +21,9 @@ export function App() {
 			<h1>My Website</h1>
 			<p>This page uses cookies to improve your experience.</p>
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
-					<PreferencesSummary preferences={result} />
+					<PreferencesSummary preferences={state.result} />
 					<button
 						type="button"
 						onClick={reset}
@@ -34,7 +34,7 @@ export function App() {
 				</div>
 			)}
 
-			{state === "waiting" && receiving === "cookie-choice" && (
+			{state.status === "waiting" && (
 				<Banner signal={signal} />
 			)}
 		</div>

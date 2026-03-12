@@ -14,14 +14,14 @@ Exhaustive reference for all public exports from `cursus`.
 // Layer mode — consumes a workflow from WorkflowLayerProvider
 function useWorkflow<T>(
   workflowId: string,
-): UseWorkflowResult<T, Record<string, unknown>>;
+): UseWorkflowResult<T>;
 
 // Inline mode — runs a workflow directly
-function useWorkflow<T, SignalMap, WorkflowMap>(
+function useWorkflow<T>(
   workflowId: string,
-  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
+  workflowFn: Workflow<T>,
   options?: UseWorkflowOptions,
-): UseWorkflowResult<T, SignalMap>;
+): UseWorkflowResult<T>;
 ```
 
 **UseWorkflowOptions:**
@@ -31,21 +31,28 @@ function useWorkflow<T, SignalMap, WorkflowMap>(
 | `storage` | `WorkflowStorage` | Storage backend. Defaults to registry storage or ephemeral `MemoryStorage`. |
 | `onEvent` | `WorkflowEventObserver \| WorkflowEventObserver[]` | Event observer(s) |
 | `version` | `number` | Version stamp. Mismatched version wipes storage and restarts. |
+| `snapshot` | `WorkflowSnapshot` | SSR snapshot for hydration. |
 
 **UseWorkflowResult:**
 
 | Field | Type |
 |-------|------|
-| `state` | `WorkflowState` |
-| `result` | `T \| undefined` |
-| `error` | `string \| undefined` |
-| `receiving` | `string \| undefined` |
-| `waitingForAll` | `string[] \| undefined` |
-| `waitingForAny` | `string[] \| undefined` |
+| `state` | `WorkflowState<T>` |
+| `published` | `unknown` |
 | `signal(name, payload)` | `(name: K, payload: SignalMap[K]) => void` |
-| `published` | `T \| undefined` |
 | `cancel()` | `() => void` |
 | `reset()` | `() => void` |
+
+`WorkflowState<T>` is a tagged union:
+
+```ts
+type WorkflowState<T> =
+  | { status: "running" }
+  | { status: "waiting" }
+  | { status: "completed"; result: T }
+  | { status: "failed"; error: string }
+  | { status: "cancelled" };
+```
 
 ### useWorkflowEvents
 
@@ -187,38 +194,152 @@ function checkVersion(
 
 Returns `true` if storage was wiped due to version mismatch. No-op when version is `undefined` or storage lacks version methods.
 
-## Workflow Types
+## Workflow Functions
 
-### WorkflowFunction
-
-```ts
-type WorkflowFunction<T, SignalMap, WorkflowMap, PublishType = never> = (
-  ctx: WorkflowContext<SignalMap, WorkflowMap, PublishType>,
-) => Generator<Command, T, unknown>;
-```
-
-### WorkflowContext
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `activity` | `(name, fn) => Generator` | Run an async activity |
-| `receive` | `(signal) => Generator` | Wait for a named signal |
-| `all` | `(...generators) => Generator` | Wait for multiple signals/workflows/activities to all complete |
-| `race` | `(...generators) => Generator` | Race branches, first wins — returns `{winner, value}` |
-| `sleep` | `(durationMs) => Generator` | Durable timer |
-| `child` | `(name, workflow) => Generator` | Delegate to a child workflow |
-| `handle` | `(handlers) => Generator` | Signal dispatch loop |
-| `done` | `(value) => Generator` | Exit a `handle` loop with a value |
-| `join` | `(id, options?) => Generator` | Wait for a workflow to complete |
-| `published` | `(id, options?) => Generator` | Wait for a workflow to publish a value |
-| `workflow` | `(id) => Generator` | Wait for a workflow to complete (same as `join`) |
-| `publish` | `(value) => Generator` | Resolve waiters without completing (requires `PublishType`) |
-
-### WorkflowState
+Free functions imported from `"cursus"` for building workflows:
 
 ```ts
-type WorkflowState = "running" | "waiting" | "completed" | "failed" | "cancelled";
+import {
+  workflow, activity, receive, sleep, publish, join,
+  published, race, all, handle, child,
+} from "cursus";
 ```
+
+### workflow
+
+```ts
+function workflow<F>(fn: F): F;
+```
+
+Wraps a generator function as a workflow.
+
+### activity
+
+```ts
+function activity<T>(
+  name: string,
+  fn: (signal: AbortSignal) => Promise<T>,
+): Generator<ActivityDescriptor, T, unknown>;
+```
+
+Run an async activity. On replay, the stored result is returned without calling `fn`.
+
+### receive
+
+```ts
+function receive<V, K extends string = string>(
+  signal: K,
+): Generator<ReceiveDescriptor, V, unknown>;
+```
+
+Wait for a named signal from the UI.
+
+### sleep
+
+```ts
+function sleep(durationMs: number): Generator<SleepDescriptor, void, unknown>;
+```
+
+Durable timer that survives page reloads.
+
+### child
+
+```ts
+function child<T>(
+  name: string,
+  workflowFn: (...args: any[]) => Generator<any, T, unknown>,
+): Generator<ChildDescriptor, T, unknown>;
+```
+
+Delegate to a child workflow with its own event log scope.
+
+### join
+
+```ts
+function join<V, K extends string = string>(
+  workflowId: K,
+  options?: { start?: boolean },
+): Generator<JoinDescriptor, V, unknown>;
+```
+
+Wait for another workflow to complete. Auto-starts by default.
+
+### published
+
+```ts
+function published<V, K extends string = string>(
+  workflowId: K,
+  options?: { start?: boolean },
+): Generator<PublishedDescriptor, V, unknown>;
+```
+
+Wait for another workflow to publish a value.
+
+### publish
+
+```ts
+function publish<V>(value: V): Generator<PublishDescriptor, void, unknown>;
+```
+
+Publish a value to consumers without completing the workflow.
+
+### all
+
+```ts
+function all<A, B>(a: Generator<A>, b: Generator<B>): Generator<AllDescriptor, [RA, RB], unknown>;
+function all<A, B, C>(a, b, c): Generator<AllDescriptor, [RA, RB, RC], unknown>;
+function all<A, B, C, D>(a, b, c, d): Generator<AllDescriptor, [RA, RB, RC, RD], unknown>;
+function all(...branches): Generator<AllDescriptor, unknown[], unknown>;
+```
+
+Wait for all branches to complete. Returns a tuple of results in order.
+
+### race
+
+```ts
+function race<A, B>(a: Generator<A>, b: Generator<B>): Generator<RaceDescriptor, { winner: number; value: RA | RB }, unknown>;
+function race<A, B, C>(a, b, c): Generator<RaceDescriptor, { winner: number; value: RA | RB | RC }, unknown>;
+function race(...branches): Generator<RaceDescriptor, { winner: number; value: unknown }, unknown>;
+```
+
+Race branches — first to complete wins. Returns `{ winner, value }` where `winner` is the zero-based index.
+
+### handle
+
+```ts
+function handle<T>(
+  handlers: Record<string, SignalHandler>,
+): Generator<Descriptor, T, unknown>;
+```
+
+Signal dispatch loop. Blocks the workflow and routes incoming signals to matching handlers. Stays in the loop until a handler calls `done(value)`.
+
+**SignalHandler:**
+
+```ts
+type SignalHandler = (
+  payload: unknown,
+  done: <T>(value: T) => Workflow<never>,
+) => Workflow<void>;
+```
+
+## Types
+
+### Workflow
+
+```ts
+type Workflow<A, R = never> = Generator<Descriptor & Step<R>, A, unknown>;
+```
+
+The core workflow type. `A` is the return type, `R` is the requirements type (signals, dependencies).
+
+### SignalMapOf
+
+```ts
+type SignalMapOf<F> = // infers signal map from a workflow function
+```
+
+Extracts the signal name/payload map from a workflow function type. Used internally by `useWorkflow` for type-safe `signal()` calls.
 
 ### CancelledError
 
@@ -311,9 +432,9 @@ type ActivityWrapper = <T>(
 ### createTestRuntime
 
 ```ts
-function createTestRuntime<T, SignalMap, WorkflowMap>(
-  workflowFn: WorkflowFunction<T, SignalMap, WorkflowMap>,
-  options: TestRuntimeOptions<SignalMap>,
+function createTestRuntime<T>(
+  workflowFn: Workflow<T>,
+  options: TestRuntimeOptions,
 ): Promise<T>;
 ```
 

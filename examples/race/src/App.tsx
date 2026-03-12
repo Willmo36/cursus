@@ -53,11 +53,11 @@ export function App() {
 }
 
 function FetchFlow() {
-	const { state, result } = useWorkflow("fetch", fetchWorkflow, {
+	const { state } = useWorkflow("fetch", fetchWorkflow, {
 		storage,
 	});
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return (
 			<div
 				style={{
@@ -73,8 +73,8 @@ function FetchFlow() {
 		);
 	}
 
-	if (state === "completed" && result) {
-		if (result.status === "ok") {
+	if (state.status === "completed") {
+		if (state.result.status === "ok") {
 			return (
 				<div
 					style={{
@@ -85,7 +85,7 @@ function FetchFlow() {
 				>
 					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>Fetch Won</h2>
 					<p style={{ margin: 0 }}>
-						<strong>Data:</strong> {result.data}
+						<strong>Data:</strong> {state.result.data}
 					</p>
 					<p
 						style={{
@@ -127,7 +127,7 @@ function FetchFlow() {
 		);
 	}
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div
 				style={{
@@ -145,19 +145,19 @@ function FetchFlow() {
 }
 
 function ApprovalFlow() {
-	const { state, result, signal } = useWorkflow("approval", approvalWorkflow, { storage });
+	const { state, signal } = useWorkflow("approval", approvalWorkflow, { storage });
 
 	const [seconds, setSeconds] = useState(10);
 
 	useEffect(() => {
-		if (state !== "running") return;
+		if (state.status !== "running") return;
 		const id = setInterval(() => {
 			setSeconds((s) => Math.max(0, s - 1));
 		}, 1000);
 		return () => clearInterval(id);
-	}, [state]);
+	}, [state.status]);
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return (
 			<div
 				style={{
@@ -188,8 +188,8 @@ function ApprovalFlow() {
 		);
 	}
 
-	if (state === "completed" && result) {
-		if (result.status === "approved") {
+	if (state.status === "completed") {
+		if (state.result.status === "approved") {
 			return (
 				<div
 					style={{
@@ -200,7 +200,7 @@ function ApprovalFlow() {
 				>
 					<h2 style={{ margin: "0 0 8px", color: "#2e7d32" }}>Approved</h2>
 					<p style={{ margin: 0 }}>
-						Approved by <strong>{result.by}</strong>.
+						Approved by <strong>{state.result.by}</strong>.
 					</p>
 				</div>
 			);
@@ -222,7 +222,7 @@ function ApprovalFlow() {
 		);
 	}
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div
 				style={{

@@ -11,14 +11,16 @@ const storage = new LocalStorage();
 const STEPS = ["Personal Info", "Education", "Submit"];
 
 export function App() {
-	const { state, result, receiving, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		"job-application",
 		applicationWorkflow,
 		{ storage },
 	);
 
+	const [step, setStep] = useState(0);
+
 	const currentStep =
-		receiving === "personal-info" ? 0 : receiving === "education" ? 1 : 2;
+		state.status === "completed" ? 2 : state.status === "running" ? 2 : step;
 
 	return (
 		<div
@@ -26,23 +28,26 @@ export function App() {
 		>
 			<h1>Job Application</h1>
 
-			{state !== "completed" && <StepIndicator current={currentStep} />}
+			{state.status !== "completed" && <StepIndicator current={currentStep} />}
 
-			{state === "waiting" && receiving === "personal-info" && (
+			{state.status === "waiting" && step === 0 && (
 				<PersonalInfoStep
-					onSubmit={(name, email) => signal("personal-info", { name, email })}
+					onSubmit={(name, email) => {
+						signal("personal-info", { name, email });
+						setStep(1);
+					}}
 				/>
 			)}
 
-			{state === "waiting" && receiving === "education" && (
+			{state.status === "waiting" && step === 1 && (
 				<EducationStep
 					onSubmit={(school, degree) => signal("education", { school, degree })}
 				/>
 			)}
 
-			{state === "running" && <p>Submitting your application...</p>}
+			{state.status === "running" && <p>Submitting your application...</p>}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
 					<h2>Application Submitted</h2>
 					<div
@@ -54,19 +59,19 @@ export function App() {
 						}}
 					>
 						<p>
-							<strong>Confirmation ID:</strong> {result.confirmationId}
+							<strong>Confirmation ID:</strong> {state.result.confirmationId}
 						</p>
 						<p>
-							<strong>Name:</strong> {result.personalInfo.name}
+							<strong>Name:</strong> {state.result.personalInfo.name}
 						</p>
 						<p>
-							<strong>Email:</strong> {result.personalInfo.email}
+							<strong>Email:</strong> {state.result.personalInfo.email}
 						</p>
 						<p>
-							<strong>School:</strong> {result.education.school}
+							<strong>School:</strong> {state.result.education.school}
 						</p>
 						<p>
-							<strong>Degree:</strong> {result.education.degree}
+							<strong>Degree:</strong> {state.result.education.degree}
 						</p>
 					</div>
 					<button type="button" onClick={reset}>

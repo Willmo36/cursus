@@ -22,8 +22,8 @@ The interpreter replays from the event log — it never re-executes activities t
 import { runWorkflow, MemoryStorage } from "cursus";
 
 const snapshot = await runWorkflow("checkout", checkoutWorkflow);
-// snapshot.state === "completed"
-// snapshot.result === { orderId: "123" }
+// snapshot.state.status === "completed"
+// snapshot.state.result === { orderId: "123" }
 // snapshot.events === [ ... full event log ... ]
 ```
 
@@ -35,7 +35,7 @@ const snapshot = await runWorkflow("checkout", checkoutWorkflow, {
 });
 ```
 
-If the workflow blocks on a signal (e.g. `receive`), `runWorkflow` returns immediately with `state: "waiting"`. The snapshot captures events up to the blocking point.
+If the workflow blocks on a signal (e.g. `receive`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
 
 ## Client-Side Hydration
 
@@ -45,14 +45,14 @@ Pass the snapshot to `useWorkflow`:
 import { useWorkflow } from "cursus/react";
 
 function CheckoutPage({ snapshot }) {
-  const { state, result } = useWorkflow("checkout", checkoutWorkflow, {
+  const { state } = useWorkflow("checkout", checkoutWorkflow, {
     storage,
     snapshot,
   });
 
   // First render uses snapshot values — no loading flash
-  if (state === "completed") {
-    return <OrderConfirmation order={result} />;
+  if (state.status === "completed") {
+    return <OrderConfirmation order={state.result} />;
   }
   // ...
 }
@@ -73,8 +73,6 @@ type WorkflowSnapshot = {
   workflowId: string;
   events: WorkflowEvent[];
   state: WorkflowState;
-  result: unknown;
-  error: string | undefined;
   published: unknown;
 };
 ```
@@ -136,6 +134,6 @@ const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
 
 ## Limitations
 
-- **Signals**: Workflows that block on signals return `state: "waiting"`. The client must provide the signal to continue.
+- **Signals**: Workflows that block on signals return `state.status === "waiting"`. The client must provide the signal to continue.
 - **Timers**: `sleep()` blocks `runWorkflow` for the full duration. Avoid long sleeps in server-executed workflows.
 - **Cross-workflow deps**: `runWorkflow` doesn't support `join` or `published` — these require a registry, which is a client-side concept. Workflows that use these commands should be hydrated via layers, not `runWorkflow`.

@@ -42,16 +42,16 @@ export function App() {
 }
 
 function ProfileForm() {
-	const { state, result, receiving, signal, reset } =
+	const { state, signal, reset } =
 		useWorkflow<UserProfile>("profile");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 
-	if (state === "completed" && result) {
+	if (state.status === "completed") {
 		return (
 			<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 				<p>
-					<strong>Profile:</strong> {result.name} ({result.email})
+					<strong>Profile:</strong> {state.result.name} ({state.result.email})
 				</p>
 				<button type="button" onClick={reset} style={{ fontSize: 12 }}>
 					Change profile
@@ -60,11 +60,11 @@ function ProfileForm() {
 		);
 	}
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return <StatusMessage text="Validating profile..." />;
 	}
 
-	if (state === "waiting" && receiving === "profile") {
+	if (state.status === "waiting") {
 		return (
 			<div>
 				<h2>Your details</h2>
@@ -106,34 +106,34 @@ function ProfileForm() {
 }
 
 function CheckoutForm() {
-	const { state, result, receivingAll, signal } = useWorkflow(
+	const { state, signal } = useWorkflow(
 		"checkout",
 		checkoutWorkflow,
 	);
 	const [card, setCard] = useState("");
 
-	if (state === "completed" && result) {
+	if (state.status === "completed") {
 		return (
 			<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 				<h2>Order confirmed</h2>
 				<p>
-					<strong>Order ID:</strong> {result.orderId}
+					<strong>Order ID:</strong> {state.result.orderId}
 				</p>
 				<p>
-					<strong>Ship to:</strong> {result.name} ({result.email})
+					<strong>Ship to:</strong> {state.result.name} ({state.result.email})
 				</p>
 				<p>
-					<strong>Card:</strong> ****{result.cardLast4}
+					<strong>Card:</strong> ****{state.result.cardLast4}
 				</p>
 			</div>
 		);
 	}
 
-	if (state === "running") {
+	if (state.status === "running") {
 		return <StatusMessage text="Waiting for profile..." />;
 	}
 
-	if (state === "waiting" && receivingAll?.includes("payment")) {
+	if (state.status === "waiting") {
 		return (
 			<div>
 				<h2>Payment</h2>

@@ -9,7 +9,7 @@ import { loginWorkflow } from "./workflow";
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, receiving, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		"login",
 		loginWorkflow,
 		{ storage },
@@ -21,7 +21,7 @@ export function App() {
 		>
 			<h1>Login</h1>
 
-			{state === "waiting" && receiving === "credentials" && (
+			{state.status === "waiting" && (
 				<LoginForm
 					onSubmit={(username, password) =>
 						signal("credentials", { username, password })
@@ -29,12 +29,12 @@ export function App() {
 				/>
 			)}
 
-			{state === "running" && <p>Authenticating...</p>}
+			{state.status === "running" && <p>Authenticating...</p>}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
-					<h2>Welcome, {result.displayName}!</h2>
-					<p>Logged in at {result.loginTime}</p>
+					<h2>Welcome, {state.result.displayName}!</h2>
+					<p>Logged in at {state.result.loginTime}</p>
 					<button type="button" onClick={reset}>
 						Log Out
 					</button>

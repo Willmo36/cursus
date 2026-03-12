@@ -50,14 +50,14 @@ Use `useWorkflow` with just an ID (no workflow function) to consume a layer work
 
 ```tsx
 function ProfilePage() {
-  const { state, result, receiving, signal } = useWorkflow<{ name: string }>("profile");
+  const { state, signal } = useWorkflow<{ name: string }>("profile");
 
-  if (receiving === "profile") {
+  if (state.status === "waiting") {
     return <ProfileForm onSubmit={(data) => signal("profile", data)} />;
   }
 
-  if (state === "completed") {
-    return <p>Welcome, {result.name}</p>;
+  if (state.status === "completed") {
+    return <p>Welcome, {state.result.name}</p>;
   }
 
   return <p>Loading...</p>;
@@ -71,20 +71,16 @@ Layer workflows are started automatically on first `useWorkflow` call and shared
 Workflows can wait on other workflows in the same layer using `join`:
 
 ```ts
-const checkoutWorkflow: WorkflowFunction<
-  string,
-  { payment: string },
-  { profile: { name: string } }
-> = function* (ctx) {
-  const payment = yield* ctx.receive("payment");
-  const profile = yield* ctx.join("profile");
-  return yield* ctx.activity("place-order", async () => {
+import { workflow, receive, activity, join } from "cursus";
+
+const checkoutWorkflow = workflow(function* () {
+  const payment = yield* receive("payment");
+  const profile = yield* join("profile");
+  return yield* activity("place-order", async () => {
     return `${profile.name}: ${payment}`;
   });
-};
+});
 ```
-
-The third type parameter (`WorkflowMap`) declares which workflows this one can depend on.
 
 `join` auto-starts the target workflow if it hasn't been started yet. If it's already completed, the result is returned immediately.
 
@@ -93,29 +89,21 @@ The third type parameter (`WorkflowMap`) declares which workflows this one can d
 For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `published` get the published value immediately:
 
 ```ts
-const sessionWorkflow: WorkflowFunction<
-  void,
-  { login: { user: string } },
-  Record<string, never>,
-  Record<string, never>,
-  { user: string }
-> = function* (ctx) {
-  const { user } = yield* ctx.receive("login");
-  yield* ctx.publish({ user });
-  // keeps running — handles revocation, tier changes, etc.
-  yield* ctx.receive("login");
-};
+import { workflow, receive, publish, published, activity } from "cursus";
 
-const checkoutWorkflow: WorkflowFunction<
-  string,
-  Record<string, unknown>,
-  { session: { user: string } }
-> = function* (ctx) {
-  const account = yield* ctx.published("session");
-  return yield* ctx.activity("place-order", async () => {
+const sessionWorkflow = workflow(function* () {
+  const { user } = yield* receive("login");
+  yield* publish({ user });
+  // keeps running — handles revocation, tier changes, etc.
+  yield* receive("login");
+});
+
+const checkoutWorkflow = workflow(function* () {
+  const account = yield* published("session");
+  return yield* activity("place-order", async () => {
     return `order for ${account.user}`;
   });
-};
+});
 ```
 
 Resolution order for `published`: published value → wait. Resolution order for `join`: completed → failed → wait.
@@ -125,10 +113,8 @@ Resolution order for `published`: published value → wait. Resolution order for
 You can mix signals and workflow dependencies in `all`:
 
 ```ts
-const [payment, profile] = yield* ctx.all(ctx.receive("payment"), ctx.workflow("profile"));
+const [payment, profile] = yield* all(receive("payment"), join("profile"));
 ```
-
-`ctx.workflow("id")` returns a generator that resolves through the registry, just like `ctx.join("id")`.
 
 ## Inline Workflows Alongside Layers
 

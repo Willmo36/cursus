@@ -4,19 +4,19 @@ import { useWorkflow } from "cursus/react";
 import type { CartItem } from "./types";
 
 export function Cart({ onCheckout }: { onCheckout: () => void }) {
-	const { state, signal, error, published } = useWorkflow<CartItem[]>("cart");
+	const { state, signal, published } = useWorkflow<CartItem[]>("cart");
 	const items = (published as CartItem[] | undefined) ?? [];
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div className="p-4 bg-red-50 rounded-lg">
 				<h2 className="mt-0 text-lg font-bold">Cart</h2>
-				<p className="text-red-700">Cart error: {error}</p>
+				<p className="text-red-700">Cart error: {state.error}</p>
 			</div>
 		);
 	}
 
-	if (state === "completed") {
+	if (state.status === "completed") {
 		return (
 			<div className="border border-gray-300 rounded-lg p-4 self-start">
 				<h2 className="mt-0 text-lg font-bold">Cart</h2>

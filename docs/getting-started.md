@@ -19,18 +19,18 @@ Optional peer dependencies: `react >= 18.0.0`, `react-dom >= 18.0.0` (required f
 
 ## Your First Workflow
 
-A workflow is a generator function that receives a context object:
+A workflow is a generator function wrapped with `workflow()`:
 
 ```ts
-import type { WorkflowFunction } from "cursus";
+import { workflow, receive, activity } from "cursus";
 
-const greetingWorkflow: WorkflowFunction<string> = function* (ctx) {
-  const name = yield* ctx.receive<string>("name");
-  const greeting = yield* ctx.activity("greet", async () => {
+const greetingWorkflow = workflow(function* () {
+  const name = yield* receive<string>("name");
+  const greeting = yield* activity("greet", async () => {
     return `Hello, ${name}!`;
   });
   return greeting;
-};
+});
 ```
 
 This workflow:
@@ -50,13 +50,13 @@ import { MemoryStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
 
 function Greeter() {
-  const { state, result, receiving, signal } = useWorkflow(
+  const { state, signal } = useWorkflow(
     "greeter",
     greetingWorkflow,
     { storage: new MemoryStorage() },
   );
 
-  if (receiving === "name") {
+  if (state.status === "waiting") {
     return (
       <form onSubmit={(e) => {
         e.preventDefault();
@@ -69,8 +69,8 @@ function Greeter() {
     );
   }
 
-  if (state === "completed") {
-    return <p>{result}</p>;
+  if (state.status === "completed") {
+    return <p>{state.result}</p>;
   }
 
   return <p>Working...</p>;
@@ -81,14 +81,9 @@ function Greeter() {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `state` | `WorkflowState` | `"running"` \| `"waiting"` \| `"completed"` \| `"failed"` \| `"cancelled"` |
-| `result` | `T \| undefined` | The workflow's return value, once completed |
-| `error` | `string \| undefined` | Error message if the workflow failed |
-| `receiving` | `string \| undefined` | The signal name the workflow is blocked on |
-| `receivingAll` | `string[] \| undefined` | Signal names when using `all` |
-| `receivingAny` | `string[] \| undefined` | Signal names when using `race` with signals |
+| `state` | `WorkflowState<T>` | Tagged union: `{ status: "running" }` \| `{ status: "waiting" }` \| `{ status: "completed", result: T }` \| `{ status: "failed", error: string }` \| `{ status: "cancelled" }` |
+| `published` | `T \| undefined` | The workflow's published value, if any |
 | `signal(name, payload)` | function | Send a signal into the workflow |
-| `query(name)` | function | Read a query value exposed by the workflow |
 | `cancel()` | function | Cancel the running workflow |
 | `reset()` | function | Clear storage and restart from scratch |
 
@@ -99,7 +94,7 @@ By default, inline workflows use an ephemeral `MemoryStorage`. To survive page r
 ```tsx
 import { LocalStorage } from "cursus";
 
-const { state, result } = useWorkflow("greeter", greetingWorkflow, {
+const { state } = useWorkflow("greeter", greetingWorkflow, {
   storage: new LocalStorage("my-app"),
 });
 ```
@@ -108,7 +103,7 @@ Events are persisted incrementally. When the workflow completes, storage is comp
 
 ## What's Next
 
-- [Workflows](./workflows.md) — the full `WorkflowContext` API
+- [Workflows](./workflows.md) — the full workflow API
 - [Layers](./layers.md) — shared workflows across your component tree
 - [Storage](./storage.md) — persistence options and versioning
 - [Testing](./testing.md) — test workflows without React

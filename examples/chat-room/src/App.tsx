@@ -11,7 +11,7 @@ const storage = new LocalStorage();
 const WORKFLOW_ID = "chat-room";
 
 export function App() {
-	const { state, result, receiving, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		WORKFLOW_ID,
 		chatWorkflow,
 		{ storage },
@@ -21,7 +21,7 @@ export function App() {
 	const [text, setText] = useState("");
 	const hydrated = useHydratedMessages();
 
-	const isActive = state === "waiting" && receiving === "chat-event";
+	const isActive = state.status === "waiting";
 
 	return (
 		<div
@@ -29,7 +29,7 @@ export function App() {
 		>
 			<h1>Chat Room</h1>
 
-			{!joined && state !== "completed" && (
+			{!joined && state.status !== "completed" && (
 				<form
 					onSubmit={(e) => {
 						e.preventDefault();
@@ -92,12 +92,12 @@ export function App() {
 				</div>
 			)}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
 					<h2>Room Closed</h2>
-					<MessageList messages={result} />
+					<MessageList messages={state.result} />
 					<p style={{ color: "#666" }}>
-						{result.length} message{result.length !== 1 ? "s" : ""} total
+						{state.result.length} message{state.result.length !== 1 ? "s" : ""} total
 					</p>
 					<button type="button" onClick={reset}>
 						New Room

@@ -28,7 +28,7 @@ export function App() {
 }
 
 function Checkout() {
-	const { state, result, error, receiving, signal } = useWorkflow(
+	const { state, signal } = useWorkflow(
 		"checkout",
 		checkoutWorkflow,
 		{
@@ -37,16 +37,16 @@ function Checkout() {
 		},
 	);
 
-	if (state === "failed") {
+	if (state.status === "failed") {
 		return (
 			<div style={{ background: "#ffebee", padding: 16, borderRadius: 8 }}>
-				<p style={{ color: "#c62828" }}>Checkout failed: {error}</p>
+				<p style={{ color: "#c62828" }}>Checkout failed: {state.error}</p>
 			</div>
 		);
 	}
 
-	if (state === "completed" && result) {
-		const order = result as OrderResult;
+	if (state.status === "completed") {
+		const order = state.result as OrderResult;
 		return (
 			<div style={{ background: "#e8f5e9", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>Order Confirmed</h2>
@@ -63,7 +63,7 @@ function Checkout() {
 		);
 	}
 
-	if (state === "waiting" && receiving === "confirm") {
+	if (state.status === "waiting") {
 		return (
 			<div style={{ background: "#fff3e0", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>Confirm Payment</h2>

@@ -11,9 +11,9 @@ cursus provides higher-order functions that wrap activity functions with retry a
 Retries a failed activity with configurable backoff:
 
 ```ts
-import { withRetry } from "cursus";
+import { withRetry, activity } from "cursus";
 
-const result = yield* ctx.activity(
+const result = yield* activity(
   "fetch-data",
   withRetry(
     async (signal) => {
@@ -50,7 +50,7 @@ Retries respect the `AbortSignal` — if the workflow is cancelled during a retr
 Prevents repeated calls to a failing service. After enough failures, the circuit opens and calls fail immediately with `CircuitOpenError`:
 
 ```ts
-import { withCircuitBreaker, CircuitOpenError } from "cursus";
+import { withCircuitBreaker, CircuitOpenError, activity } from "cursus";
 
 const fetchWithBreaker = withCircuitBreaker(
   async (signal) => {
@@ -61,7 +61,7 @@ const fetchWithBreaker = withCircuitBreaker(
 );
 
 try {
-  const result = yield* ctx.activity("fetch", fetchWithBreaker);
+  const result = yield* activity("fetch", fetchWithBreaker);
 } catch (err) {
   if (err instanceof CircuitOpenError) {
     // Circuit is open — service is down, don't retry
@@ -87,14 +87,14 @@ try {
 `wrapActivity` composes multiple wrappers into one. Wrappers apply right-to-left (innermost first):
 
 ```ts
-import { wrapActivity, withRetry, withCircuitBreaker } from "cursus";
+import { wrapActivity, withRetry, withCircuitBreaker, activity } from "cursus";
 
 const resilient = wrapActivity(
   withCircuitBreaker,  // outer: stops calling if service is down
   withRetry,           // inner: retries transient failures
 );
 
-const result = yield* ctx.activity(
+const result = yield* activity(
   "fetch",
   resilient(async (signal) => {
     const res = await fetch("/api/data", { signal });

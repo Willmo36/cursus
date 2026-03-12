@@ -12,9 +12,14 @@ const layer = createLayer(
 );
 
 function AccountPanel() {
-	const { receiving, published, signal } = useWorkflow("account");
+	const { state, published, signal } = useWorkflow("account");
 
-	if (receiving === "login") {
+	const accountState = published as
+		| { status: "loading" }
+		| { status: "ready"; account: { name: string; tier: string } }
+		| undefined;
+
+	if (state.status === "waiting" && (!accountState || accountState.status === "loading")) {
 		return (
 			<div>
 				<h2>Account</h2>
@@ -25,12 +30,7 @@ function AccountPanel() {
 		);
 	}
 
-	const state = published as
-		| { status: "loading" }
-		| { status: "ready"; account: { name: string; tier: string } }
-		| undefined;
-
-	if (!state || state.status === "loading") {
+	if (!accountState || accountState.status !== "ready") {
 		return (
 			<div>
 				<h2>Account</h2>
@@ -43,7 +43,7 @@ function AccountPanel() {
 		<div>
 			<h2>Account</h2>
 			<p>
-				{state.account.name} ({state.account.tier})
+				{accountState.account.name} ({accountState.account.tier})
 			</p>
 			<button onClick={() => signal("upgrade", { tier: "pro" })}>
 				Upgrade to Pro

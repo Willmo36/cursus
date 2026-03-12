@@ -11,7 +11,7 @@ import { productWorkflow } from "./workflow";
 const storage = new LocalStorage("ssr");
 
 export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
-	const { state, result, published, receiving, signal, reset } = useWorkflow(
+	const { state, published, signal, reset } = useWorkflow(
 		"product", productWorkflow, { storage, snapshot },
 	);
 
@@ -22,8 +22,6 @@ export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
 			snapshot={snapshot}
 			product={product}
 			state={state}
-			receiving={receiving}
-			result={result as ProductResult | undefined}
 			onSignal={(name, payload) =>
 				signal(name as keyof ProductSignals, payload)
 			}

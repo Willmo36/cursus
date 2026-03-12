@@ -7,7 +7,7 @@ import { ssoWorkflow } from "./workflow";
 const storage = new LocalStorage();
 
 export function App() {
-	const { state, result, receiving, signal, reset } = useWorkflow(
+	const { state, signal, reset } = useWorkflow(
 		"sso",
 		ssoWorkflow,
 		{ storage },
@@ -19,11 +19,11 @@ export function App() {
 		>
 			<h1>SSO Login</h1>
 
-			{state === "running" && !result && (
+			{state.status === "running" && (
 				<StatusMessage text="Connecting to provider..." />
 			)}
 
-			{state === "waiting" && receiving === "sso-callback" && (
+			{state.status === "waiting" && (
 				<div>
 					<p>Waiting for SSO provider response...</p>
 					<p style={{ fontSize: 13, color: "#666" }}>
@@ -47,7 +47,7 @@ export function App() {
 				</div>
 			)}
 
-			{state === "completed" && result && (
+			{state.status === "completed" && (
 				<div>
 					<h2>Authenticated</h2>
 					<div
@@ -58,13 +58,13 @@ export function App() {
 						}}
 					>
 						<p>
-							<strong>Provider:</strong> {result.provider}
+							<strong>Provider:</strong> {state.result.provider}
 						</p>
 						<p>
-							<strong>Email:</strong> {result.email}
+							<strong>Email:</strong> {state.result.email}
 						</p>
 						<p style={{ fontSize: 12, color: "#666", wordBreak: "break-all" }}>
-							<strong>Token:</strong> {result.accessToken}
+							<strong>Token:</strong> {state.result.accessToken}
 						</p>
 					</div>
 					<button type="button" onClick={reset} style={{ marginTop: 16 }}>
