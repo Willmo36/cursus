@@ -87,6 +87,40 @@ export type SignalMapOf<F> = F extends (...args: any[]) => infer G
 	? [SignalMap<G>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<G>>
 	: Record<string, never>;
 
+// --- Dependency checking utilities ---
+
+// Extracts the return type from a workflow function
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
+export type WorkflowReturn<F> = F extends (...args: any[]) => Generator<any, infer T, any> ? T : never;
+
+// Extracts the Publishes<V> value type from a requirement union
+export type ExtractPublishes<R> = R extends Publishes<infer V> ? V : never;
+
+// Extracts requirements from a workflow function
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
+export type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
+	? Requirements<ReturnType<F>>
+	: never;
+
+// Extracts Result dependency keys from a requirement union
+export type ResultDeps<R> = R extends Result<infer K, any> ? K : never;
+
+// Extracts Published dependency keys from a requirement union
+export type PublishedDeps<R> = R extends Published<infer K, any> ? K : never;
+
+// All dependency keys (Result + Published) from a requirement union
+export type DepKeys<R> = ResultDeps<R> | PublishedDeps<R>;
+
+// Dependency keys from R that are NOT satisfied by Provides
+export type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
+	Exclude<DepKeys<R>, keyof Provides>;
+
+// Resolves to F if all deps are satisfied, otherwise a descriptive error string
+export type CheckDeps<F, Provides extends Record<string, unknown>> =
+	[UnsatisfiedDeps<ReqsOf<F>, Provides>] extends [never]
+		? F
+		: `Missing dependencies: ${UnsatisfiedDeps<ReqsOf<F>, Provides> & string}`;
+
 // --- Descriptors (yielded by workflow generators, no seq) ---
 
 export type ActivityDescriptor = {

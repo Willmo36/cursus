@@ -9,40 +9,11 @@ import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
 import { useWorkflow as useWorkflowBase } from "./use-workflow";
 import type {
-	Published,
-	Requirements,
-	Result,
+	CheckDeps,
 	SignalMapOf,
+	WorkflowReturn,
 	WorkflowState,
 } from "./types";
-
-// Extracts Result dependency keys from a requirement union
-type ResultDeps<R> = R extends Result<infer K, any> ? K : never;
-
-// Extracts Published dependency keys from a requirement union
-type PublishedDeps<R> = R extends Published<infer K, any> ? K : never;
-
-// All dependency keys (Result + Published)
-type DepKeys<R> = ResultDeps<R> | PublishedDeps<R>;
-
-// Extracts requirements from a workflow function
-// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
-	? Requirements<ReturnType<F>>
-	: never;
-
-// Keys from R not in Provides
-type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
-	Exclude<DepKeys<R>, keyof Provides>;
-
-// If deps are satisfied, resolves to F. Otherwise resolves to a descriptive error string.
-type CheckDeps<F, Provides extends Record<string, unknown>> =
-	[UnsatisfiedDeps<ReqsOf<F>, Provides>] extends [never]
-		? F
-		: `Missing dependencies: ${UnsatisfiedDeps<ReqsOf<F>, Provides> & string}`;
-
-// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-type WorkflowReturn<F> = F extends (...args: any[]) => Generator<any, infer T, any> ? T : never;
 
 type UseWorkflowResult<T, SignalMap extends Record<string, unknown>> = {
 	state: WorkflowState<T>;
