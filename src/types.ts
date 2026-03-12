@@ -26,10 +26,16 @@ export type Signal<K extends string = string, V = unknown> = {
 	readonly signal: { readonly [P in K]: V };
 };
 
-// Declares that a workflow reads published value V from workflow K
-export type Dependency<K extends string = string, V = unknown> = {
-	readonly _tag: "dependency";
-	readonly dependency: { readonly [P in K]: V };
+// Declares that a workflow depends on the result of workflow K (via join)
+export type Result<K extends string = string, V = unknown> = {
+	readonly _tag: "result";
+	readonly result: { readonly [P in K]: V };
+};
+
+// Declares that a workflow depends on a published value V from workflow K
+export type Published<K extends string = string, V = unknown> = {
+	readonly _tag: "published";
+	readonly published: { readonly [P in K]: V };
 };
 
 // Declares that a workflow publishes values of type V
@@ -39,7 +45,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Signal | Dependency | Publishes;
+export type Requirement = Signal | Result | Published | Publishes;
 
 // --- Step (internal yield carrier) ---
 
@@ -462,18 +468,18 @@ export function publish<V>(value: V): Generator<PublishDescriptor & Step<Publish
 export function published<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean; where?: (value: V) => boolean; afterSeq?: number },
-): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> & {
-	as: <W>() => Generator<PublishedDescriptor & Step<Dependency<K, W>>, W, unknown>;
+): Generator<PublishedDescriptor & Step<Published<K, V>>, V, unknown> & {
+	as: <W>() => Generator<PublishedDescriptor & Step<Published<K, W>>, W, unknown>;
 } {
 	const start = options?.start ?? true;
-	const gen = (function* (): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> {
+	const gen = (function* (): Generator<PublishedDescriptor & Step<Published<K, V>>, V, unknown> {
 		const result = yield {
 			type: "published" as const,
 			workflowId,
 			start,
 			where: options?.where as ((value: unknown) => boolean) | undefined,
 			afterSeq: options?.afterSeq,
-		} as PublishedDescriptor & Step<Dependency<K, V>>;
+		} as PublishedDescriptor & Step<Published<K, V>>;
 		return result as V;
 	})();
 	(gen as any).as = <W>() => published<W, K>(workflowId, options as any);
@@ -483,16 +489,16 @@ export function published<V, K extends string = string>(
 export function join<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean },
-): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> & {
-	as: <W>() => Generator<JoinDescriptor & Step<Dependency<K, W>>, W, unknown>;
+): Generator<JoinDescriptor & Step<Result<K, V>>, V, unknown> & {
+	as: <W>() => Generator<JoinDescriptor & Step<Result<K, W>>, W, unknown>;
 } {
 	const start = options?.start ?? true;
-	const gen = (function* (): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> {
+	const gen = (function* (): Generator<JoinDescriptor & Step<Result<K, V>>, V, unknown> {
 		const result = yield {
 			type: "join" as const,
 			workflowId,
 			start,
-		} as JoinDescriptor & Step<Dependency<K, V>>;
+		} as JoinDescriptor & Step<Result<K, V>>;
 		return result as V;
 	})();
 	(gen as any).as = <W>() => join<W, K>(workflowId, options);
@@ -551,7 +557,7 @@ export function subscribe<T, V, K extends string = string>(
 		value: V,
 		done: <D>(value: D) => Workflow<never>,
 	) => Workflow<void, Requirement>,
-): Generator<SubscribeDescriptor & Step<Dependency<K, V>>, T, unknown> {
+): Generator<SubscribeDescriptor & Step<Published<K, V>>, T, unknown> {
 	const start = options?.start ?? true;
 	return (function* () {
 		const result = yield {
@@ -560,7 +566,7 @@ export function subscribe<T, V, K extends string = string>(
 			start,
 			where: options?.where as ((value: unknown) => boolean) | undefined,
 			body: body as SubscribeDescriptor["body"],
-		} as SubscribeDescriptor & Step<Dependency<K, V>>;
+		} as SubscribeDescriptor & Step<Published<K, V>>;
 		return result as T;
 	})();
 }

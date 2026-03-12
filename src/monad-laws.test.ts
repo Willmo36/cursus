@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
 import { activity, all, child, handle, join, publish, published, race, receive, sleep, workflow } from "./types";
-import type { Dependency, Publishes, Requirements, Signal, Workflow } from "./types";
+import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -194,13 +194,13 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("published propagates Dependency requirement", () => {
+		it("published propagates Published requirement", () => {
 			const w = workflow(function* () {
 				const config = yield* published("config").as<{ url: string }>();
 				return config.url;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Dependency<"config", { url: string }>> = true;
+			const _check: AssertEqual<R, Published<"config", { url: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -212,7 +212,7 @@ describe("Monad laws", () => {
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Dependency<"config", { url: string }>> = true;
+			const _check: AssertEqual<R, Published<"config", { url: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -224,7 +224,7 @@ describe("Monad laws", () => {
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Dependency<"config", unknown>> = true;
+			const _check: AssertEqual<R, Published<"config", unknown>> = true;
 			void _check;
 			void w;
 		});
@@ -236,7 +236,7 @@ describe("Monad laws", () => {
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Dependency<"payment", { receipt: string }>> = true;
+			const _check: AssertEqual<R, Result<"payment", { receipt: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -248,7 +248,7 @@ describe("Monad laws", () => {
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Dependency<"payment", unknown>> = true;
+			const _check: AssertEqual<R, Result<"payment", unknown>> = true;
 			void _check;
 			void w;
 		});
@@ -273,7 +273,7 @@ describe("Monad laws", () => {
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<
 				R,
-				| Dependency<"config", { url: string }>
+				| Published<"config", { url: string }>
 				| Signal<"login", { name: string }>
 				| Publishes<number>
 			> = true;
@@ -381,7 +381,7 @@ describe("Monad laws", () => {
 				return msg;
 			});
 
-			// Only Signal<"greet", string> — no Dependency or Publishes
+			// Only Signal<"greet", string> — no Result, Published, or Publishes
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Signal<"greet", string>> = true;
 			void _check;
