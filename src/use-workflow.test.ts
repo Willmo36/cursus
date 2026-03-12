@@ -7,6 +7,7 @@ import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
+import { createBindings } from "./bindings";
 import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
@@ -1046,6 +1047,100 @@ describe("useWorkflow", () => {
 			expect(types).toContain("activity_scheduled");
 			expect(types).toContain("activity_completed");
 			expect(types).toContain("workflow_completed");
+		});
+	});
+
+	describe("createBindings()", () => {
+		it("useWorkflow from hooks starts and completes a registry workflow", async () => {
+			const greetWorkflow = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("greet", greetWorkflow)
+				.build();
+
+			const { useWorkflow: useWf, Provider } = createBindings(registry);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(Provider, null, children);
+
+			const { result } = renderHook(() => useWf("greet"), { wrapper });
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("completed");
+			});
+
+			if (result.current.state.status === "completed") {
+				expect(result.current.state.result).toBe("hello");
+			}
+		});
+
+		it("useWorkflow sends typed signals", async () => {
+			const loginWorkflow = workflow(function* () {
+				const name = yield* receive("login").as<string>();
+				return `Welcome ${name}`;
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("login", loginWorkflow)
+				.build();
+
+			const { useWorkflow: useWf, Provider } = createBindings(registry);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(Provider, null, children);
+
+			const { result } = renderHook(() => useWf("login"), { wrapper });
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("waiting");
+			});
+
+			act(() => {
+				result.current.signal("login", "Max");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("completed");
+			});
+
+			if (result.current.state.status === "completed") {
+				expect(result.current.state.result).toBe("Welcome Max");
+			}
+		});
+
+		it("inline workflow with satisfied deps runs via registry", async () => {
+			const profileWorkflow = workflow(function* () {
+				return yield* activity("fetch", async () => ({ name: "Max" }));
+			});
+
+			const orderWorkflow = workflow(function* () {
+				const profile = yield* join("profile").as<{ name: string }>();
+				return `order for ${profile.name}`;
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("profile", profileWorkflow)
+				.build();
+
+			const { useWorkflow: useWf, Provider } = createBindings(registry);
+
+			const wrapper = ({ children }: { children: ReactNode }) =>
+				createElement(Provider, null, children);
+
+			const { result } = renderHook(
+				() => useWf("order", orderWorkflow),
+				{ wrapper },
+			);
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("completed");
+			});
+
+			if (result.current.state.status === "completed") {
+				expect(result.current.state.result).toBe("order for Max");
+			}
 		});
 	});
 
