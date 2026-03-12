@@ -1,9 +1,9 @@
 // ABOUTME: UI for the error recovery example.
-// ABOUTME: Payment form feeds the layer workflow; order flow shows the caught failure.
+// ABOUTME: Payment form feeds the registry workflow; order flow shows the caught failure.
 
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { useWorkflow } from "cursus/react";
 import { useState } from "react";
+import { useWorkflow } from "./main";
 import { storage } from "./storage";
 import { orderWorkflow } from "./workflows";
 
@@ -45,7 +45,7 @@ export function App() {
 }
 
 function PaymentForm() {
-	const { state, signal } = useWorkflow<unknown>("payment");
+	const { state, signal } = useWorkflow("payment");
 	const [card, setCard] = useState("");
 
 	if (state.status === "completed") {
