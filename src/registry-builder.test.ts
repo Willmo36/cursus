@@ -105,4 +105,86 @@ describe("Registry builder", () => {
 		// @ts-expect-error — "session" is not provided, should fail
 		createRegistry(new MemoryStorage()).add("dashboard", dashboardWorkflow);
 	});
+
+	describe("build()", () => {
+		it("returns a registry that can start and complete workflows", async () => {
+			const greetWorkflow = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("greet", greetWorkflow)
+				.build();
+
+			await registry.start("greet");
+			const state = registry.getState("greet");
+			expect(state?.status).toBe("completed");
+			if (state?.status === "completed") {
+				expect(state.result).toBe("hello");
+			}
+		});
+
+		it("resolves cross-workflow dependencies at runtime", async () => {
+			const profileWorkflow = workflow(function* () {
+				return yield* activity("fetch", async () => ({ name: "Max" }));
+			});
+
+			const orderWorkflow = workflow(function* () {
+				const profile = yield* join("profile").as<{ name: string }>();
+				return `order for ${profile.name}`;
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("profile", profileWorkflow)
+				.add("order", orderWorkflow)
+				.build();
+
+			await registry.start("profile");
+			await registry.start("order");
+			const state = registry.getState("order");
+			expect(state?.status).toBe("completed");
+			if (state?.status === "completed") {
+				expect(state.result).toBe("order for Max");
+			}
+		});
+
+		it("getState() returns typed result for the workflow", async () => {
+			const greetWorkflow = workflow(function* () {
+				return yield* activity("greet", async () => ({ message: "hello" }));
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("greet", greetWorkflow)
+				.build();
+
+			await registry.start("greet");
+			const state = registry.getState("greet");
+			if (state?.status === "completed") {
+				// Type-level: result should be { message: string }
+				const _check: AssertEqual<typeof state.result, { message: string }> = true;
+				void _check;
+				expect(state.result.message).toBe("hello");
+			} else {
+				throw new Error("Expected completed");
+			}
+		});
+
+		it("build() constrains start() to registered workflow IDs (type-level)", () => {
+			const greetWorkflow = workflow(function* () {
+				return "hello";
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("greet", greetWorkflow)
+				.build();
+
+			// Valid: "greet" is a registered ID
+			const _validStart: (id: "greet") => Promise<void> = registry.start.bind(registry);
+			void _validStart;
+
+			// @ts-expect-error — "unknown" is not a registered workflow ID
+			const _invalidStart: (id: "unknown") => Promise<void> = registry.start.bind(registry);
+			void _invalidStart;
+		});
+	});
 });

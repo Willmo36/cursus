@@ -1,12 +1,16 @@
 // ABOUTME: Typed registry builder that checks workflow dependencies at compile time.
 // ABOUTME: Each add() call verifies that Result and Published deps are already provided.
 
+import { WorkflowRegistry } from "./registry";
 import type {
 	AnyWorkflowFunction,
 	Published,
 	Publishes,
 	Requirements,
 	Result,
+	WorkflowEvent,
+	WorkflowEventObserver,
+	WorkflowState,
 	WorkflowStorage,
 } from "./types";
 
@@ -41,11 +45,21 @@ type RegistryEntry = {
 	published: unknown;
 };
 
-// If deps are satisfied, resolves to F. Otherwise resolves to a descriptive never.
+// If deps are satisfied, resolves to F. Otherwise resolves to a descriptive error string.
 type CheckDeps<F, Provides extends Record<string, unknown>> =
 	[UnsatisfiedDeps<ReqsOf<F>, Provides>] extends [never]
 		? F
 		: `Missing dependencies: ${UnsatisfiedDeps<ReqsOf<F>, Provides> & string}`;
+
+export type Registry<Provides extends Record<string, RegistryEntry> = {}> = {
+	start(id: keyof Provides & string): Promise<void>;
+	signal(id: keyof Provides & string, name: string, payload?: unknown): void;
+	reset(id: keyof Provides & string): Promise<void>;
+	getState<K extends keyof Provides & string>(id: K): WorkflowState<Provides[K]["result"]> | undefined;
+	getEvents(id: keyof Provides & string): WorkflowEvent[];
+	getWorkflowIds(): string[];
+	readonly storage: WorkflowStorage;
+};
 
 export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}> = {
 	// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
@@ -56,6 +70,8 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 		result: WorkflowReturn<F>;
 		published: ExtractPublishes<ReqsOf<F>>;
 	}>>;
+
+	build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }): Registry<Provides>;
 };
 
 export function createRegistry(
@@ -67,6 +83,14 @@ export function createRegistry(
 		add(id: string, workflowFn: AnyWorkflowFunction) {
 			workflows[id] = workflowFn;
 			return builder;
+		},
+		build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }) {
+			const observers = options?.onEvent
+				? Array.isArray(options.onEvent)
+					? options.onEvent
+					: [options.onEvent]
+				: undefined;
+			return new WorkflowRegistry(workflows, storage, observers) as unknown as Registry;
 		},
 	} as any;
 
