@@ -8,6 +8,7 @@ import type {
 	Publishes,
 	Requirements,
 	Result,
+	SignalMapOf,
 	WorkflowEvent,
 	WorkflowEventObserver,
 	WorkflowState,
@@ -40,9 +41,10 @@ type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
 	? Requirements<ReturnType<F>>
 	: never;
 
-type RegistryEntry = {
+export type RegistryEntry = {
 	result: unknown;
 	published: unknown;
+	signals: Record<string, unknown>;
 };
 
 // If deps are satisfied, resolves to F. Otherwise resolves to a descriptive error string.
@@ -59,6 +61,8 @@ export type Registry<Provides extends Record<string, RegistryEntry> = {}> = {
 	getEvents(id: keyof Provides & string): WorkflowEvent[];
 	getWorkflowIds(): string[];
 	readonly storage: WorkflowStorage;
+	/** @internal */
+	readonly _registry: WorkflowRegistry;
 };
 
 export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}> = {
@@ -69,6 +73,7 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 	): RegistryBuilder<Provides & Record<K, {
 		result: WorkflowReturn<F>;
 		published: ExtractPublishes<ReqsOf<F>>;
+		signals: SignalMapOf<F>;
 	}>>;
 
 	build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }): Registry<Provides>;
@@ -90,7 +95,10 @@ export function createRegistry(
 					? options.onEvent
 					: [options.onEvent]
 				: undefined;
-			return new WorkflowRegistry(workflows, storage, observers) as unknown as Registry;
+			const inner = new WorkflowRegistry(workflows, storage, observers);
+			const registry = Object.create(inner);
+			registry._registry = inner;
+			return registry as unknown as Registry;
 		},
 	} as any;
 

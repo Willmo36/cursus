@@ -11,6 +11,7 @@ import {
 } from "react";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
+import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
 import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
@@ -44,12 +45,21 @@ type UseWorkflowResult<
 	reset: () => void;
 };
 
-// Overload 1: consume a workflow from the layer by ID
+// Overload 1: consume a workflow from the layer by ID (untyped, legacy)
 export function useWorkflow<T = unknown>(
 	workflowId: string,
 ): UseWorkflowResult<T, Record<string, unknown>>;
 
-// Overload 2: run an inline workflow with optional layer deps
+// Overload 2: consume a workflow from a typed registry
+export function useWorkflow<
+	P extends Record<string, RegistryEntry>,
+	K extends keyof P & string,
+>(
+	workflowId: K,
+	registry: Registry<P>,
+): UseWorkflowResult<P[K]["result"], P[K]["signals"]>;
+
+// Overload 3: run an inline workflow with optional layer deps
 // biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T and signal map from the workflow function
 export function useWorkflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
 	workflowId: string,
@@ -60,10 +70,17 @@ export function useWorkflow<F extends (...args: any[]) => Generator<any, any, un
 // Implementation
 export function useWorkflow(
 	workflowId: string,
-	workflowFn?: AnyWorkflowFunction,
+	workflowFnOrRegistry?: AnyWorkflowFunction | Registry<any>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<unknown, Record<string, unknown>> {
-	const registry = useContext(RegistryContext);
+	const contextRegistry = useContext(RegistryContext);
+
+	// Detect which mode we're in
+	const isRegistryMode = workflowFnOrRegistry != null && typeof workflowFnOrRegistry === "object" && "_registry" in workflowFnOrRegistry;
+	const registry = isRegistryMode
+		? (workflowFnOrRegistry as Registry<any>)._registry
+		: contextRegistry;
+	const workflowFn = isRegistryMode ? undefined : workflowFnOrRegistry as AnyWorkflowFunction | undefined;
 	const isLayerMode = workflowFn === undefined;
 
 	// For inline workflows: explicit storage > registry storage > ephemeral fallback
@@ -211,7 +228,7 @@ export function useWorkflow(
 			cancelled = true;
 			registry?.unobserve(workflowId);
 		};
-	}, [workflowId, workflowFn, runId]);
+	}, [workflowId, workflowFn, workflowFnOrRegistry, runId]);
 
 	const signal = useCallback(
 		(name: string, payload?: unknown) => {

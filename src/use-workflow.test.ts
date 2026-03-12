@@ -7,6 +7,7 @@ import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
+import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
@@ -1045,6 +1046,61 @@ describe("useWorkflow", () => {
 			expect(types).toContain("activity_scheduled");
 			expect(types).toContain("activity_completed");
 			expect(types).toContain("workflow_completed");
+		});
+	});
+
+	describe("registry mode (with typed registry)", () => {
+		it("starts and completes a workflow from a built registry", async () => {
+			const greetWorkflow = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("greet", greetWorkflow)
+				.build();
+
+			const { result } = renderHook(() =>
+				useWorkflow("greet", registry),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("completed");
+			});
+
+			if (result.current.state.status === "completed") {
+				expect(result.current.state.result).toBe("hello");
+			}
+		});
+
+		it("sends signals to a registry workflow", async () => {
+			const loginWorkflow = workflow(function* () {
+				const name = yield* receive("login").as<string>();
+				return `Welcome ${name}`;
+			});
+
+			const registry = createRegistry(new MemoryStorage())
+				.add("login", loginWorkflow)
+				.build();
+
+			const { result } = renderHook(() =>
+				useWorkflow("login", registry),
+			);
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("waiting");
+			});
+
+			act(() => {
+				result.current.signal("login", "Max");
+			});
+
+			await waitFor(() => {
+				expect(result.current.state.status).toBe("completed");
+			});
+
+			if (result.current.state.status === "completed") {
+				expect(result.current.state.result).toBe("Welcome Max");
+			}
 		});
 	});
 });
