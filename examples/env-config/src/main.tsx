@@ -1,20 +1,22 @@
 // ABOUTME: Entry point for the env-config example app.
-// ABOUTME: Creates a workflow layer with the env workflow and mounts the app.
+// ABOUTME: Creates a workflow registry with the env workflow and exports typed bindings.
 
-import { createLayer } from "cursus";
-import { WorkflowLayerProvider } from "cursus/react";
+import { createRegistry } from "cursus";
+import { createBindings } from "cursus/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { storage } from "./storage";
 import { envWorkflow } from "./workflows";
 
-const layer = createLayer({ env: envWorkflow }, storage);
+const registry = createRegistry(storage).add("env", envWorkflow).build();
+
+export const { useWorkflow, Provider } = createBindings(registry);
 
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
-		<WorkflowLayerProvider layer={layer}>
+		<Provider>
 			<App />
-		</WorkflowLayerProvider>
+		</Provider>
 	</StrictMode>,
 );

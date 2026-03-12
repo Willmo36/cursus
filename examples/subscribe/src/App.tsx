@@ -1,15 +1,7 @@
 // ABOUTME: Main layout for the subscribe example app.
 // ABOUTME: Account store + points store demonstrating reactive subscribe with takeLatest.
-import { createLayer } from "cursus";
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { useWorkflow, WorkflowLayerProvider } from "cursus/react";
-import { storage } from "./storage";
-import { accountWorkflow, pointsWorkflow } from "./workflows";
-
-const layer = createLayer(
-	{ account: accountWorkflow, points: pointsWorkflow },
-	storage,
-);
+import { useWorkflow } from "./main";
 
 function AccountPanel() {
 	const { state, published, signal } = useWorkflow("account");
@@ -66,29 +58,27 @@ function PointsPanel() {
 
 export function App() {
 	return (
-		<WorkflowLayerProvider layer={layer}>
-			<div
-				style={{
-					maxWidth: 600,
-					margin: "0 auto",
-					padding: 20,
-					fontFamily: "sans-serif",
-				}}
-			>
-				<h1>Subscribe Example</h1>
-				<p>
-					The points store subscribes to the account store. When the account
-					changes (e.g. upgrade), points automatically refetches with takeLatest
-					semantics — cancelling any in-flight fetch.
-				</p>
-				<div style={{ display: "grid", gap: 20 }}>
-					<AccountPanel />
-					<PointsPanel />
-				</div>
-				<div style={{ marginTop: 40 }}>
-					<WorkflowDebugPanel />
-				</div>
+		<div
+			style={{
+				maxWidth: 600,
+				margin: "0 auto",
+				padding: 20,
+				fontFamily: "sans-serif",
+			}}
+		>
+			<h1>Subscribe Example</h1>
+			<p>
+				The points store subscribes to the account store. When the account
+				changes (e.g. upgrade), points automatically refetches with takeLatest
+				semantics — cancelling any in-flight fetch.
+			</p>
+			<div style={{ display: "grid", gap: 20 }}>
+				<AccountPanel />
+				<PointsPanel />
 			</div>
-		</WorkflowLayerProvider>
+			<div style={{ marginTop: 40 }}>
+				<WorkflowDebugPanel />
+			</div>
+		</div>
 	);
 }

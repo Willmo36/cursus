@@ -1,8 +1,8 @@
 // ABOUTME: Entry point for the shop example app.
-// ABOUTME: Sets up error toggle context, creates workflow layer, and mounts the app.
+// ABOUTME: Sets up error toggle context, creates workflow registry, and mounts the app.
 import "./index.css";
-import { createLayer } from "cursus";
-import { WorkflowLayerProvider } from "cursus/react";
+import { createRegistry } from "cursus";
+import { createBindings } from "cursus/react";
 import { StrictMode, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -21,17 +21,13 @@ function Root() {
 		[],
 	);
 
-	const layer = useMemo(
-		() =>
-			createLayer<{ cart: unknown; checkout: unknown }>(
-				{
-					cart: createCartWorkflow(apiFetch),
-					checkout: createCheckoutWorkflow(apiFetch),
-				},
-				storage,
-			),
-		[apiFetch],
-	);
+	const { Provider } = useMemo(() => {
+		const registry = createRegistry(storage)
+			.add("cart", createCartWorkflow(apiFetch))
+			.add("checkout", createCheckoutWorkflow(apiFetch))
+			.build();
+		return createBindings(registry);
+	}, [apiFetch]);
 
 	const errorToggle = useMemo(
 		() => ({ forceError, setForceError, apiFetch }),
@@ -40,9 +36,9 @@ function Root() {
 
 	return (
 		<ErrorToggleCtx.Provider value={errorToggle}>
-			<WorkflowLayerProvider layer={layer}>
+			<Provider>
 				<App />
-			</WorkflowLayerProvider>
+			</Provider>
 		</ErrorToggleCtx.Provider>
 	);
 }

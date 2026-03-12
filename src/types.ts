@@ -590,7 +590,7 @@ export function subscribe<T, V, K extends string = string>(
 	body: (
 		value: V,
 		done: <D>(value: D) => Workflow<never>,
-	) => Workflow<void, Requirement>,
+	) => Workflow<void, Signal | Publishes>,
 ): Generator<SubscribeDescriptor & Step<Published<K, V>>, T, unknown> {
 	const start = options?.start ?? true;
 	return (function* () {
@@ -613,22 +613,22 @@ export class DoneSignal {
 export type SignalHandler = (
 	payload: unknown,
 	done: <T>(value: T) => Workflow<never>,
-) => Workflow<void, Requirement>;
+) => Workflow<void, Signal | Publishes>;
 
 export function handle<T>(
 	handlers: Record<string, SignalHandler>,
-): Workflow<T, Requirement> {
+): Workflow<T, Signal | Publishes> {
 	const handlerNames = Object.keys(handlers);
 	const doneFn = <D>(value: D): Workflow<never> => {
 		return (function* (): Generator<never, never, unknown> {
 			throw new DoneSignal(value);
 		})();
 	};
-	return (function* (): Generator<Descriptor & Step<Requirement>, T, unknown> {
+	return (function* (): Generator<Descriptor & Step<Signal | Publishes>, T, unknown> {
 		for (;;) {
-			const result = yield* race(
+			const result = yield* (race(
 				...handlerNames.map((n) => receive(n)),
-			);
+			) as Generator<Descriptor & Step<Signal>, { winner: number; value: unknown }, unknown>);
 			const signal = handlerNames[result.winner];
 			const handler = handlers[signal];
 			if (!handler) continue;

@@ -1,15 +1,7 @@
 // ABOUTME: Main layout for the publish example app.
 // ABOUTME: Session login + checkout flow demonstrating publish and published.
-import { createLayer } from "cursus";
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { useWorkflow, WorkflowLayerProvider } from "cursus/react";
-import { storage } from "./storage";
-import { checkoutWorkflow, sessionWorkflow } from "./workflows";
-
-const layer = createLayer(
-	{ session: sessionWorkflow, checkout: checkoutWorkflow },
-	storage,
-);
+import { useWorkflow } from "./main";
 
 function Session() {
 	const { state, published, signal } = useWorkflow("session");
@@ -46,7 +38,7 @@ function Session() {
 }
 
 function Checkout() {
-	const { state, signal } = useWorkflow<string>("checkout");
+	const { state, signal } = useWorkflow("checkout");
 
 	if (state.status === "completed") {
 		return (
@@ -76,29 +68,27 @@ function Checkout() {
 
 export function App() {
 	return (
-		<WorkflowLayerProvider layer={layer}>
-			<div
-				style={{
-					maxWidth: 600,
-					margin: "0 auto",
-					padding: 20,
-					fontFamily: "sans-serif",
-				}}
-			>
-				<h1>Publish Example</h1>
-				<p>
-					The session workflow publishes the account on login but keeps running.
-					The checkout workflow gets the published value immediately via
-					ctx.published().
-				</p>
-				<div style={{ display: "grid", gap: 20 }}>
-					<Session />
-					<Checkout />
-				</div>
-				<div style={{ marginTop: 40 }}>
-					<WorkflowDebugPanel />
-				</div>
+		<div
+			style={{
+				maxWidth: 600,
+				margin: "0 auto",
+				padding: 20,
+				fontFamily: "sans-serif",
+			}}
+		>
+			<h1>Publish Example</h1>
+			<p>
+				The session workflow publishes the account on login but keeps running.
+				The checkout workflow gets the published value immediately via
+				ctx.published().
+			</p>
+			<div style={{ display: "grid", gap: 20 }}>
+				<Session />
+				<Checkout />
 			</div>
-		</WorkflowLayerProvider>
+			<div style={{ marginTop: 40 }}>
+				<WorkflowDebugPanel />
+			</div>
+		</div>
 	);
 }

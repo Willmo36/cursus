@@ -2,10 +2,9 @@
 // ABOUTME: Demonstrates cross-workflow deps: checkout blocks until profile is complete.
 
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { useWorkflow } from "cursus/react";
 import { useState } from "react";
+import { useWorkflow } from "./main";
 import { storage } from "./storage";
-import type { UserProfile } from "./workflows";
 import { checkoutWorkflow } from "./workflows";
 
 export function App() {
@@ -42,8 +41,7 @@ export function App() {
 }
 
 function ProfileForm() {
-	const { state, signal, reset } =
-		useWorkflow<UserProfile>("profile");
+	const { state, signal, reset } = useWorkflow("profile");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 

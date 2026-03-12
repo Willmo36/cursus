@@ -1,9 +1,8 @@
 // ABOUTME: UI for the env-config example showing resolved environment and user profile.
 // ABOUTME: Both workflows auto-run on mount with no user interaction needed.
 import { WorkflowDebugPanel } from "cursus/devtools";
-import { useWorkflow } from "cursus/react";
 import { storage } from "./storage";
-import type { EnvConfig, UserProfile } from "./workflows";
+import { useWorkflow } from "./main";
 import { userWorkflow } from "./workflows";
 
 export function App() {
@@ -35,7 +34,7 @@ export function App() {
 }
 
 function EnvSection() {
-	const { state } = useWorkflow<EnvConfig>("env");
+	const { state } = useWorkflow("env");
 
 	if (state.status === "failed") {
 		return (
@@ -60,9 +59,7 @@ function EnvSection() {
 }
 
 function UserSection() {
-	const { state } = useWorkflow("user", userWorkflow, {
-		storage,
-	});
+	const { state } = useWorkflow("user", userWorkflow);
 
 	if (state.status === "failed") {
 		return (
@@ -73,7 +70,7 @@ function UserSection() {
 	}
 
 	if (state.status === "completed") {
-		const user = state.result as UserProfile;
+		const user = state.result;
 		return (
 			<div style={{ background: "#e3f2fd", padding: 16, borderRadius: 8 }}>
 				<h2 style={{ marginTop: 0 }}>User Profile</h2>
