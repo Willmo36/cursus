@@ -592,12 +592,29 @@ export function handle<T>(
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
 export type AnyWorkflowFunction = (...args: any[]) => Generator<any, any, any>;
 
-export type WorkflowState =
-	| "running"
-	| "waiting"
-	| "completed"
-	| "failed"
-	| "cancelled";
+// --- Workflow state (tagged union) ---
+
+export const RUNNING = "running" as const;
+export const WAITING = "waiting" as const;
+export const COMPLETED = "completed" as const;
+export const FAILED = "failed" as const;
+export const CANCELLED = "cancelled" as const;
+
+// Internal status string used by the interpreter.
+export type InterpreterStatus =
+	| typeof RUNNING
+	| typeof WAITING
+	| typeof COMPLETED
+	| typeof FAILED
+	| typeof CANCELLED;
+
+// Public workflow state exposed to consumers via useWorkflow and snapshots.
+export type WorkflowState<T = unknown> =
+	| { status: typeof RUNNING }
+	| { status: typeof WAITING }
+	| { status: typeof COMPLETED; result: T }
+	| { status: typeof FAILED; error: string }
+	| { status: typeof CANCELLED };
 
 // --- Registry interface (avoids circular imports) ---
 

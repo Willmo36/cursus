@@ -176,7 +176,7 @@ export class WorkflowRegistry<K extends string = string>
 		await persistEvents();
 
 		// Compact storage for terminal workflows — keep published + terminal events for reload
-		if (interpreter.state === "completed" || interpreter.state === "failed") {
+		if (interpreter.status === "completed" || interpreter.status === "failed") {
 			const allEvents = log.events();
 			const compacted: WorkflowEvent[] = [];
 			const publishedEvent = allEvents
@@ -212,7 +212,7 @@ export class WorkflowRegistry<K extends string = string>
 			entry.publishedValue = publishedEvent.value;
 		}
 
-		if (interpreter.state === "completed") {
+		if (interpreter.status === "completed") {
 			entry.completed = true;
 			entry.result = interpreter.result;
 			this.removeDependency(id);
@@ -226,7 +226,7 @@ export class WorkflowRegistry<K extends string = string>
 				waiter.resolve(interpreter.result);
 			}
 			entry.completionWaiters = [];
-		} else if (interpreter.state === "failed") {
+		} else if (interpreter.status === "failed") {
 			entry.failed = true;
 			entry.error = interpreter.error;
 			this.removeDependency(id);

@@ -24,7 +24,7 @@ describe("WorkflowRegistry", () => {
 		await registry.start("greet");
 
 		const state = registry.getState("greet");
-		expect(state).toBe("completed");
+		expect(state?.status).toBe("completed");
 	});
 
 	it("waitFor() returns the result of a completed workflow", async () => {
@@ -243,15 +243,15 @@ describe("WorkflowRegistry", () => {
 		const storage = new MemoryStorage();
 		const registry = new WorkflowRegistry({ greet: wf }, storage);
 
-		const states: string[] = [];
+		const statuses: string[] = [];
 		registry.onStateChange("greet", () => {
 			const s = registry.getState("greet");
-			if (s) states.push(s);
+			if (s) statuses.push(s.status);
 		});
 
 		await registry.start("greet");
 
-		expect(states).toContain("completed");
+		expect(statuses).toContain("completed");
 	});
 
 	describe("observe/unobserve", () => {
@@ -363,7 +363,7 @@ describe("WorkflowRegistry", () => {
 			registry.onStateChange("local", () => calls.push("changed"));
 
 			await vi.waitFor(() => {
-				expect(interpreter2.state).toBe("waiting");
+				expect(interpreter2.status).toBe("waiting");
 			});
 
 			interpreter2.signal("submit", "data");
@@ -384,7 +384,7 @@ describe("WorkflowRegistry", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			registry.observe("local", interpreter);
@@ -507,7 +507,7 @@ describe("WorkflowRegistry", () => {
 			const registry = new WorkflowRegistry({ counter: wf }, storage);
 
 			await registry.start("counter");
-			expect(registry.getState("counter")).toBe("completed");
+			expect(registry.getState("counter")?.status).toBe("completed");
 			expect(await registry.waitFor("counter")).toBe(1);
 
 			await registry.reset("counter");
@@ -521,7 +521,7 @@ describe("WorkflowRegistry", () => {
 
 			// Can start again
 			await registry.start("counter");
-			expect(registry.getState("counter")).toBe("completed");
+			expect(registry.getState("counter")?.status).toBe("completed");
 			expect(await registry.waitFor("counter")).toBe(2);
 		});
 
@@ -537,7 +537,7 @@ describe("WorkflowRegistry", () => {
 			const startPromise = registry.start("form");
 			await new Promise((r) => setTimeout(r, 10));
 
-			expect(registry.getState("form")).toBe("waiting");
+			expect(registry.getState("form")?.status).toBe("waiting");
 
 			await registry.reset("form");
 			await startPromise;
@@ -607,7 +607,7 @@ describe("WorkflowRegistry", () => {
 
 			await registry.start("A");
 
-			expect(registry.getState("A")).toBe("failed");
+			expect(registry.getState("A")?.status).toBe("failed");
 			const interpreter = registry.getInterpreter("A");
 			expect(interpreter?.error).toMatch(/Circular dependency/);
 			expect(interpreter?.error).toContain("A");
@@ -635,7 +635,7 @@ describe("WorkflowRegistry", () => {
 
 			await registry.start("A");
 
-			expect(registry.getState("A")).toBe("failed");
+			expect(registry.getState("A")?.status).toBe("failed");
 			const interpreter = registry.getInterpreter("A");
 			expect(interpreter?.error).toMatch(/Circular dependency/);
 			expect(interpreter?.error).toContain("A");
@@ -665,8 +665,8 @@ describe("WorkflowRegistry", () => {
 			await registry.start("A");
 			await registry.start("C");
 
-			expect(registry.getState("A")).toBe("completed");
-			expect(registry.getState("C")).toBe("completed");
+			expect(registry.getState("A")?.status).toBe("completed");
+			expect(registry.getState("C")?.status).toBe("completed");
 			expect(await registry.waitFor("A")).toBe("hello");
 			expect(await registry.waitFor("C")).toBe("hello");
 		});
@@ -689,7 +689,7 @@ describe("WorkflowRegistry", () => {
 
 			await registry.start("A");
 
-			expect(registry.getState("A")).toBe("failed");
+			expect(registry.getState("A")?.status).toBe("failed");
 			const interpreter = registry.getInterpreter("A");
 			expect(interpreter?.error).toMatch(/Circular dependency/);
 		});
@@ -715,10 +715,10 @@ describe("WorkflowRegistry", () => {
 
 			// B depends on A; after both complete, starting C (which depends on B) should work
 			await registry.start("B");
-			expect(registry.getState("B")).toBe("completed");
+			expect(registry.getState("B")?.status).toBe("completed");
 
 			await registry.start("C");
-			expect(registry.getState("C")).toBe("completed");
+			expect(registry.getState("C")?.status).toBe("completed");
 			expect(await registry.waitFor("C")).toBe("hello");
 		});
 	});
@@ -764,7 +764,7 @@ describe("WorkflowRegistry", () => {
 			);
 			await registry.start("greet");
 
-			expect(registry.getState("greet")).toBe("completed");
+			expect(registry.getState("greet")?.status).toBe("completed");
 			expect(await registry.waitFor("greet")).toBe("hello");
 		});
 
@@ -893,10 +893,10 @@ describe("WorkflowRegistry", () => {
 		const storage = new MemoryStorage();
 		const registry = new WorkflowRegistry({ form: wf }, storage);
 
-		const states: string[] = [];
+		const statuses: string[] = [];
 		const unsubscribe = registry.onStateChange("form", () => {
 			const s = registry.getState("form");
-			if (s) states.push(s);
+			if (s) statuses.push(s.status);
 		});
 
 		const startPromise = registry.start("form");
@@ -911,7 +911,7 @@ describe("WorkflowRegistry", () => {
 		await startPromise;
 
 		// Should NOT have received the completed notification
-		expect(states).not.toContain("completed");
+		expect(statuses).not.toContain("completed");
 	});
 
 	describe("publish", () => {

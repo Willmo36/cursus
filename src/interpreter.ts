@@ -18,6 +18,7 @@ import {
 	type WorkflowEventObserver,
 	type WorkflowFailedEvent,
 	type WorkflowRegistryInterface,
+	type InterpreterStatus,
 	type WorkflowState,
 } from "./types";
 
@@ -25,7 +26,7 @@ export class Interpreter {
 	private workflowFn: AnyWorkflowFunction;
 	private log: EventLog;
 	private seq = 0;
-	private _state: WorkflowState = "running";
+	private _status: InterpreterStatus = "running";
 	private _result: unknown;
 	private _error: string | undefined;
 	private _receiving: string | undefined;
@@ -88,8 +89,23 @@ export class Interpreter {
 		return this.log.events();
 	}
 
+	get status(): InterpreterStatus {
+		return this._status;
+	}
+
 	get state(): WorkflowState {
-		return this._state;
+		switch (this._status) {
+			case "completed":
+				return { status: "completed", result: this._result };
+			case "failed":
+				return { status: "failed", error: this._error! };
+			case "cancelled":
+				return { status: "cancelled" };
+			case "waiting":
+				return { status: "waiting" };
+			case "running":
+				return { status: "running" };
+		}
 	}
 
 	get result(): unknown {
@@ -145,7 +161,7 @@ export class Interpreter {
 			return;
 		}
 
-		if (this._state !== "waiting") return;
+		if (this._status !== "waiting") return;
 
 		// Single receive path
 		if (this._receiving === name) {
@@ -156,7 +172,7 @@ export class Interpreter {
 				seq: this.findWaitingSeq(),
 				timestamp: Date.now(),
 			});
-			this._state = "running";
+			this._status = "running";
 			this._receiving = undefined;
 			this.notifyChange();
 			this.pendingReceive?.resolve(payload);
@@ -167,14 +183,14 @@ export class Interpreter {
 
 	cancel(): void {
 		if (
-			this._state === "completed" ||
-			this._state === "failed" ||
-			this._state === "cancelled"
+			this._status === "completed" ||
+			this._status === "failed" ||
+			this._status === "cancelled"
 		) {
 			return;
 		}
 
-		this._state = "cancelled";
+		this._status = "cancelled";
 		this.log.append({ type: "workflow_cancelled", timestamp: Date.now() });
 
 		// Cancel active child
@@ -214,8 +230,8 @@ export class Interpreter {
 		const child = this._activeChild;
 		if (!child) return;
 
-		if (child.state === "waiting") {
-			this._state = "waiting";
+		if (child.status === "waiting") {
+			this._status = "waiting";
 			this._receiving = child.receiving;
 			this._receivingAll = child.receivingAll;
 			this._receivingAny = child.receivingAny;
@@ -228,11 +244,11 @@ export class Interpreter {
 
 	private clearChildState(): void {
 		if (
-			this._state !== "completed" &&
-			this._state !== "failed" &&
-			this._state !== "cancelled"
+			this._status !== "completed" &&
+			this._status !== "failed" &&
+			this._status !== "cancelled"
 		) {
-			this._state = "running";
+			this._status = "running";
 		}
 		this._receiving = undefined;
 		this._receivingAll = undefined;
@@ -257,7 +273,7 @@ export class Interpreter {
 				(e): e is WorkflowCompletedEvent => e.type === "workflow_completed",
 			);
 			if (completed) {
-				this._state = "completed";
+				this._status = "completed";
 				this._result = completed.result;
 				this.notifyChange();
 				return this._result;
@@ -266,7 +282,7 @@ export class Interpreter {
 				(e): e is WorkflowFailedEvent => e.type === "workflow_failed",
 			);
 			if (failed) {
-				this._state = "failed";
+				this._status = "failed";
 				this._error = failed.error;
 				this.notifyChange();
 				return undefined;
@@ -275,7 +291,7 @@ export class Interpreter {
 				(e): e is WorkflowCancelledEvent => e.type === "workflow_cancelled",
 			);
 			if (cancelled) {
-				this._state = "cancelled";
+				this._status = "cancelled";
 				this.notifyChange();
 				return undefined;
 			}
@@ -300,7 +316,7 @@ export class Interpreter {
 			}
 
 			this._result = next.value;
-			this._state = "completed";
+			this._status = "completed";
 			if (!this.hasEvent("workflow_completed")) {
 				this.log.append({
 					type: "workflow_completed",
@@ -318,7 +334,7 @@ export class Interpreter {
 			}
 			const message = err instanceof Error ? err.message : String(err);
 			const stack = err instanceof Error ? err.stack : undefined;
-			this._state = "failed";
+			this._status = "failed";
 			this._error = message;
 			if (!this.hasEvent("workflow_failed")) {
 				this.log.append({
@@ -443,7 +459,7 @@ export class Interpreter {
 		}
 
 		// Live: pause until signal() is called
-		this._state = "waiting";
+		this._status = "waiting";
 		this._receiving = command.signal;
 
 		return new Promise((resolve, reject) => {
@@ -536,7 +552,7 @@ export class Interpreter {
 			this._activeChild = null;
 			this.clearChildState();
 
-			if (childInterpreter.state === "failed") {
+			if (childInterpreter.status === "failed") {
 				const childFailedEvent = childLog
 					.events()
 					.find((e) => e.type === "workflow_failed");
@@ -883,7 +899,7 @@ export class Interpreter {
 
 					return childInterpreter.run().then((result) => {
 						unsub();
-						if (childInterpreter.state === "failed") {
+						if (childInterpreter.status === "failed") {
 							throw new Error(
 								childInterpreter.error ?? "Child workflow failed",
 							);
@@ -921,7 +937,7 @@ export class Interpreter {
 		// Expose signal-based all branches for signal routing
 		if (allWaiters.length > 0) {
 			this._allWaiters = allWaiters;
-			this._state = "waiting";
+			this._status = "waiting";
 			this._receivingAll = allWaiters.map((w) => w.signal);
 			this.notifyChange();
 		}
@@ -940,7 +956,7 @@ export class Interpreter {
 			this._pendingReject = null;
 			this._allWaiters = null;
 			this._receivingAll = undefined;
-			this._state = "running";
+			this._status = "running";
 
 			// Sort by index to preserve declaration order
 			const ordered = (results as Array<{ index: number; value: unknown }>)
@@ -1034,7 +1050,7 @@ export class Interpreter {
 								// resolution when ctx.handle() loops and a signal arrives
 								// before the next race is set up.
 								this._raceWaiters = null;
-								this._state = "running";
+								this._status = "running";
 								resolve({ index, value: payload });
 							},
 						});
@@ -1072,7 +1088,7 @@ export class Interpreter {
 							this._activeChild = null;
 							this.clearChildState();
 						}
-						if (childInterpreter.state === "failed") {
+						if (childInterpreter.status === "failed") {
 							throw new Error(
 								childInterpreter.error ?? "Child workflow failed",
 							);
@@ -1122,7 +1138,7 @@ export class Interpreter {
 		// Expose signal-based race branches for signal routing
 		if (raceWaiters.length > 0) {
 			this._raceWaiters = raceWaiters;
-			this._state = "waiting";
+			this._status = "waiting";
 			this._receivingAny = raceWaiters.map((w) => w.signal);
 			this.notifyChange();
 		}
@@ -1154,7 +1170,7 @@ export class Interpreter {
 			this._activeChild = null;
 			this.clearChildState();
 		}
-		this._state = "running";
+		this._status = "running";
 		this._raceCleanup = null;
 
 		this.log.append({

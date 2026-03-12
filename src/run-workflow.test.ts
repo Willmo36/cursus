@@ -15,9 +15,7 @@ describe("runWorkflow", () => {
 		const snapshot = await runWorkflow("test-1", wf);
 
 		expect(snapshot.workflowId).toBe("test-1");
-		expect(snapshot.state).toBe("completed");
-		expect(snapshot.result).toBe("hello");
-		expect(snapshot.error).toBeUndefined();
+		expect(snapshot.state).toEqual({ status: "completed", result: "hello" });
 	});
 
 	it("returns snapshot with events array", async () => {
@@ -44,8 +42,7 @@ describe("runWorkflow", () => {
 		const snapshot = await runWorkflow("test-3", wf);
 
 		expect(snapshot.published).toBe("intermediate");
-		expect(snapshot.state).toBe("completed");
-		expect(snapshot.result).toBe("done");
+		expect(snapshot.state).toEqual({ status: "completed", result: "done" });
 	});
 
 	it("returns failed state when workflow throws", async () => {
@@ -57,9 +54,7 @@ describe("runWorkflow", () => {
 
 		const snapshot = await runWorkflow("test-4", wf);
 
-		expect(snapshot.state).toBe("failed");
-		expect(snapshot.error).toBe("boom");
-		expect(snapshot.result).toBeUndefined();
+		expect(snapshot.state).toEqual({ status: "failed", error: "boom" });
 	});
 
 	it("returns waiting state when workflow blocks on signal", async () => {
@@ -70,11 +65,8 @@ describe("runWorkflow", () => {
 
 		const snapshot = await runWorkflow("test-5", wf);
 
-		expect(snapshot.state).toBe("waiting");
-		expect(snapshot.result).toBeUndefined();
-		expect(snapshot.error).toBeUndefined();
+		expect(snapshot.state).toEqual({ status: "waiting" });
 		expect(snapshot.events.length).toBeGreaterThan(0);
-		expect(snapshot.receiving).toBe("submit");
 	});
 
 	it("includes receiving in snapshot for SSR hydration", async () => {
@@ -86,10 +78,7 @@ describe("runWorkflow", () => {
 
 		const snapshot = await runWorkflow("test-waiting", wf);
 
-		expect(snapshot.state).toBe("waiting");
-		expect(snapshot.receiving).toBe("confirm");
-		expect(snapshot.receivingAll).toBeUndefined();
-		expect(snapshot.receivingAny).toBeUndefined();
+		expect(snapshot.state).toEqual({ status: "waiting" });
 	});
 
 	it("uses provided storage", async () => {
@@ -100,7 +89,7 @@ describe("runWorkflow", () => {
 
 		const snapshot = await runWorkflow("test-6", wf, { storage });
 
-		expect(snapshot.state).toBe("completed");
+		expect(snapshot.state).toEqual({ status: "completed", result: "hello" });
 
 		// Events should be persisted to the provided storage
 		const storedEvents = await storage.load("test-6");

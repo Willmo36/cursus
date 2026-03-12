@@ -55,7 +55,7 @@ describe("useWorkflowEvents", () => {
 		);
 
 		await waitFor(() => {
-			expect(result.current.wf.state).toBe("completed");
+			expect(result.current.wf.state.status).toBe("completed");
 		});
 
 		await waitFor(() => {
@@ -86,7 +86,7 @@ describe("useWorkflowEvents", () => {
 		);
 
 		await waitFor(() => {
-			expect(result.current.wf.state).toBe("waiting");
+			expect(result.current.wf.state.status).toBe("waiting");
 		});
 
 		// Events should include workflow_started at minimum
@@ -100,7 +100,7 @@ describe("useWorkflowEvents", () => {
 		});
 
 		await waitFor(() => {
-			expect(result.current.wf.state).toBe("completed");
+			expect(result.current.wf.state.status).toBe("completed");
 		});
 
 		await waitFor(() => {
@@ -138,7 +138,7 @@ describe("useWorkflowEvents", () => {
 
 		// Then: verify the workflow completes
 		await waitFor(() => {
-			expect(result.current.local.state).toBe("completed");
+			expect(result.current.local.state.status).toBe("completed");
 		});
 
 		// Finally: verify events are visible
@@ -168,7 +168,7 @@ describe("useWorkflowEvents", () => {
 		);
 
 		await waitFor(() => {
-			expect(result.current.local.state).toBe("waiting");
+			expect(result.current.local.state.status).toBe("waiting");
 		});
 
 		act(() => {
@@ -176,7 +176,7 @@ describe("useWorkflowEvents", () => {
 		});
 
 		await waitFor(() => {
-			expect(result.current.local.state).toBe("completed");
+			expect(result.current.local.state.status).toBe("completed");
 		});
 
 		await waitFor(() => {

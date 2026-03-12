@@ -19,7 +19,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("hello");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("runs a workflow that yields two sequential activities", async () => {
@@ -73,7 +73,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("boom");
 
 			const events = log.events();
@@ -203,7 +203,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toContain("Non-determinism detected");
 		});
 	});
@@ -220,7 +220,7 @@ describe("Interpreter", () => {
 
 			// Should be waiting after run starts
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("submit");
 			});
 
@@ -228,7 +228,7 @@ describe("Interpreter", () => {
 
 			const result = await runPromise;
 			expect(result).toBe("got: form-data");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("replays signal from event log", async () => {
@@ -297,13 +297,13 @@ describe("Interpreter", () => {
 
 			// Timer should be started but not fired
 			await vi.advanceTimersByTimeAsync(500);
-			expect(interpreter.state).toBe("running");
+			expect(interpreter.status).toBe("running");
 
 			await vi.advanceTimersByTimeAsync(500);
 			const result = await runPromise;
 
 			expect(result).toBe("done");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			const events = log.events();
 			expect(events).toContainEqual(
@@ -402,7 +402,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("oops");
 		});
 	});
@@ -417,7 +417,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Send in reverse order
@@ -425,7 +425,7 @@ describe("Interpreter", () => {
 
 			// Should still be waiting for email
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("email", "a@b.com");
@@ -433,7 +433,7 @@ describe("Interpreter", () => {
 			const result = await runPromise;
 			// Tuple in declaration order regardless of signal arrival order
 			expect(result).toEqual(["a@b.com", "secret"]);
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("records all_started and all_completed events", async () => {
@@ -446,13 +446,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("a", "val-a");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("b", "val-b");
@@ -515,7 +515,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAll).toEqual(["email", "password"]);
 			});
 
@@ -543,7 +543,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAll).toEqual(["payment"]);
 			});
 
@@ -551,7 +551,7 @@ describe("Interpreter", () => {
 
 			const result = await runPromise;
 			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("profile", {
 				start: true,
 				caller: undefined,
@@ -576,7 +576,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("payment", "pay-data");
@@ -618,7 +618,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
@@ -686,7 +686,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Workflow completes first
@@ -694,7 +694,7 @@ describe("Interpreter", () => {
 			await new Promise((r) => setTimeout(r, 0));
 
 			// Still waiting for signal
-			expect(interpreter.state).toBe("waiting");
+			expect(interpreter.status).toBe("waiting");
 
 			// Now signal arrives
 			interpreter.signal("payment", { card: "5678" });
@@ -721,7 +721,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("dependency failed");
 		});
 
@@ -742,7 +742,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log, mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
@@ -775,7 +775,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.receivingAll).toBeUndefined();
 		});
 
@@ -802,7 +802,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("recovered");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(log.events()).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_dependency_failed",
@@ -828,7 +828,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("parent got: child-result");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("child workflow has its own event log", async () => {
@@ -917,7 +917,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(parentWorkflow, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 
 			const events = log.events();
 			const childFailed = events.find((e) => e.type === "child_failed");
@@ -961,7 +961,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Should have been called at least once (entering waiting state)
@@ -995,7 +995,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("fallback");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("workflow catches error, does a second activity, returns its result", async () => {
@@ -1018,7 +1018,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("recovered");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			const events = interpreter.events;
 			expect(events).toContainEqual(
@@ -1086,7 +1086,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("recovered");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(failFn).not.toHaveBeenCalled();
 			expect(recoverFn).not.toHaveBeenCalled();
 		});
@@ -1107,7 +1107,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("hello");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(interpreter.result).toBe("hello");
 			expect(activityFn).not.toHaveBeenCalled();
 		});
@@ -1126,7 +1126,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBeUndefined();
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("boom");
 			expect(activityFn).not.toHaveBeenCalled();
 		});
@@ -1275,7 +1275,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
@@ -1333,7 +1333,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log, mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
@@ -1389,7 +1389,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log, mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("dependency failed");
 			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
 		});
@@ -1419,7 +1419,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("recovered");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(log.events()).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_dependency_failed",
@@ -1585,7 +1585,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
@@ -1775,7 +1775,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toContain("WorkflowRegistry");
 		});
 
@@ -1796,7 +1796,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log, mockRegistry);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(log.events()).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_dependency_failed",
@@ -1833,7 +1833,7 @@ describe("Interpreter", () => {
 
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 
 		it("cancel() breaks out of receive and sets cancelled state", async () => {
@@ -1846,14 +1846,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
 
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 
 		it("cancel() breaks out of sleep and sets cancelled state", async () => {
@@ -1874,7 +1874,7 @@ describe("Interpreter", () => {
 
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 
 			vi.useRealTimers();
 		});
@@ -1887,11 +1887,11 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			interpreter.cancel();
 
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(interpreter.result).toBe("hello");
 		});
 
@@ -1905,11 +1905,11 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 
 			interpreter.cancel();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("boom");
 		});
 
@@ -1924,7 +1924,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
@@ -1947,7 +1947,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 			expect(activityFn).not.toHaveBeenCalled();
 		});
 
@@ -1997,14 +1997,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("add", "item-1");
 
 			const result = await runPromise;
 			expect(result).toBe("add:item-1");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("returns { winner, value } with correct discriminant", async () => {
@@ -2016,7 +2016,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("b", 42);
@@ -2035,13 +2035,13 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("c", "ignored");
 
 			// Should still be waiting
-			expect(interpreter.state).toBe("waiting");
+			expect(interpreter.status).toBe("waiting");
 		});
 
 		it("exposes waitingForAny getter", async () => {
@@ -2057,7 +2057,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAny).toEqual(["a", "b"]);
 			});
 		});
@@ -2165,7 +2165,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("a", "payload-a");
@@ -2200,13 +2200,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 	});
 
@@ -2228,7 +2228,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("greet", "Max");
@@ -2254,17 +2254,17 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("inc");
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("inc");
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("finish");
@@ -2286,7 +2286,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("stop", "goodbye");
@@ -2309,7 +2309,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("go");
@@ -2407,13 +2407,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("go");
 			await runPromise;
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("handler boom");
 		});
 
@@ -2430,14 +2430,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// "b" is in the signal map but has no handler — should be skipped
 			interpreter.signal("b", "ignored");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("a", "matched");
@@ -2463,14 +2463,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("data", "hello");
 
 			const result = await runPromise;
 			expect(result).toBe("parent got: child got: hello");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("parent reports child's receiving", async () => {
@@ -2487,7 +2487,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("info");
 			});
 		});
@@ -2505,7 +2505,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAll).toEqual(["a", "b"]);
 			});
 		});
@@ -2527,7 +2527,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAny).toEqual(["x", "y"]);
 			});
 		});
@@ -2550,7 +2550,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("deep");
 			});
 
@@ -2574,13 +2574,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 
 		it("signal is harmless when child is running an activity", async () => {
@@ -2613,7 +2613,7 @@ describe("Interpreter", () => {
 
 			const result = await runPromise;
 			expect(result).toBe("done");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 	});
 
@@ -2632,7 +2632,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toEqual({ winner: 0, value: "data" });
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			vi.useRealTimers();
 		});
@@ -2668,7 +2668,7 @@ describe("Interpreter", () => {
 			const result = await runPromise;
 
 			expect(result).toEqual({ winner: 1, value: undefined });
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			vi.useRealTimers();
 		});
@@ -2799,7 +2799,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("manual", "manual-result");
@@ -2852,7 +2852,7 @@ describe("Interpreter", () => {
 			interpreter.cancel();
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 			expect(activitySignal?.aborted).toBe(true);
 
 			vi.useRealTimers();
@@ -2867,14 +2867,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("reject", "denied");
 
 			const result = await runPromise;
 			expect(result).toEqual({ winner: 1, value: "denied" });
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("races three receive branches — third signal wins", async () => {
@@ -2890,7 +2890,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("optB", "picked-B");
@@ -2925,7 +2925,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("data", "hello");
@@ -3002,13 +3002,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 
 		it("exposes all signal names via waitingForAny during multi-signal race", async () => {
@@ -3020,7 +3020,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAny).toEqual(
 					expect.arrayContaining(["approve", "reject"]),
 				);
@@ -3038,14 +3038,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("approve", "approved-by-manager");
 
 			const result = await runPromise;
 			expect(result).toEqual({ winner: 0, value: "approved-by-manager" });
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			vi.useRealTimers();
 		});
@@ -3064,7 +3064,7 @@ describe("Interpreter", () => {
 			const result = await runPromise;
 
 			expect(result).toEqual({ winner: 1, value: undefined });
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 
 			vi.useRealTimers();
 		});
@@ -3082,7 +3082,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("approve", "yes");
@@ -3095,7 +3095,7 @@ describe("Interpreter", () => {
 			const replayResult = await replayed.run();
 
 			expect(replayResult).toEqual({ winner: 0, value: "yes" });
-			expect(replayed.state).toBe("completed");
+			expect(replayed.status).toBe("completed");
 
 			vi.useRealTimers();
 		});
@@ -3121,14 +3121,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Send "go" to enter the handler
 			interpreter.signal("go");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("input");
 			});
 
@@ -3152,7 +3152,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("approve", "ok");
@@ -3176,7 +3176,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("data");
 			});
 
@@ -3209,13 +3209,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("start");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receiving).toBe("value");
 			});
 
@@ -3242,7 +3242,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAny).toEqual(["a", "b"]);
 			});
 
@@ -3263,21 +3263,21 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Send in reverse order
 			interpreter.signal("b", "val-b");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("a", "val-a");
 
 			const result = await runPromise;
 			expect(result).toEqual(["val-a", "val-b"]);
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("runs concurrent activities and returns all results", async () => {
@@ -3292,7 +3292,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toEqual(["one", "two"]);
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("mixes signal and activity in same all() call", async () => {
@@ -3307,7 +3307,7 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("name", "Max");
@@ -3401,13 +3401,13 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.cancel();
 			await runPromise;
 
-			expect(interpreter.state).toBe("cancelled");
+			expect(interpreter.status).toBe("cancelled");
 		});
 
 		it("mixes signal and workflow join in all()", async () => {
@@ -3431,14 +3431,14 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("payment", { card: "1234" });
 
 			const result = await runPromise;
 			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("signals reach the correct receive branch", async () => {
@@ -3454,20 +3454,20 @@ describe("Interpreter", () => {
 			const runPromise = interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			// Send out of order
 			interpreter.signal("c", "C");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("a", "A");
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 			});
 
 			interpreter.signal("b", "B");
@@ -3485,7 +3485,7 @@ describe("Interpreter", () => {
 			interpreter.run();
 
 			await vi.waitFor(() => {
-				expect(interpreter.state).toBe("waiting");
+				expect(interpreter.status).toBe("waiting");
 				expect(interpreter.receivingAll).toEqual(["x", "y"]);
 			});
 
@@ -3509,7 +3509,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, new EventLog());
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("failed");
+			expect(interpreter.status).toBe("failed");
 			expect(interpreter.error).toBe("oops");
 		});
 	});
@@ -3656,7 +3656,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toBe("extra");
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 		});
 
 		it("replays publish from event log without calling registry", async () => {
@@ -3707,7 +3707,7 @@ describe("Interpreter", () => {
 			const interpreter = new Interpreter(wf, log);
 			await interpreter.run();
 
-			expect(interpreter.state).toBe("completed");
+			expect(interpreter.status).toBe("completed");
 			expect(interpreter.published).toBe("account-123");
 		});
 	});

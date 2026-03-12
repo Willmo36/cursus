@@ -15,12 +15,7 @@ export type WorkflowSnapshot = {
 	workflowId: string;
 	events: WorkflowEvent[];
 	state: WorkflowState;
-	result: unknown;
-	error: string | undefined;
 	published: unknown;
-	receiving: string | undefined;
-	receivingAll: string[] | undefined;
-	receivingAny: string[] | undefined;
 };
 
 export async function runWorkflow(
@@ -39,7 +34,7 @@ export async function runWorkflow(
 		let resolved = false;
 
 		const unsub = interpreter.onStateChange(() => {
-			if (!resolved && interpreter.state === "waiting") {
+			if (!resolved && interpreter.status === "waiting") {
 				resolved = true;
 				unsub();
 				resolve();
@@ -65,11 +60,6 @@ export async function runWorkflow(
 		workflowId,
 		events: allEvents,
 		state: interpreter.state,
-		result: interpreter.result,
-		error: interpreter.error,
 		published: interpreter.published,
-		receiving: interpreter.receiving,
-		receivingAll: interpreter.receivingAll,
-		receivingAny: interpreter.receivingAny,
 	};
 }

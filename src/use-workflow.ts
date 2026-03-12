@@ -34,12 +34,7 @@ type UseWorkflowResult<
 	T,
 	SignalMap extends Record<string, unknown> = Record<string, unknown>,
 > = {
-	state: WorkflowState;
-	result: T | undefined;
-	error: string | undefined;
-	receiving: (keyof SignalMap & string) | undefined;
-	receivingAll: string[] | undefined;
-	receivingAny: string[] | undefined;
+	state: WorkflowState<T>;
 	published: unknown;
 	signal: <K extends keyof SignalMap & string>(
 		name: K,
@@ -75,18 +70,7 @@ export function useWorkflow(
 	const storage = options?.storage ?? registry?.storage ?? new MemoryStorage();
 	const snapshot = options?.snapshot;
 	const [state, setState] = useState<WorkflowState>(
-		snapshot?.state ?? "running",
-	);
-	const [result, setResult] = useState<unknown>(snapshot?.result);
-	const [error, setError] = useState<string | undefined>(snapshot?.error);
-	const [receiving, setReceiving] = useState<string | undefined>(
-		snapshot?.receiving,
-	);
-	const [receivingAll, setReceivingAll] = useState<string[] | undefined>(
-		snapshot?.receivingAll,
-	);
-	const [receivingAny, setReceivingAny] = useState<string[] | undefined>(
-		snapshot?.receivingAny,
+		snapshot?.state ?? { status: "running" },
 	);
 	const [published, setPublished] = useState<unknown>(snapshot?.published);
 	const [runId, restart] = useReducer((x: number) => x + 1, 0);
@@ -110,11 +94,6 @@ export function useWorkflow(
 				const interpreter = registry?.getInterpreter(workflowId);
 				if (!interpreter) return;
 				setState(interpreter.state);
-				setResult(interpreter.result);
-				setError(interpreter.error);
-				setReceiving(interpreter.receiving);
-				setReceivingAll(interpreter.receivingAll);
-				setReceivingAny(interpreter.receivingAny);
 				setPublished(interpreter.published);
 			}
 
@@ -138,7 +117,7 @@ export function useWorkflow(
 			// Terminal snapshots: no interpreter needed, just seed storage
 			if (
 				snapshot &&
-				(snapshot.state === "completed" || snapshot.state === "failed")
+				(snapshot.state.status === "completed" || snapshot.state.status === "failed")
 			) {
 				const stored = await storageRef.current.load(workflowId);
 				if (stored.length === 0) {
@@ -195,11 +174,6 @@ export function useWorkflow(
 			function syncState() {
 				if (cancelled) return;
 				setState(interpreter.state);
-				setResult(interpreter.result);
-				setError(interpreter.error);
-				setReceiving(interpreter.receiving);
-				setReceivingAll(interpreter.receivingAll);
-				setReceivingAny(interpreter.receivingAny);
 				setPublished(interpreter.published);
 				persistEvents();
 			}
@@ -214,7 +188,7 @@ export function useWorkflow(
 			syncState();
 
 			// Compact storage for terminal workflows
-			if (interpreter.state === "completed" || interpreter.state === "failed") {
+			if (interpreter.status === "completed" || interpreter.status === "failed") {
 				const allEvents = log.events();
 				const terminalEvent = allEvents
 					.slice()
@@ -257,12 +231,7 @@ export function useWorkflow(
 	const reset = useCallback(async () => {
 		if (isLayerMode && registry) {
 			await registry.reset(workflowId);
-			setState("running");
-			setResult(undefined);
-			setError(undefined);
-			setReceiving(undefined);
-			setReceivingAll(undefined);
-			setReceivingAny(undefined);
+			setState({ status: "running" });
 			setPublished(undefined);
 			await registry.start(workflowId);
 			return;
@@ -270,23 +239,13 @@ export function useWorkflow(
 		interpreterRef.current?.cancel();
 		storageRef.current.clear(workflowId);
 		interpreterRef.current = null;
-		setState("running");
-		setResult(undefined);
-		setError(undefined);
-		setReceiving(undefined);
-		setReceivingAll(undefined);
-		setReceivingAny(undefined);
+		setState({ status: "running" });
 		setPublished(undefined);
 		restart();
 	}, [isLayerMode, registry, workflowId]);
 
 	return {
 		state,
-		result,
-		error,
-		receiving,
-		receivingAll,
-		receivingAny,
 		published,
 		signal,
 		cancel,

@@ -25,11 +25,10 @@ describe("useWorkflow", () => {
 				useWorkflow("test-1", w, { storage: new MemoryStorage() }),
 			);
 
-			expect(result.current.state).toBe("running");
-			expect(result.current.result).toBeUndefined();
+			expect(result.current.state).toEqual({ status: "running" });
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
+				expect(result.current.state.status).toBe("completed");
 			});
 		});
 
@@ -43,8 +42,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("hello");
+				expect(result.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 		});
 
@@ -59,8 +57,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
-				expect(result.current.receiving).toBe("submit");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -68,8 +65,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("got: form-data");
+				expect(result.current.state).toEqual({ status: "completed", result: "got: form-data" });
 			});
 		});
 
@@ -89,8 +85,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
-				expect(result.current.receivingAny).toEqual(["a", "b"]);
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -98,8 +93,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.receivingAny).toBeUndefined();
+				expect(result.current.state.status).toBe("completed");
 			});
 		});
 
@@ -116,8 +110,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe(1);
+				expect(result.current.state).toEqual({ status: "completed", result: 1 });
 			});
 
 			await act(async () => {
@@ -125,8 +118,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe(2);
+				expect(result.current.state).toEqual({ status: "completed", result: 2 });
 			});
 		});
 
@@ -143,7 +135,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.state).toBe("completed");
+				expect(result1.current.state.status).toBe("completed");
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -154,8 +146,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result2.current.state).toBe("completed");
-				expect(result2.current.result).toBe("hello");
+				expect(result2.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -173,8 +164,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
-				expect(result.current.receiving).toBe("email");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 		});
 
@@ -190,7 +180,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -198,7 +188,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -206,8 +196,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toEqual(["a@b.com", "secret"]);
+				expect(result.current.state).toEqual({ status: "completed", result: ["a@b.com", "secret"] });
 			});
 		});
 
@@ -233,8 +222,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("inline-result");
+				expect(result.current.state).toEqual({ status: "completed", result: "inline-result" });
 			});
 
 			// Events should be persisted to the provider's storage, not lost in ephemeral MemoryStorage
@@ -267,7 +255,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
+				expect(result.current.state.status).toBe("completed");
 			});
 
 			// Events should be in explicit storage, not provider storage
@@ -288,8 +276,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("hello");
+				expect(result.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 		});
 
@@ -324,8 +311,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.state).toBe("completed");
-				expect(result1.current.result).toBe("hello");
+				expect(result1.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -342,8 +328,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result2.current.state).toBe("completed");
-				expect(result2.current.result).toBe("hello");
+				expect(result2.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -363,7 +348,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.receiving).toBe("email");
+				expect(result1.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -371,7 +356,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result1.current.receiving).toBe("password");
+				expect(result1.current.state).toEqual({ status: "waiting" });
 			});
 
 			unmount();
@@ -384,8 +369,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result2.current.state).toBe("waiting");
-				expect(result2.current.receiving).toBe("password");
+				expect(result2.current.state).toEqual({ status: "waiting" });
 			});
 		});
 	});
@@ -427,8 +411,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("hello");
+				expect(result.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 		});
 
@@ -449,8 +432,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
-				expect(result.current.receiving).toBe("submit");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -458,8 +440,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("got: form-data");
+				expect(result.current.state).toEqual({ status: "completed", result: "got: form-data" });
 			});
 		});
 
@@ -481,7 +462,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.receiving).toBe("step1");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -489,7 +470,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.receiving).toBe("step2");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -497,8 +478,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("val1:val2");
+				expect(result.current.state).toEqual({ status: "completed", result: "val1:val2" });
 			});
 		});
 
@@ -520,8 +500,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe(1);
+				expect(result.current.state).toEqual({ status: "completed", result: 1 });
 			});
 
 			await act(async () => {
@@ -529,8 +508,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe(2);
+				expect(result.current.state).toEqual({ status: "completed", result: 2 });
 			});
 		});
 
@@ -554,7 +532,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			expect(result.current.published).toBeUndefined();
@@ -587,7 +565,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			unmount();
@@ -609,7 +587,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -617,7 +595,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("cancelled");
+				expect(result.current.state).toEqual({ status: "cancelled" });
 			});
 		});
 
@@ -635,7 +613,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			// Reset while waiting — should cancel and restart
@@ -644,7 +622,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			// Should be on run 2 now
@@ -653,8 +631,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("run2: data");
+				expect(result.current.state).toEqual({ status: "completed", result: "run2: data" });
 			});
 		});
 	});
@@ -682,8 +659,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("local got: user-123");
+				expect(result.current.state).toEqual({ status: "completed", result: "local got: user-123" });
 			});
 		});
 
@@ -717,13 +693,11 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.profile.state).toBe("waiting");
-				expect(result.current.profile.receiving).toBe("profile");
+				expect(result.current.profile.state).toEqual({ status: "waiting" });
 			});
 
 			await waitFor(() => {
-				expect(result.current.checkout.state).toBe("waiting");
-				expect(result.current.checkout.receiving).toBe("payment");
+				expect(result.current.checkout.state).toEqual({ status: "waiting" });
 			});
 
 			act(() => {
@@ -731,7 +705,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.profile.state).toBe("completed");
+				expect(result.current.profile.state.status).toBe("completed");
 			});
 
 			act(() => {
@@ -739,8 +713,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.checkout.state).toBe("completed");
-				expect(result.current.checkout.result).toBe("Max:1234");
+				expect(result.current.checkout.state).toEqual({ status: "completed", result: "Max:1234" });
 			});
 		});
 
@@ -782,12 +755,12 @@ describe("useWorkflow", () => {
 
 			// Wait for profile to be waiting for signal
 			await waitFor(() => {
-				expect(result.current.profile.receiving).toBe("profile");
+				expect(result.current.profile.state).toEqual({ status: "waiting" });
 			});
 
 			// Wait for checkout to be waiting (all)
 			await waitFor(() => {
-				expect(result.current.checkout.state).toBe("waiting");
+				expect(result.current.checkout.state).toEqual({ status: "waiting" });
 			});
 
 			// Send profile signal — profile completes, checkout still waiting for payment
@@ -796,7 +769,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.profile.state).toBe("completed");
+				expect(result.current.profile.state.status).toBe("completed");
 			});
 
 			// Send payment signal — checkout should complete
@@ -805,8 +778,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.checkout.state).toBe("completed");
-				expect(result.current.checkout.result).toBe("Max:1234");
+				expect(result.current.checkout.state).toEqual({ status: "completed", result: "Max:1234" });
 			});
 
 			// Now check that the debug panel shows ALL checkout events
@@ -850,8 +822,8 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.local.state).toBe("completed");
-				expect(result.current.global.state).toBe("completed");
+				expect(result.current.local.state.status).toBe("completed");
+				expect(result.current.global.state.status).toBe("completed");
 			});
 
 			await waitFor(() => {
@@ -886,8 +858,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.state).toBe("completed");
-				expect(result1.current.result).toBe(1);
+				expect(result1.current.state).toEqual({ status: "completed", result: 1 });
 			});
 
 			unmount();
@@ -898,8 +869,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result2.current.state).toBe("completed");
-				expect(result2.current.result).toBe(2);
+				expect(result2.current.state).toEqual({ status: "completed", result: 2 });
 			});
 		});
 
@@ -917,7 +887,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result1.current.state).toBe("completed");
+				expect(result1.current.state.status).toBe("completed");
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -929,8 +899,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result2.current.state).toBe("completed");
-				expect(result2.current.result).toBe("hello");
+				expect(result2.current.state).toEqual({ status: "completed", result: "hello" });
 			});
 
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -953,8 +922,7 @@ describe("useWorkflow", () => {
 			);
 
 			// Initial render should use snapshot values, not defaults
-			expect(result.current.state).toBe("completed");
-			expect(result.current.result).toBe("hello");
+			expect(result.current.state).toEqual({ status: "completed", result: "hello" });
 		});
 
 		it("does not start interpreter for completed snapshot", async () => {
@@ -975,7 +943,7 @@ describe("useWorkflow", () => {
 
 			// Should remain completed without re-running the activity
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
+				expect(result.current.state.status).toBe("completed");
 			});
 
 			expect(activityFn).not.toHaveBeenCalled();
@@ -989,7 +957,7 @@ describe("useWorkflow", () => {
 
 			// Run on "server" — blocks on signal, returns waiting snapshot
 			const snapshot = await runWorkflow("snap-3", w);
-			expect(snapshot.state).toBe("waiting");
+			expect(snapshot.state).toEqual({ status: "waiting" });
 
 			// Hydrate on "client" — seeds events, interpreter should resume from waiting
 			const { result } = renderHook(() =>
@@ -1000,7 +968,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("waiting");
+				expect(result.current.state).toEqual({ status: "waiting" });
 			});
 
 			// Send signal — workflow should complete
@@ -1009,8 +977,7 @@ describe("useWorkflow", () => {
 			});
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
-				expect(result.current.result).toBe("hello Max");
+				expect(result.current.state).toEqual({ status: "completed", result: "hello Max" });
 			});
 		});
 
@@ -1030,8 +997,7 @@ describe("useWorkflow", () => {
 			);
 
 			expect(result.current.published).toBe("progress");
-			expect(result.current.state).toBe("completed");
-			expect(result.current.result).toBe("done");
+			expect(result.current.state).toEqual({ status: "completed", result: "done" });
 		});
 
 		it("initializes error from failed snapshot", async () => {
@@ -1050,8 +1016,7 @@ describe("useWorkflow", () => {
 				}),
 			);
 
-			expect(result.current.state).toBe("failed");
-			expect(result.current.error).toBe("boom");
+			expect(result.current.state).toEqual({ status: "failed", error: "boom" });
 		});
 	});
 
@@ -1070,7 +1035,7 @@ describe("useWorkflow", () => {
 			);
 
 			await waitFor(() => {
-				expect(result.current.state).toBe("completed");
+				expect(result.current.state.status).toBe("completed");
 			});
 
 			const types = observed

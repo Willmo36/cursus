@@ -135,7 +135,7 @@ export async function createTestRuntime<
 
 	// Auto-send signals when the interpreter enters waiting state
 	interpreter.onStateChange(() => {
-		if (interpreter.state !== "waiting" || signalQueue.length === 0) return;
+		if (interpreter.status !== "waiting" || signalQueue.length === 0) return;
 
 		// Single receive: match by name
 		if (interpreter.receiving) {
@@ -175,7 +175,7 @@ export async function createTestRuntime<
 
 	await interpreter.run();
 
-	if (interpreter.state === "failed") {
+	if (interpreter.status === "failed") {
 		throw new Error(interpreter.error ?? "Workflow failed");
 	}
 
