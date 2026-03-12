@@ -77,7 +77,7 @@ export function ProductPage({
 				<br />
 				State: <code>{state.status}</code>
 				<br />
-				Snapshot state: <code>{snapshot.state}</code>
+				Snapshot state: <code>{snapshot.state.status}</code>
 				<br />
 				Events in snapshot: <code>{snapshot.events.length}</code>
 			</div>

@@ -203,10 +203,6 @@ function OrderFlow() {
 		);
 	}
 
-	if (state.status === "waiting") {
-		return <StatusMessage text="Waiting for payment..." />;
-	}
-
 	return null;
 }
 
