@@ -462,9 +462,11 @@ export function publish<V>(value: V): Generator<PublishDescriptor & Step<Publish
 export function published<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean; where?: (value: V) => boolean; afterSeq?: number },
-): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> {
+): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> & {
+	as: <W>() => Generator<PublishedDescriptor & Step<Dependency<K, W>>, W, unknown>;
+} {
 	const start = options?.start ?? true;
-	return (function* () {
+	const gen = (function* (): Generator<PublishedDescriptor & Step<Dependency<K, V>>, V, unknown> {
 		const result = yield {
 			type: "published" as const,
 			workflowId,
@@ -474,14 +476,18 @@ export function published<V, K extends string = string>(
 		} as PublishedDescriptor & Step<Dependency<K, V>>;
 		return result as V;
 	})();
+	(gen as any).as = <W>() => published<W, K>(workflowId, options as any);
+	return gen as any;
 }
 
 export function join<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean },
-): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> {
+): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> & {
+	as: <W>() => Generator<JoinDescriptor & Step<Dependency<K, W>>, W, unknown>;
+} {
 	const start = options?.start ?? true;
-	return (function* () {
+	const gen = (function* (): Generator<JoinDescriptor & Step<Dependency<K, V>>, V, unknown> {
 		const result = yield {
 			type: "join" as const,
 			workflowId,
@@ -489,6 +495,8 @@ export function join<V, K extends string = string>(
 		} as JoinDescriptor & Step<Dependency<K, V>>;
 		return result as V;
 	})();
+	(gen as any).as = <W>() => join<W, K>(workflowId, options);
+	return gen as any;
 }
 
 // Extracts requirements from a generator's yield type

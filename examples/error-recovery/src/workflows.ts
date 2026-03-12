@@ -47,7 +47,7 @@ export type OrderResult =
 export const orderWorkflow = workflow(function* () {
 	const shipping = yield* receive("shipping").as<ShippingInfo>();
 	try {
-		const receipt = yield* join<Receipt, "payment">("payment");
+		const receipt = yield* join("payment").as<Receipt>();
 		return {
 			status: "confirmed" as const,
 			...shipping,

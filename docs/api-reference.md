@@ -256,24 +256,26 @@ Delegate to a child workflow with its own event log scope.
 ### join
 
 ```ts
-function join<V, K extends string = string>(
-  workflowId: K,
-  options?: { start?: boolean },
-): Generator<JoinDescriptor, V, unknown>;
+function join(workflowId: K): Generator & { as: <V>() => Generator };
 ```
 
-Wait for another workflow to complete. Auto-starts by default.
+Wait for another workflow to complete. Auto-starts by default. Use `.as<V>()` to type the result:
+
+```ts
+const profile = yield* join("profile").as<UserProfile>();
+```
 
 ### published
 
 ```ts
-function published<V, K extends string = string>(
-  workflowId: K,
-  options?: { start?: boolean },
-): Generator<PublishedDescriptor, V, unknown>;
+function published(workflowId: K): Generator & { as: <V>() => Generator };
 ```
 
-Wait for another workflow to publish a value.
+Wait for another workflow to publish a value. Use `.as<V>()` to type the value:
+
+```ts
+const config = yield* published("config").as<{ url: string }>();
+```
 
 ### publish
 

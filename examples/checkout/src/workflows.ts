@@ -36,7 +36,7 @@ type OrderConfirmation = {
 export const checkoutWorkflow = workflow(function* () {
 	const [payment, profile] = yield* all(
 		receive("payment").as<PaymentInfo>(),
-		join<UserProfile, "profile">("profile"),
+		join("profile").as<UserProfile>(),
 	);
 
 	const order = yield* activity("place-order", async () => {

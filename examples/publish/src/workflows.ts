@@ -43,7 +43,7 @@ export const sessionWorkflow = workflow(function* () {
 });
 
 export const checkoutWorkflow = workflow(function* () {
-	const account = yield* published<Account, "session">("session");
+	const account = yield* published("session").as<Account>();
 
 	const payment = yield* receive("pay").as<{ amount: number }>();
 

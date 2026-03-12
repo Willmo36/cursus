@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handle, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, handle, join, publish, published, race, receive, sleep, workflow } from "./types";
 import type { Dependency, Publishes, Requirements, Signal, Workflow } from "./types";
 
 /**
@@ -196,11 +196,59 @@ describe("Monad laws", () => {
 
 		it("published propagates Dependency requirement", () => {
 			const w = workflow(function* () {
-				const config = yield* published<{ url: string }, "config">("config");
+				const config = yield* published("config").as<{ url: string }>();
 				return config.url;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Dependency<"config", { url: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("published().as<V>() infers workflow id and types value", async () => {
+			const w = workflow(function* () {
+				const config = yield* published("config").as<{ url: string }>();
+				return config.url;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Dependency<"config", { url: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("published() without .as() infers unknown value", () => {
+			const w = workflow(function* () {
+				const data = yield* published("config");
+				return data;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Dependency<"config", unknown>> = true;
+			void _check;
+			void w;
+		});
+
+		it("join().as<V>() infers workflow id and types result", () => {
+			const w = workflow(function* () {
+				const result = yield* join("payment").as<{ receipt: string }>();
+				return result.receipt;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Dependency<"payment", { receipt: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("join() without .as() infers unknown result", () => {
+			const w = workflow(function* () {
+				const data = yield* join("payment");
+				return data;
+			});
+
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Dependency<"payment", unknown>> = true;
 			void _check;
 			void w;
 		});
@@ -217,7 +265,7 @@ describe("Monad laws", () => {
 
 		it("multiple operations accumulate requirements as union", () => {
 			const w = workflow(function* () {
-				const config = yield* published<{ url: string }, "config">("config");
+				const config = yield* published("config").as<{ url: string }>();
 				const user = yield* receive("login").as<{ name: string }>();
 				yield* publish(42);
 				return `${config.url}-${user.name}`;

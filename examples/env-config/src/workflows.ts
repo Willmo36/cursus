@@ -34,7 +34,7 @@ export const envWorkflow = workflow(function* () {
 // --- User workflow (local, depends on env) ---
 
 export const userWorkflow = workflow(function* () {
-	const env = yield* join<EnvConfig, "env">("env");
+	const env = yield* join("env").as<EnvConfig>();
 
 	const user = yield* activity("fetch-user", async () => {
 		const url = `${env.baseUrl}/user`;

@@ -66,7 +66,7 @@ export function createCheckoutWorkflow(apiFetch: ApiFetch) {
 	return workflow(function* () {
 		const [credentials, items] = yield* all(
 			receive("login").as<{ email: string; password: string }>(),
-			join<CartItem[], "cart">("cart"),
+			join("cart").as<CartItem[]>(),
 		);
 
 		const user = yield* activity("authenticate", (signal) =>
