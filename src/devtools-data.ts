@@ -186,9 +186,7 @@ export function formatDetails(event: WorkflowEvent): string {
 			return event.error;
 		case "workflow_dependency_started":
 			return event.workflowId;
-		case "workflow_dependency_completed":
-			return `${event.workflowId} = ${truncate(JSON.stringify(event.result))}`;
-		case "workflow_dependency_published":
+		case "workflow_output_resolved":
 			return `${event.workflowId} = ${truncate(JSON.stringify(event.result))}`;
 		case "child_started":
 			return event.name;

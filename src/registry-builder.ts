@@ -1,5 +1,5 @@
 // ABOUTME: Typed registry builder that checks workflow dependencies at compile time.
-// ABOUTME: Each add() call verifies that Result and Published deps are already provided.
+// ABOUTME: Each add() call verifies that Output deps are already provided.
 
 import { WorkflowRegistry } from "./registry";
 import type {

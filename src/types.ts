@@ -26,19 +26,7 @@ export type Signal<K extends string = string, V = unknown> = {
 	readonly signal: { readonly [P in K]: V };
 };
 
-// Declares that a workflow depends on the result of workflow K (via join)
-export type Result<K extends string = string, V = unknown> = {
-	readonly _tag: "result";
-	readonly result: { readonly [P in K]: V };
-};
-
-// Declares that a workflow depends on a published value V from workflow K
-export type Published<K extends string = string, V = unknown> = {
-	readonly _tag: "published";
-	readonly published: { readonly [P in K]: V };
-};
-
-// Declares that a workflow depends on the output of workflow K (published or result)
+// Declares that a workflow depends on the output of workflow K
 export type Output<K extends string = string, V = unknown> = {
 	readonly _tag: "output";
 	readonly output: { readonly [P in K]: V };
@@ -51,7 +39,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Signal | Result | Published | Output | Publishes;
+export type Requirement = Signal | Output | Publishes;
 
 // --- Step (internal yield carrier) ---
 
@@ -108,17 +96,11 @@ export type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
 	? Requirements<ReturnType<F>>
 	: never;
 
-// Extracts Result dependency keys from a requirement union
-export type ResultDeps<R> = R extends Result<infer K, any> ? K : never;
-
-// Extracts Published dependency keys from a requirement union
-export type PublishedDeps<R> = R extends Published<infer K, any> ? K : never;
-
 // Extracts Output dependency keys from a requirement union
 export type OutputDeps<R> = R extends Output<infer K, any> ? K : never;
 
-// All dependency keys (Result + Published + Output) from a requirement union
-export type DepKeys<R> = ResultDeps<R> | PublishedDeps<R> | OutputDeps<R>;
+// All dependency keys from a requirement union
+export type DepKeys<R> = OutputDeps<R>;
 
 // Dependency keys from R that are NOT satisfied by Provides
 export type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
@@ -154,20 +136,6 @@ export type ChildDescriptor = {
 	workflow: AnyWorkflowFunction;
 };
 
-export type PublishedDescriptor = {
-	type: "published";
-	workflowId: string;
-	start: boolean;
-	where?: (value: unknown) => boolean;
-	afterSeq?: number;
-};
-
-export type JoinDescriptor = {
-	type: "join";
-	workflowId: string;
-	start: boolean;
-};
-
 export type OutputDescriptor = {
 	type: "output";
 	workflowId: string;
@@ -189,17 +157,6 @@ export type AllDescriptor = {
 	items: Descriptor[];
 };
 
-export type SubscribeDescriptor = {
-	type: "subscribe";
-	workflowId: string;
-	start: boolean;
-	where?: (value: unknown) => boolean;
-	body: (
-		value: unknown,
-		done: <T>(value: T) => Workflow<never>,
-	) => Workflow<void, Requirement>;
-};
-
 export type LoopDescriptor = {
 	type: "loop";
 	// biome-ignore lint/suspicious/noExplicitAny: body factory returns any generator
@@ -216,13 +173,10 @@ export type Descriptor =
 	| ReceiveDescriptor
 	| SleepDescriptor
 	| ChildDescriptor
-	| PublishedDescriptor
-	| JoinDescriptor
 	| OutputDescriptor
 	| RaceDescriptor
 	| AllDescriptor
 	| PublishDescriptor
-	| SubscribeDescriptor
 	| LoopDescriptor
 	| LoopBreakDescriptor;
 
@@ -232,14 +186,10 @@ export type ActivityCommand = ActivityDescriptor & { seq: number };
 export type ReceiveCommand = ReceiveDescriptor & { seq: number };
 export type SleepCommand = SleepDescriptor & { seq: number };
 export type ChildCommand = ChildDescriptor & { seq: number };
-export type PublishedCommand = PublishedDescriptor & { seq: number };
-export type JoinCommand = JoinDescriptor & { seq: number };
 export type OutputCommand = OutputDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
-export type SubscribeCommand = SubscribeDescriptor & { seq: number };
-
 export type LoopCommand = LoopDescriptor & { seq: number };
 export type LoopBreakCommand = LoopBreakDescriptor & { seq: number };
 
@@ -248,13 +198,10 @@ export type Command =
 	| ReceiveCommand
 	| SleepCommand
 	| ChildCommand
-	| PublishedCommand
-	| JoinCommand
 	| OutputCommand
 	| RaceCommand
 	| AllCommand
 	| PublishCommand
-	| SubscribeCommand
 	| LoopCommand
 	| LoopBreakCommand;
 
@@ -337,22 +284,6 @@ export type WorkflowDependencyStartedEvent = {
 	type: "workflow_dependency_started";
 	workflowId: string;
 	seq: number;
-	timestamp: number;
-};
-
-export type WorkflowDependencyCompletedEvent = {
-	type: "workflow_dependency_completed";
-	workflowId: string;
-	seq: number;
-	result: unknown;
-	timestamp: number;
-};
-
-export type WorkflowDependencyPublishedEvent = {
-	type: "workflow_dependency_published";
-	workflowId: string;
-	seq: number;
-	result: unknown;
 	timestamp: number;
 };
 
@@ -452,8 +383,6 @@ export type WorkflowEvent =
 	| ChildCompletedEvent
 	| ChildFailedEvent
 	| WorkflowDependencyStartedEvent
-	| WorkflowDependencyCompletedEvent
-	| WorkflowDependencyPublishedEvent
 	| WorkflowDependencyFailedEvent
 	| WorkflowOutputResolvedEvent
 	| WorkflowPublishedEvent
@@ -475,20 +404,6 @@ export type WorkflowTrace = {
 	workflowId: string;
 	events: WorkflowEvent[];
 };
-
-// --- WorkflowMap constraint helpers ---
-
-export type WorkflowDep = { published?: unknown; result?: unknown };
-
-export type PublishedOf<
-	M extends Record<string, WorkflowDep>,
-	K extends keyof M,
-> = M[K] extends { published: infer P } ? P : never;
-
-export type ResultOf<
-	M extends Record<string, WorkflowDep>,
-	K extends keyof M,
-> = M[K] extends { result: infer R } ? R : never;
 
 // --- Workflow types ---
 
@@ -593,46 +508,6 @@ export function publish<V>(value: V): Generator<PublishDescriptor & Step<Publish
 	})();
 }
 
-export function published<V, K extends string = string>(
-	workflowId: K,
-	options?: { start?: boolean; where?: (value: V) => boolean; afterSeq?: number },
-): Generator<PublishedDescriptor & Step<Published<K, V>>, V, unknown> & {
-	as: <W>() => Generator<PublishedDescriptor & Step<Published<K, W>>, W, unknown>;
-} {
-	const start = options?.start ?? true;
-	const gen = (function* (): Generator<PublishedDescriptor & Step<Published<K, V>>, V, unknown> {
-		const result = yield {
-			type: "published" as const,
-			workflowId,
-			start,
-			where: options?.where as ((value: unknown) => boolean) | undefined,
-			afterSeq: options?.afterSeq,
-		} as PublishedDescriptor & Step<Published<K, V>>;
-		return result as V;
-	})();
-	(gen as any).as = <W>() => published<W, K>(workflowId, options as any);
-	return gen as any;
-}
-
-export function join<V, K extends string = string>(
-	workflowId: K,
-	options?: { start?: boolean },
-): Generator<JoinDescriptor & Step<Result<K, V>>, V, unknown> & {
-	as: <W>() => Generator<JoinDescriptor & Step<Result<K, W>>, W, unknown>;
-} {
-	const start = options?.start ?? true;
-	const gen = (function* (): Generator<JoinDescriptor & Step<Result<K, V>>, V, unknown> {
-		const result = yield {
-			type: "join" as const,
-			workflowId,
-			start,
-		} as JoinDescriptor & Step<Result<K, V>>;
-		return result as V;
-	})();
-	(gen as any).as = <W>() => join<W, K>(workflowId, options);
-	return gen as any;
-}
-
 export function output<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean },
@@ -697,27 +572,6 @@ export function all(...branches: Generator<any, unknown, any>[]): Generator<AllD
 	})();
 }
 
-export function subscribe<T, V, K extends string = string>(
-	workflowId: K,
-	options: { start?: boolean; where?: (value: V) => boolean },
-	body: (
-		value: V,
-		done: <D>(value: D) => Workflow<never>,
-	) => Workflow<void, Signal | Publishes>,
-): Generator<SubscribeDescriptor & Step<Published<K, V>>, T, unknown> {
-	const start = options?.start ?? true;
-	return (function* () {
-		const result = yield {
-			type: "subscribe" as const,
-			workflowId,
-			start,
-			where: options?.where as ((value: unknown) => boolean) | undefined,
-			body: body as SubscribeDescriptor["body"],
-		} as SubscribeDescriptor & Step<Published<K, V>>;
-		return result as T;
-	})();
-}
-
 // Extracts the break value type from a loop body's yield type
 type LoopBreakValue<Y> = Y extends LoopBreakDescriptor<infer V> ? V : never;
 
@@ -749,19 +603,6 @@ export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Step<
 // Helper to extract yield type from a generator
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
 type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
-
-// Sentinel thrown by done() callbacks inside subscribe to exit the loop.
-export class DoneSignal {
-	constructor(public readonly value: unknown) {}
-}
-
-// A signal handler function that receives a typed payload
-export type SignalHandler<V = unknown> = (
-	payload: V,
-	done: <T>(value: T) => Workflow<never>,
-	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
-) => Generator<any, void, any>;
-
 
 // Accepts any workflow function regardless of parameter or return types.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
@@ -795,19 +636,6 @@ export type WorkflowState<T = unknown> =
 
 export type WorkflowRegistryInterface = {
 	waitFor<T>(
-		workflowId: string,
-		options?: { start?: boolean; caller?: string },
-	): Promise<T>;
-	waitForPublished<T>(
-		workflowId: string,
-		options?: {
-			start?: boolean;
-			caller?: string;
-			where?: (value: unknown) => boolean;
-			afterSeq?: number;
-		},
-	): Promise<T>;
-	waitForCompletion<T>(
 		workflowId: string,
 		options?: { start?: boolean; caller?: string },
 	): Promise<T>;

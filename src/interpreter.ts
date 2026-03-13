@@ -9,7 +9,6 @@ import {
 	CancelledError,
 	type Command,
 	type Descriptor,
-	DoneSignal,
 	type RaceCompletedEvent,
 	type SignalReceivedEvent,
 	type WorkflowCancelledEvent,
@@ -371,10 +370,6 @@ export class Interpreter {
 				return this.executeSleep(command);
 			case "child":
 				return this.executeChild(command);
-			case "published":
-				return this.executePublishedCommand(command);
-			case "join":
-				return this.executeJoinCommand(command);
 			case "output":
 				return this.executeOutput(command);
 			case "race":
@@ -383,8 +378,6 @@ export class Interpreter {
 				return this.executeAll(command);
 			case "publish":
 				return this.executePublish(command);
-			case "subscribe":
-				return this.executeSubscribe(command);
 			case "loop":
 				return this.executeLoop(command);
 			case "loop_break":
@@ -595,138 +588,6 @@ export class Interpreter {
 		}
 	}
 
-	private async executePublishedCommand(
-		command: Extract<Command, { type: "published" }>,
-	): Promise<unknown> {
-		// Check for replay
-		const completed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_published",
-		);
-		if (completed) {
-			return (completed as { result: unknown }).result;
-		}
-
-		// Check for replay: failed
-		const failed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_failed",
-		);
-		if (failed) {
-			throw new Error((failed as { error: string }).error);
-		}
-
-		// Live: require registry
-		if (!this.registry) {
-			throw new Error(
-				"published requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
-		this.log.append({
-			type: "workflow_dependency_started",
-			workflowId: command.workflowId,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
-
-		try {
-			const result = await this.registry.waitForPublished(command.workflowId, {
-				start: command.start,
-				caller: this._workflowId,
-				where: command.where,
-				afterSeq: command.afterSeq,
-			});
-
-			this.log.append({
-				type: "workflow_dependency_published",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				result,
-				timestamp: Date.now(),
-			});
-
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			const stack = err instanceof Error ? err.stack : undefined;
-			this.log.append({
-				type: "workflow_dependency_failed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				error: message,
-				stack,
-				timestamp: Date.now(),
-			});
-			throw err;
-		}
-	}
-
-	private async executeJoinCommand(
-		command: Extract<Command, { type: "join" }>,
-	): Promise<unknown> {
-		// Check for replay: completed
-		const completed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_completed",
-		);
-		if (completed) {
-			return (completed as { result: unknown }).result;
-		}
-
-		// Check for replay: failed
-		const failed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_failed",
-		);
-		if (failed) {
-			throw new Error((failed as { error: string }).error);
-		}
-
-		// Live: require registry
-		if (!this.registry) {
-			throw new Error(
-				"join requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
-		this.log.append({
-			type: "workflow_dependency_started",
-			workflowId: command.workflowId,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
-
-		try {
-			const result = await this.registry.waitForCompletion(command.workflowId, {
-				start: command.start,
-				caller: this._workflowId,
-			});
-
-			this.log.append({
-				type: "workflow_dependency_completed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				result,
-				timestamp: Date.now(),
-			});
-
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			const stack = err instanceof Error ? err.stack : undefined;
-			this.log.append({
-				type: "workflow_dependency_failed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				error: message,
-				stack,
-				timestamp: Date.now(),
-			});
-			throw err;
-		}
-	}
-
 	private async executeOutput(
 		command: Extract<Command, { type: "output" }>,
 	): Promise<unknown> {
@@ -811,56 +672,6 @@ export class Interpreter {
 			timestamp: Date.now(),
 		});
 		this.notifyChange();
-	}
-
-	private async executeSubscribe(
-		command: Extract<Command, { type: "subscribe" }>,
-	): Promise<unknown> {
-		const { workflowId, start, where, body } = command;
-
-		const doneFn = <T>(value: T): Generator<Descriptor, never, unknown> => {
-			return (function* (): Generator<Descriptor, never, unknown> {
-				throw new DoneSignal(value);
-			})();
-		};
-
-		// First iteration: get current or first matching value
-		const firstPublished: Descriptor = {
-			type: "published",
-			workflowId,
-			start,
-			where,
-		};
-		let value = await this.executeCommand(this.assignSeq(firstPublished));
-
-		for (;;) {
-			// Run the body as a sub-generator, driving it through the interpreter
-			const bodyGen = body(value, doneFn);
-			try {
-				let next = bodyGen.next();
-				while (!next.done) {
-					const desc = next.value as Descriptor;
-					const cmd = this.assignSeq(desc);
-					const result = await this.executeCommand(cmd);
-					next = bodyGen.next(result);
-				}
-			} catch (err) {
-				if (err instanceof DoneSignal) {
-					return err.value;
-				}
-				throw err;
-			}
-
-			// Body completed — wait for next publish
-			const nextPublished: Descriptor = {
-				type: "published",
-				workflowId,
-				start,
-				where,
-				afterSeq: this.registry?.getPublishSeq(workflowId) ?? 0,
-			};
-			value = await this.executeCommand(this.assignSeq(nextPublished));
-		}
 	}
 
 	private async executeLoop(
@@ -975,18 +786,6 @@ export class Interpreter {
 						});
 					});
 				}
-				case "published": {
-					return this.executePublishedCommand(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
-				case "join": {
-					return this.executeJoinCommand(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
 				case "output": {
 					return this.executeOutput(item).then((value) => ({
 						index,
@@ -1042,9 +841,6 @@ export class Interpreter {
 				}
 				case "publish": {
 					throw new Error("publish cannot be used inside an all branch");
-				}
-				case "subscribe": {
-					throw new Error("subscribe cannot be used inside an all branch");
 				}
 				case "loop": {
 					throw new Error("loop cannot be used inside an all branch");
@@ -1223,18 +1019,6 @@ export class Interpreter {
 						return { index, value: result };
 					});
 				}
-				case "published": {
-					return this.executePublishedCommand(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
-				case "join": {
-					return this.executeJoinCommand(item).then((value) => ({
-						index,
-						value,
-					}));
-				}
 				case "output": {
 					return this.executeOutput(item).then((value) => ({
 						index,
@@ -1255,9 +1039,6 @@ export class Interpreter {
 				}
 				case "publish": {
 					throw new Error("publish cannot be used inside a race branch");
-				}
-				case "subscribe": {
-					throw new Error("subscribe cannot be used inside a race branch");
 				}
 				case "loop": {
 					return this.executeLoop(item).then((value) => ({

@@ -1101,8 +1101,8 @@ describe("WorkflowRegistry", () => {
 		});
 	});
 
-	describe("waitForPublished / waitForCompletion", () => {
-		it("waitForPublished() returns published value", async () => {
+	describe("waitFor", () => {
+		it("waitFor() returns published value", async () => {
 			const wf = workflow(function* () {
 				const { user } = yield* receive<{ user: string }>("login");
 				yield* publish({ user });
@@ -1115,10 +1115,10 @@ describe("WorkflowRegistry", () => {
 
 			await new Promise((r) => setTimeout(r, 10));
 
-			// Add a published waiter before publishing
+			// Add a waiter before publishing
 			let waiterResult: unknown;
 			const waiterPromise = registry
-				.waitForPublished("session", { start: false })
+				.waitFor("session", { start: false })
 				.then((r) => {
 					waiterResult = r;
 				});
@@ -1131,67 +1131,7 @@ describe("WorkflowRegistry", () => {
 			expect(waiterResult).toEqual({ user: "max" });
 		});
 
-		it("waitForCompletion() returns result value, not published value", async () => {
-			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
-				yield* publish({ user });
-				return `done for ${user}`;
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: wf }, storage);
-			const startPromise = registry.start("session");
-
-			await new Promise((r) => setTimeout(r, 10));
-
-			// Add a completion waiter
-			const completionPromise = registry.waitForCompletion<string>("session", {
-				start: false,
-			});
-
-			await new Promise((r) => setTimeout(r, 10));
-
-			registry.signal("session", "login", { user: "max" });
-			await startPromise;
-
-			const result = await completionPromise;
-			expect(result).toBe("done for max");
-		});
-
-		it("publish resolves only publishedWaiters, not completionWaiters", async () => {
-			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
-				yield* publish({ user });
-				// Keep running
-				yield* receive("login");
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: wf }, storage);
-			const startPromise = registry.start("session");
-
-			await new Promise((r) => setTimeout(r, 10));
-
-			let publishedResolved = false;
-			let completionResolved = false;
-
-			registry.waitForPublished("session", { start: false }).then(() => {
-				publishedResolved = true;
-			});
-			registry.waitForCompletion("session", { start: false }).then(() => {
-				completionResolved = true;
-			});
-
-			await new Promise((r) => setTimeout(r, 10));
-
-			registry.signal("session", "login", { user: "max" });
-			await new Promise((r) => setTimeout(r, 10));
-
-			expect(publishedResolved).toBe(true);
-			expect(completionResolved).toBe(false);
-		});
-
-		it("completion resolves completionWaiters with result", async () => {
+		it("waitFor() returns result value on completion", async () => {
 			const wf = workflow(function* () {
 				return yield* activity("greet", async () => "hello");
 			});
@@ -1199,12 +1139,11 @@ describe("WorkflowRegistry", () => {
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({ greet: wf }, storage);
 
-			const completionPromise = registry.waitForCompletion<string>("greet");
-			const result = await completionPromise;
+			const result = await registry.waitFor<string>("greet");
 			expect(result).toBe("hello");
 		});
 
-		it("failure rejects both published and completion waiters", async () => {
+		it("failure rejects waitFor", async () => {
 			const wf = workflow(function* () {
 				return yield* activity("fail", async () => {
 					throw new Error("boom");
@@ -1214,14 +1153,12 @@ describe("WorkflowRegistry", () => {
 			const storage = new MemoryStorage();
 			const registry = new WorkflowRegistry({ fail: wf }, storage);
 
-			const publishedPromise = registry.waitForPublished("fail");
-			const completionPromise = registry.waitForCompletion("fail");
+			const promise = registry.waitFor("fail");
 
-			await expect(publishedPromise).rejects.toThrow("boom");
-			await expect(completionPromise).rejects.toThrow("boom");
+			await expect(promise).rejects.toThrow("boom");
 		});
 
-		it("waitForPublished returns immediately when already published", async () => {
+		it("waitFor returns immediately when already published", async () => {
 			const wf = workflow(function* () {
 				const { user } = yield* receive<{ user: string }>("login");
 				yield* publish({ user });
@@ -1236,13 +1173,13 @@ describe("WorkflowRegistry", () => {
 			registry.signal("session", "login", { user: "max" });
 			await new Promise((r) => setTimeout(r, 10));
 
-			const result = await registry.waitForPublished("session", {
+			const result = await registry.waitFor("session", {
 				start: false,
 			});
 			expect(result).toEqual({ user: "max" });
 		});
 
-		it("waitForCompletion returns immediately when already completed", async () => {
+		it("waitFor returns immediately when already completed", async () => {
 			const wf = workflow(function* () {
 				return yield* activity("greet", async () => "hello");
 			});
@@ -1251,116 +1188,8 @@ describe("WorkflowRegistry", () => {
 			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
 
-			const result = await registry.waitForCompletion<string>("greet");
+			const result = await registry.waitFor<string>("greet");
 			expect(result).toBe("hello");
-		});
-	});
-
-	describe("published where predicate", () => {
-		it("waitForPublished skips value that does not match where", async () => {
-			type UserState = { status: "loading" } | { status: "ready"; user: string };
-
-			const wf = workflow(function* () {
-				yield* publish({ status: "loading" });
-				yield* receive("go");
-				yield* publish({ status: "ready", user: "max" });
-				yield* receive("go");
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ user: wf }, storage);
-			const startPromise = registry.start("user");
-
-			await new Promise((r) => setTimeout(r, 10));
-
-			// At this point, user has published { status: "loading" }
-			// waitForPublished with where should NOT resolve yet
-			let resolved = false;
-			let resolvedValue: unknown;
-			registry
-				.waitForPublished<UserState>("user", {
-					start: false,
-					where: (v) => (v as UserState).status === "ready",
-				})
-				.then((r) => {
-					resolved = true;
-					resolvedValue = r;
-				});
-
-			await new Promise((r) => setTimeout(r, 10));
-			expect(resolved).toBe(false);
-
-			// Trigger second publish with ready state
-			registry.signal("user", "go", undefined);
-			await new Promise((r) => setTimeout(r, 10));
-
-			expect(resolved).toBe(true);
-			expect(resolvedValue).toEqual({ status: "ready", user: "max" });
-		});
-
-		it("waitForPublished resolves immediately when where matches current value", async () => {
-			const wf = workflow(function* () {
-				yield* publish("hello");
-				yield* receive("go");
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ dep: wf }, storage);
-			const startPromise = registry.start("dep");
-			await new Promise((r) => setTimeout(r, 10));
-
-			const result = await registry.waitForPublished<string>("dep", {
-				start: false,
-				where: (v) => v === "hello",
-			});
-			expect(result).toBe("hello");
-		});
-
-		it("publish re-evaluates where waiters on each publish", async () => {
-			type State = { count: number };
-
-			const wf = workflow(function* () {
-				let count = 0;
-				yield* publish({ count });
-				yield* handler()
-					.on("inc", function* () {
-						count++;
-						yield* publish({ count });
-					})
-					.as<void>();
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ counter: wf }, storage);
-			const startPromise = registry.start("counter");
-			await new Promise((r) => setTimeout(r, 10));
-
-			// Wait for count >= 3
-			let resolvedValue: unknown;
-			registry
-				.waitForPublished<State>("counter", {
-					start: false,
-					where: (v) => (v as State).count >= 3,
-				})
-				.then((r) => {
-					resolvedValue = r;
-				});
-
-			await new Promise((r) => setTimeout(r, 10));
-			expect(resolvedValue).toBeUndefined();
-
-			// Increment 1, 2, 3
-			registry.signal("counter", "inc", undefined);
-			await new Promise((r) => setTimeout(r, 10));
-			expect(resolvedValue).toBeUndefined();
-
-			registry.signal("counter", "inc", undefined);
-			await new Promise((r) => setTimeout(r, 10));
-			expect(resolvedValue).toBeUndefined();
-
-			registry.signal("counter", "inc", undefined);
-			await new Promise((r) => setTimeout(r, 10));
-			expect(resolvedValue).toEqual({ count: 3 });
 		});
 	});
 

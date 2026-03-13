@@ -33,8 +33,6 @@ type WorkflowEntry = {
 	publishSeq: number;
 	observed: boolean;
 	waiters: Waiter[];
-	publishedWaiters: Waiter[];
-	completionWaiters: Waiter[];
 	listeners: Array<() => void>;
 };
 
@@ -70,8 +68,6 @@ export class WorkflowRegistry<K extends string = string>
 				publishSeq: 0,
 				observed: false,
 				waiters: [],
-				publishedWaiters: [],
-				completionWaiters: [],
 				listeners: [],
 			});
 		}
@@ -222,10 +218,6 @@ export class WorkflowRegistry<K extends string = string>
 				);
 			}
 			entry.waiters = [];
-			for (const waiter of entry.completionWaiters) {
-				waiter.resolve(interpreter.result);
-			}
-			entry.completionWaiters = [];
 		} else if (interpreter.status === "failed") {
 			entry.failed = true;
 			entry.error = interpreter.error;
@@ -235,14 +227,6 @@ export class WorkflowRegistry<K extends string = string>
 				waiter.reject(err);
 			}
 			entry.waiters = [];
-			for (const waiter of entry.publishedWaiters) {
-				waiter.reject(err);
-			}
-			entry.publishedWaiters = [];
-			for (const waiter of entry.completionWaiters) {
-				waiter.reject(err);
-			}
-			entry.completionWaiters = [];
 		}
 	}
 
@@ -291,89 +275,6 @@ export class WorkflowRegistry<K extends string = string>
 		});
 	}
 
-	async waitForPublished<T>(
-		id: string,
-		options?: {
-			start?: boolean;
-			caller?: string;
-			where?: (value: unknown) => boolean;
-			afterSeq?: number;
-		},
-	): Promise<T> {
-		const entry = this.getEntry(id);
-		const shouldStart = options?.start ?? true;
-		const caller = options?.caller;
-		const where = options?.where;
-		const afterSeq = options?.afterSeq;
-
-		const matchesNow = () =>
-			entry.published &&
-			(afterSeq === undefined || entry.publishSeq > afterSeq) &&
-			(!where || where(entry.publishedValue));
-
-		if (matchesNow()) {
-			return entry.publishedValue as T;
-		}
-
-		if (entry.failed) {
-			throw new Error(entry.error ?? "Workflow failed");
-		}
-
-		if (caller) {
-			this.addDependency(caller, id);
-		}
-
-		if (!entry.interpreter && shouldStart) {
-			await this.start(id);
-			if (matchesNow()) {
-				return entry.publishedValue as T;
-			}
-			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
-		}
-
-		return new Promise<T>((resolve, reject) => {
-			entry.publishedWaiters.push({
-				resolve: resolve as (value: unknown) => void,
-				reject,
-				where,
-			});
-		});
-	}
-
-	async waitForCompletion<T>(
-		id: string,
-		options?: { start?: boolean; caller?: string },
-	): Promise<T> {
-		const entry = this.getEntry(id);
-		const shouldStart = options?.start ?? true;
-		const caller = options?.caller;
-
-		if (entry.completed) {
-			return entry.result as T;
-		}
-
-		if (entry.failed) {
-			throw new Error(entry.error ?? "Workflow failed");
-		}
-
-		if (caller) {
-			this.addDependency(caller, id);
-		}
-
-		if (!entry.interpreter && shouldStart) {
-			await this.start(id);
-			if (entry.completed) return entry.result as T;
-			if (entry.failed) throw new Error(entry.error ?? "Workflow failed");
-		}
-
-		return new Promise<T>((resolve, reject) => {
-			entry.completionWaiters.push({
-				resolve: resolve as (value: unknown) => void,
-				reject,
-			});
-		});
-	}
-
 	publish(id: string, value: unknown): void {
 		const entry = this.getEntry(id);
 		entry.published = true;
@@ -383,15 +284,6 @@ export class WorkflowRegistry<K extends string = string>
 			waiter.resolve(value);
 		}
 		entry.waiters = [];
-		const remaining: Waiter[] = [];
-		for (const waiter of entry.publishedWaiters) {
-			if (waiter.where && !waiter.where(value)) {
-				remaining.push(waiter);
-			} else {
-				waiter.resolve(value);
-			}
-		}
-		entry.publishedWaiters = remaining;
 	}
 
 	getPublishSeq(id: string): number {
@@ -410,8 +302,6 @@ export class WorkflowRegistry<K extends string = string>
 		entry.publishSeq = 0;
 		entry.result = undefined;
 		entry.error = undefined;
-		entry.publishedWaiters = [];
-		entry.completionWaiters = [];
 		this.removeDependency(id);
 
 		await this._storage.clear(id);
@@ -474,8 +364,6 @@ export class WorkflowRegistry<K extends string = string>
 			publishSeq: 0,
 			observed: true,
 			waiters: [],
-			publishedWaiters: [],
-			completionWaiters: [],
 			listeners: [],
 		};
 		this.entries.set(id, entry);

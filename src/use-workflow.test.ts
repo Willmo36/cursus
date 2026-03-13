@@ -639,7 +639,7 @@ describe("useWorkflow", () => {
 	});
 
 	describe("cross-workflow dependencies", () => {
-		it("inline workflow can use join with layer workflows", async () => {
+		it("inline workflow can use output with layer workflows", async () => {
 			const loginWorkflow = workflow(function* () {
 				return yield* activity("login", async () => "user-123");
 			});
@@ -665,7 +665,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("signal then join then activity completes", async () => {
+		it("signal then output then activity completes", async () => {
 			const profileWorkflow = workflow(function* () {
 				const profile = yield* receive("profile");
 				return profile;

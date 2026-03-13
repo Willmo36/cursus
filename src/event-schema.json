@@ -65,10 +65,7 @@
 						"$ref": "#/$defs/WorkflowDependencyStartedEvent"
 					},
 					{
-						"$ref": "#/$defs/WorkflowDependencyCompletedEvent"
-					},
-					{
-						"$ref": "#/$defs/WorkflowDependencyPublishedEvent"
+						"$ref": "#/$defs/WorkflowOutputResolvedEvent"
 					},
 					{
 						"$ref": "#/$defs/WorkflowDependencyFailedEvent"
@@ -351,33 +348,13 @@
 				}
 			}
 		},
-		"WorkflowDependencyCompletedEvent": {
+		"WorkflowOutputResolvedEvent": {
 			"type": "object",
 			"required": ["type", "workflowId", "seq", "result", "timestamp"],
 			"additionalProperties": false,
 			"properties": {
 				"type": {
-					"const": "workflow_dependency_completed"
-				},
-				"workflowId": {
-					"type": "string"
-				},
-				"seq": {
-					"type": "integer"
-				},
-				"result": {},
-				"timestamp": {
-					"type": "number"
-				}
-			}
-		},
-		"WorkflowDependencyPublishedEvent": {
-			"type": "object",
-			"required": ["type", "workflowId", "seq", "result", "timestamp"],
-			"additionalProperties": false,
-			"properties": {
-				"type": {
-					"const": "workflow_dependency_published"
+					"const": "workflow_output_resolved"
 				},
 				"workflowId": {
 					"type": "string"

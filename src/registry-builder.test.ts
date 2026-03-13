@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
-import { activity, join, output, publish, published, receive, workflow } from "./types";
-import type { Output, Published, Publishes, Requirements, Result, Signal } from "./types";
+import { activity, output, publish, receive, workflow } from "./types";
+import type { Output, Publishes, Requirements, Signal } from "./types";
 
 type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
 
