@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, join, race, receive, workflow } from "./types";
+import { activity, all, child, handler, join, output, race, receive, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -136,6 +136,21 @@ describe("createTestRuntime", () => {
 		});
 
 		expect(result).toBe("mock-user:mock-hello:yes");
+	});
+
+	it("mocks output with workflowResults", async () => {
+		const wf = workflow(function* () {
+			const config = yield* output("config");
+			return `got: ${config}`;
+		});
+
+		const result = await createTestRuntime(wf, {
+			workflowResults: {
+				config: "test-config",
+			},
+		});
+
+		expect(result).toBe("got: test-config");
 	});
 
 	it("handles workflow that catches activity error", async () => {
