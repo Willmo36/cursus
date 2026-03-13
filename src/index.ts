@@ -40,6 +40,9 @@ export type {
 	LoopBreakDescriptor,
 	LoopCommand,
 	LoopDescriptor,
+	Output,
+	OutputCommand,
+	OutputDescriptor,
 	Published,
 	Publishes,
 	PublishCommand,
@@ -74,5 +77,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CANCELLED, CancelledError, child, COMPLETED, DoneSignal, FAILED, handler, join, loop, loopBreak, publish, published, race, receive, RUNNING, sleep, subscribe, WAITING, workflow } from "./types";
+export { activity, all, CANCELLED, CancelledError, child, COMPLETED, DoneSignal, FAILED, handler, join, loop, loopBreak, output, publish, published, race, receive, RUNNING, sleep, subscribe, WAITING, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";

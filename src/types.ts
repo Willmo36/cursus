@@ -38,6 +38,12 @@ export type Published<K extends string = string, V = unknown> = {
 	readonly published: { readonly [P in K]: V };
 };
 
+// Declares that a workflow depends on the output of workflow K (published or result)
+export type Output<K extends string = string, V = unknown> = {
+	readonly _tag: "output";
+	readonly output: { readonly [P in K]: V };
+};
+
 // Declares that a workflow publishes values of type V
 export type Publishes<V = unknown> = {
 	readonly _tag: "publishes";
@@ -45,7 +51,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Signal | Result | Published | Publishes;
+export type Requirement = Signal | Result | Published | Output | Publishes;
 
 // --- Step (internal yield carrier) ---
 
@@ -108,8 +114,11 @@ export type ResultDeps<R> = R extends Result<infer K, any> ? K : never;
 // Extracts Published dependency keys from a requirement union
 export type PublishedDeps<R> = R extends Published<infer K, any> ? K : never;
 
-// All dependency keys (Result + Published) from a requirement union
-export type DepKeys<R> = ResultDeps<R> | PublishedDeps<R>;
+// Extracts Output dependency keys from a requirement union
+export type OutputDeps<R> = R extends Output<infer K, any> ? K : never;
+
+// All dependency keys (Result + Published + Output) from a requirement union
+export type DepKeys<R> = ResultDeps<R> | PublishedDeps<R> | OutputDeps<R>;
 
 // Dependency keys from R that are NOT satisfied by Provides
 export type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
@@ -159,6 +168,12 @@ export type JoinDescriptor = {
 	start: boolean;
 };
 
+export type OutputDescriptor = {
+	type: "output";
+	workflowId: string;
+	start: boolean;
+};
+
 export type PublishDescriptor = {
 	type: "publish";
 	value: unknown;
@@ -203,6 +218,7 @@ export type Descriptor =
 	| ChildDescriptor
 	| PublishedDescriptor
 	| JoinDescriptor
+	| OutputDescriptor
 	| RaceDescriptor
 	| AllDescriptor
 	| PublishDescriptor
@@ -218,6 +234,7 @@ export type SleepCommand = SleepDescriptor & { seq: number };
 export type ChildCommand = ChildDescriptor & { seq: number };
 export type PublishedCommand = PublishedDescriptor & { seq: number };
 export type JoinCommand = JoinDescriptor & { seq: number };
+export type OutputCommand = OutputDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
@@ -233,6 +250,7 @@ export type Command =
 	| ChildCommand
 	| PublishedCommand
 	| JoinCommand
+	| OutputCommand
 	| RaceCommand
 	| AllCommand
 	| PublishCommand
@@ -347,6 +365,14 @@ export type WorkflowDependencyFailedEvent = {
 	timestamp: number;
 };
 
+export type WorkflowOutputResolvedEvent = {
+	type: "workflow_output_resolved";
+	workflowId: string;
+	seq: number;
+	result: unknown;
+	timestamp: number;
+};
+
 export type WorkflowPublishedEvent = {
 	type: "workflow_published";
 	value: unknown;
@@ -429,6 +455,7 @@ export type WorkflowEvent =
 	| WorkflowDependencyCompletedEvent
 	| WorkflowDependencyPublishedEvent
 	| WorkflowDependencyFailedEvent
+	| WorkflowOutputResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
 	| AllCompletedEvent
@@ -606,6 +633,25 @@ export function join<V, K extends string = string>(
 	return gen as any;
 }
 
+export function output<V, K extends string = string>(
+	workflowId: K,
+	options?: { start?: boolean },
+): Generator<OutputDescriptor & Step<Output<K, V>>, V, unknown> & {
+	as: <W>() => Generator<OutputDescriptor & Step<Output<K, W>>, W, unknown>;
+} {
+	const start = options?.start ?? true;
+	const gen = (function* (): Generator<OutputDescriptor & Step<Output<K, V>>, V, unknown> {
+		const result = yield {
+			type: "output" as const,
+			workflowId,
+			start,
+		} as OutputDescriptor & Step<Output<K, V>>;
+		return result as V;
+	})();
+	(gen as any).as = <W>() => output<W, K>(workflowId, options);
+	return gen as any;
+}
+
 // Extracts requirements from a generator's yield type
 type Req<G> = G extends Generator<infer Y, any, any>
 	? Y extends { __requirement?: infer R } ? R extends Requirement ? R : never : never
@@ -748,6 +794,10 @@ export type WorkflowState<T = unknown> =
 // --- Registry interface (avoids circular imports) ---
 
 export type WorkflowRegistryInterface = {
+	waitFor<T>(
+		workflowId: string,
+		options?: { start?: boolean; caller?: string },
+	): Promise<T>;
 	waitForPublished<T>(
 		workflowId: string,
 		options?: {
