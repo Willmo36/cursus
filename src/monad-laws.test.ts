@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handle, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import { activity, all, child, handle, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
@@ -395,6 +395,35 @@ describe("Monad laws", () => {
 				| Publishes<number>
 			> = true;
 			void _check;
+			void w;
+		});
+
+		it("loop propagates requirements from body", () => {
+			const w = workflow(function* () {
+				return yield* loop(function* () {
+					const msg = yield* receive("input").as<string>();
+					yield* publish(msg);
+					if (msg === "quit") {
+						yield* loopBreak("done");
+					}
+				});
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"input", string> | Publishes<string>> = true;
+			void _check;
+			void w;
+		});
+
+		it("loopBreak value type becomes loop return type", () => {
+			const w = workflow(function* () {
+				const result = yield* loop(function* () {
+					yield* loopBreak(42);
+				});
+				// result should be inferred as number
+				const _typeCheck: AssertEqual<typeof result, number> = true;
+				void _typeCheck;
+				return result;
+			});
 			void w;
 		});
 

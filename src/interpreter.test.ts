@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { activity, all, child, handle, join, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, handle, join, loop, loopBreak, publish, published, race, receive, sleep, workflow } from "./types";
 import type { WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
@@ -3709,6 +3709,169 @@ describe("Interpreter", () => {
 
 			expect(interpreter.status).toBe("completed");
 			expect(interpreter.published).toBe("account-123");
+		});
+	});
+
+	describe("Phase M: loop / loopBreak", () => {
+		it("loops until loopBreak is yielded", async () => {
+			let iterations = 0;
+			const wf = workflow(function* () {
+				return yield* loop(function* () {
+					iterations++;
+					const msg = yield* receive("input").as<string>();
+					if (msg === "quit") {
+						yield* loopBreak("done");
+					}
+				});
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log);
+			const promise = interpreter.run();
+			interpreter.signal("input", "hello");
+			interpreter.signal("input", "world");
+			interpreter.signal("input", "quit");
+			const result = await promise;
+
+			expect(result).toBe("done");
+			expect(iterations).toBe(3);
+		});
+
+		it("loopBreak value becomes the return value of loop", async () => {
+			const wf = workflow(function* () {
+				return yield* loop(function* () {
+					yield* loopBreak(42);
+				});
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe(42);
+		});
+
+		it("loop body can yield activities", async () => {
+			const calls: string[] = [];
+			const wf = workflow(function* () {
+				let count = 0;
+				return yield* loop(function* () {
+					count++;
+					yield* activity(`work-${count}`, async () => {
+						calls.push(`work-${count}`);
+						return count;
+					});
+					if (count >= 3) {
+						yield* loopBreak(count);
+					}
+				});
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log);
+			const result = await interpreter.run();
+
+			expect(result).toBe(3);
+			expect(calls).toEqual(["work-1", "work-2", "work-3"]);
+		});
+
+		it("loop body can publish values", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+				getPublishSeq: vi.fn().mockReturnValue(0),
+			};
+
+			const wf = workflow(function* () {
+				let count = 0;
+				return yield* loop(function* () {
+					count++;
+					yield* publish(count);
+					if (count >= 2) {
+						yield* loopBreak("done");
+					}
+				});
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry, "counter");
+			const result = await interpreter.run();
+
+			expect(result).toBe("done");
+			expect(mockRegistry.publish).toHaveBeenCalledWith("counter", 1);
+			expect(mockRegistry.publish).toHaveBeenCalledWith("counter", 2);
+		});
+
+		it("loop emits loop_started and loop_completed events", async () => {
+			const wf = workflow(function* () {
+				return yield* loop(function* () {
+					yield* loopBreak("result");
+				});
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log);
+			await interpreter.run();
+
+			const events = log.events();
+			expect(events).toContainEqual(
+				expect.objectContaining({ type: "loop_started" }),
+			);
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: "loop_completed",
+					value: "result",
+				}),
+			);
+		});
+
+		it("replays loop from event log", async () => {
+			const wf = workflow(function* () {
+				return yield* loop(function* () {
+					const msg = yield* receive("input").as<string>();
+					if (msg === "quit") {
+						yield* loopBreak("done");
+					}
+				});
+			});
+
+			// First run
+			const log = new EventLog();
+			const interp1 = new Interpreter(wf, log);
+			const promise = interp1.run();
+			interp1.signal("input", "hello");
+			interp1.signal("input", "quit");
+			await promise;
+
+			// Replay from same log
+			const interp2 = new Interpreter(wf, log);
+			const result = await interp2.run();
+			expect(result).toBe("done");
+		});
+
+		it("loop works inside race", async () => {
+			const wf = workflow(function* () {
+				return yield* race(
+					loop(function* () {
+						const msg = yield* receive("chat").as<string>();
+						if (msg === "quit") {
+							yield* loopBreak("chat-done");
+						}
+					}),
+					receive("cancel").as<string>(),
+				);
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log);
+			const promise = interpreter.run();
+			interpreter.signal("chat", "hello");
+			interpreter.signal("chat", "quit");
+			const result = await promise;
+
+			expect(result).toEqual({ winner: 0, value: "chat-done" });
 		});
 	});
 });
