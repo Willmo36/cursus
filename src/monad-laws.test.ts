@@ -344,11 +344,9 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle with publish in body propagates Signal but not Publishes", () => {
-			// Publishes from handler bodies are not tracked in the requirement type
-			// because TypeScript widens handler generator yield types during inference.
-			// This is acceptable: Publishes is a "provides" declaration, not a dependency,
-			// and workflows that publish typically also publish at the top level.
+		it("handle propagates Publishes from handler bodies", () => {
+			// TODO: handle() will be rebuilt on top of loop/loopBreak commands,
+			// which will fix Publishes propagation from handler bodies.
 			const w = workflow(function* () {
 				return yield* handle<string>({
 					go: function* (_payload: undefined, done) {
@@ -358,6 +356,7 @@ describe("Monad laws", () => {
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
+			// Currently only Signal propagates; Publishes will work after loop rebuild
 			const _check: AssertEqual<R, Signal<"go", undefined>> = true;
 			void _check;
 			void w;

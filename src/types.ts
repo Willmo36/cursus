@@ -617,8 +617,7 @@ export type SignalHandler<V = unknown> = (
 	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
 ) => Generator<any, void, any>;
 
-// Extracts Signal<K, V> for each handler key K with payload type V, plus any
-// non-Signal requirements from handler bodies (e.g. Publishes from yield* publish())
+// Extracts Signal<K, V> for each handler key K with payload type V
 type HandleReqs<H> = {
 	// biome-ignore lint/suspicious/noExplicitAny: need any to match handler function shapes
 	[K in keyof H & string]: H[K] extends (payload: infer V, ...args: any[]) => any
@@ -626,11 +625,8 @@ type HandleReqs<H> = {
 		: never;
 }[keyof H & string];
 
-// biome-ignore lint/suspicious/noExplicitAny: need any for handler generator yield inference
-type HandlerFn = (payload: any, done: <T>(value: T) => Workflow<never>) => Generator<any, void, any>;
-
-// biome-ignore lint/suspicious/noExplicitAny: handler map values need flexible inference
-export function handle<T, H extends Record<string, HandlerFn> = Record<string, HandlerFn>>(
+// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
+export function handle<T, H extends Record<string, (...args: any[]) => any> = Record<string, (...args: any[]) => any>>(
 	handlers: H,
 ): Workflow<T, HandleReqs<H>> {
 	const handlerNames = Object.keys(handlers);
