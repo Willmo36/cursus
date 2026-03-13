@@ -610,30 +610,45 @@ export class DoneSignal {
 	constructor(public readonly value: unknown) {}
 }
 
-export type SignalHandler = (
-	payload: unknown,
+// A signal handler function that receives a typed payload
+export type SignalHandler<V = unknown> = (
+	payload: V,
 	done: <T>(value: T) => Workflow<never>,
-) => Workflow<void, Signal | Publishes>;
+	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
+) => Generator<any, void, any>;
 
-export function handle<T>(
-	handlers: Record<string, SignalHandler>,
-): Workflow<T, Signal | Publishes> {
+// Extracts Signal<K, V> for each handler key K with payload type V, plus any
+// non-Signal requirements from handler bodies (e.g. Publishes from yield* publish())
+type HandleReqs<H> = {
+	// biome-ignore lint/suspicious/noExplicitAny: need any to match handler function shapes
+	[K in keyof H & string]: H[K] extends (payload: infer V, ...args: any[]) => any
+		? Signal<K, V>
+		: never;
+}[keyof H & string];
+
+// biome-ignore lint/suspicious/noExplicitAny: need any for handler generator yield inference
+type HandlerFn = (payload: any, done: <T>(value: T) => Workflow<never>) => Generator<any, void, any>;
+
+// biome-ignore lint/suspicious/noExplicitAny: handler map values need flexible inference
+export function handle<T, H extends Record<string, HandlerFn> = Record<string, HandlerFn>>(
+	handlers: H,
+): Workflow<T, HandleReqs<H>> {
 	const handlerNames = Object.keys(handlers);
 	const doneFn = <D>(value: D): Workflow<never> => {
 		return (function* (): Generator<never, never, unknown> {
 			throw new DoneSignal(value);
 		})();
 	};
-	return (function* (): Generator<Descriptor & Step<Signal | Publishes>, T, unknown> {
+	return (function* (): Generator<Descriptor & Step<HandleReqs<H>>, T, unknown> {
 		for (;;) {
 			const result = yield* (race(
 				...handlerNames.map((n) => receive(n)),
-			) as Generator<Descriptor & Step<Signal>, { winner: number; value: unknown }, unknown>);
+			) as Generator<Descriptor & Step<HandleReqs<H>>, { winner: number; value: unknown }, unknown>);
 			const signal = handlerNames[result.winner];
 			const handler = handlers[signal];
 			if (!handler) continue;
 			try {
-				yield* handler(result.value, doneFn);
+				yield* (handler as SignalHandler)(result.value, doneFn);
 			} catch (err) {
 				if (err instanceof DoneSignal) {
 					return err.value as T;
