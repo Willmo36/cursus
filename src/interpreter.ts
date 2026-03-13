@@ -1101,7 +1101,7 @@ export class Interpreter {
 							signal: item.signal,
 							resolve: (payload: unknown) => {
 								// Immediately clear race waiters to prevent stale
-								// resolution when ctx.handle() loops and a signal arrives
+								// resolution when receive() loops and a signal arrives
 								// before the next race is set up.
 								this._raceWaiters = null;
 								this._status = "running";

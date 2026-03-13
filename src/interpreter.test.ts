@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { activity, all, child, handle, join, loop, loopBreak, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, join, loop, loopBreak, publish, published, race, receive, sleep, workflow } from "./types";
 import type { WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
@@ -2210,11 +2210,11 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("Phase J: on/done event loop", () => {
+	describe("Phase J: receive (N signals, loop)", () => {
 		it("dispatches to matching handler", async () => {
 			const wf = workflow(function* () {
 				let message = "";
-				const result = yield* handle<string>({
+				const result = yield* receive<string>({
 					greet: function* (payload, done) {
 						const name = payload as string;
 						message = name;
@@ -2240,7 +2240,7 @@ describe("Interpreter", () => {
 		it("loops: handles multiple signals before done", async () => {
 			const wf = workflow(function* () {
 				let count = 0;
-				return yield* handle<number>({
+				return yield* receive<number>({
 					inc: function* () {
 						count++;
 					},
@@ -2275,7 +2275,7 @@ describe("Interpreter", () => {
 
 		it("done() exits loop and returns value", async () => {
 			const wf = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					stop: function* (payload, done) {
 						yield* done(payload as string);
 					},
@@ -2297,7 +2297,7 @@ describe("Interpreter", () => {
 
 		it("handlers can yield commands (activity, sleep, etc.)", async () => {
 			const wf = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					go: function* (_payload, done) {
 						const result = yield* activity("fetch", async () => "fetched");
 						yield* done(result);
@@ -2320,75 +2320,43 @@ describe("Interpreter", () => {
 
 		it("full loop replays from event log", async () => {
 			const activityFn = vi.fn().mockResolvedValue("fetched");
-			const wf = workflow(function* () {
-				let count = 0;
-				return yield* handle<string>({
-					inc: function* () {
-						yield* activity("count", activityFn);
-						count++;
-					},
-					finish: function* (_payload, done) {
-						yield* done(`total:${count}`);
-					},
+			const makeWf = () =>
+				workflow(function* () {
+					let count = 0;
+					return yield* receive<string>({
+						inc: function* () {
+							yield* activity("count", activityFn);
+							count++;
+						},
+						finish: function* (_payload, done) {
+							yield* done(`total:${count}`);
+						},
+					});
 				});
+
+			// Live run to capture event log
+			const log = new EventLog();
+			const interp1 = new Interpreter(makeWf(), log);
+			const promise = interp1.run();
+
+			await vi.waitFor(() => {
+				expect(interp1.status).toBe("waiting");
 			});
+			interp1.signal("inc");
 
-			// handle() uses race(receive(...)) internally.
-			// Seq allocation: receive("inc")=1, receive("finish")=2, race=3
-			// After first iteration handler: activity("count")=4
-			// Second iteration: receive("inc")=5, receive("finish")=6, race=7
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				// First iteration: race picks "inc" (winner 0)
-				{
-					type: "race_started",
-					seq: 3,
-					items: [{ type: "receive" }, { type: "receive" }],
-					timestamp: 2,
-				},
-				{
-					type: "race_completed",
-					seq: 3,
-					winner: 0,
-					value: undefined,
-					timestamp: 3,
-				},
-				// Handler runs activity
-				{
-					type: "activity_scheduled",
-					name: "count",
-					seq: 4,
-					timestamp: 4,
-				},
-				{
-					type: "activity_completed",
-					seq: 4,
-					result: "fetched",
-					timestamp: 5,
-				},
-				// Second iteration: race picks "finish" (winner 1)
-				{
-					type: "race_started",
-					seq: 7,
-					items: [{ type: "receive" }, { type: "receive" }],
-					timestamp: 6,
-				},
-				{
-					type: "race_completed",
-					seq: 7,
-					winner: 1,
-					value: undefined,
-					timestamp: 7,
-				},
-				{
-					type: "workflow_completed",
-					result: "total:1",
-					timestamp: 8,
-				},
-			]);
+			await vi.waitFor(() => {
+				expect(interp1.status).toBe("waiting");
+			});
+			interp1.signal("finish");
+			await promise;
 
-			const interpreter = new Interpreter(wf, log);
-			const result = await interpreter.run();
+			expect(interp1.result).toBe("total:1");
+			expect(activityFn).toHaveBeenCalledOnce();
+
+			// Replay from same log — activity should not re-execute
+			activityFn.mockClear();
+			const interp2 = new Interpreter(makeWf(), log);
+			const result = await interp2.run();
 
 			expect(result).toBe("total:1");
 			expect(activityFn).not.toHaveBeenCalled();
@@ -2396,7 +2364,7 @@ describe("Interpreter", () => {
 
 		it("handler error propagates as workflow failure", async () => {
 			const wf = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					go: function* () {
 						throw new Error("handler boom");
 					},
@@ -2419,7 +2387,7 @@ describe("Interpreter", () => {
 
 		it("unmatched signal is skipped (re-waits)", async () => {
 			const wf = workflow(function* () {
-					return yield* handle<string>({
+					return yield* receive<string>({
 						a: function* (payload, done) {
 							yield* done(payload as string);
 						},
@@ -2444,6 +2412,184 @@ describe("Interpreter", () => {
 
 			const result = await runPromise;
 			expect(result).toBe("matched");
+		});
+	});
+
+	describe("Phase J.2: receive (single signal, loop)", () => {
+		it("loops on a single signal until done", async () => {
+			const wf = workflow(function* () {
+				const messages: string[] = [];
+				return yield* receive("input", function* (msg: string, done) {
+					messages.push(msg);
+					if (msg === "quit") {
+						yield* done(messages);
+					}
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
+			interpreter.signal("input", "hello");
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
+			interpreter.signal("input", "world");
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
+			interpreter.signal("input", "quit");
+
+			const result = await promise;
+			expect(result).toEqual(["hello", "world", "quit"]);
+		});
+
+		it("handler can yield commands", async () => {
+			const wf = workflow(function* () {
+				return yield* receive("go", function* (_payload: unknown, done) {
+					const result = yield* activity("fetch", async () => "fetched");
+					yield* done(result);
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("go");
+			});
+			interpreter.signal("go");
+
+			const result = await promise;
+			expect(result).toBe("fetched");
+		});
+
+		it("handler error propagates as workflow failure", async () => {
+			const wf = workflow(function* () {
+				return yield* receive("go", function* () {
+					throw new Error("handler boom");
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("go");
+			});
+			interpreter.signal("go");
+			await promise;
+
+			expect(interpreter.status).toBe("failed");
+			expect(interpreter.error).toBe("handler boom");
+		});
+	});
+
+	describe("Phase J.3: receive (N signals, loop)", () => {
+		it("dispatches to matching handler", async () => {
+			const wf = workflow(function* () {
+				return yield* receive({
+					greet: function* (payload: string, done) {
+						yield* done(payload);
+					},
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+
+			interpreter.signal("greet", "Max");
+
+			const result = await promise;
+			expect(result).toBe("Max");
+		});
+
+		it("loops: handles multiple signals before done", async () => {
+			const wf = workflow(function* () {
+				let count = 0;
+				return yield* receive({
+					inc: function* () {
+						count++;
+					},
+					finish: function* (_payload, done) {
+						yield* done(count);
+					},
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+			interpreter.signal("inc");
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+			interpreter.signal("inc");
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+			interpreter.signal("finish");
+
+			const result = await promise;
+			expect(result).toBe(2);
+		});
+
+		it("handlers can yield commands", async () => {
+			const wf = workflow(function* () {
+				return yield* receive({
+					go: function* (_payload, done) {
+						const result = yield* activity("fetch", async () => "fetched");
+						yield* done(result);
+					},
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+			interpreter.signal("go");
+
+			const result = await promise;
+			expect(result).toBe("fetched");
+		});
+
+		it("handler error propagates as workflow failure", async () => {
+			const wf = workflow(function* () {
+				return yield* receive({
+					go: function* () {
+						throw new Error("handler boom");
+					},
+				});
+			});
+
+			const interpreter = new Interpreter(wf, new EventLog());
+			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
+			interpreter.signal("go");
+			await promise;
+
+			expect(interpreter.status).toBe("failed");
+			expect(interpreter.error).toBe("handler boom");
 		});
 	});
 
@@ -3102,14 +3248,14 @@ describe("Interpreter", () => {
 	});
 
 	describe("Profunctor: signal routing through combinators", () => {
-		it("handle handler calling ctx.child with receive receives signal", async () => {
+		it("receive handler calling child with receive receives signal", async () => {
 			const childWorkflow = workflow(function* () {
 					const val = yield* receive("input");
 					return `child: ${val}`;
 				});
 
 			const wf = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					go: function* (_payload, done) {
 						const result = yield* child("sub", childWorkflow);
 						yield* done(result);
@@ -3197,7 +3343,7 @@ describe("Interpreter", () => {
 			});
 
 			const wf = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					start: function* (_payload, done) {
 						const result = yield* child("child", childWf);
 						yield* done(result);

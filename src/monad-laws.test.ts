@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handle, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import { activity, all, child, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
@@ -313,9 +313,9 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle propagates specific Signal requirements inferred from handler payload", () => {
+		it("receive (N signals) propagates specific Signal requirements inferred from handler payload", () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					greet: function* (payload: string, done) {
 						yield* done(payload);
 					},
@@ -327,9 +327,9 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle with multiple handlers propagates union of typed Signal requirements", () => {
+		it("receive (N signals) with multiple handlers propagates union of typed Signal requirements", () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					greet: function* (payload: string, done) {
 						yield* done(payload);
 					},
@@ -344,11 +344,12 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle propagates Publishes from handler bodies", () => {
-			// TODO: handle() will be rebuilt on top of loop/loopBreak commands,
-			// which will fix Publishes propagation from handler bodies.
+		it("receive (N signals) propagates Publishes from handler bodies", () => {
+			// TODO: TypeScript widens handler generator yield types to any when
+			// the constraint uses (...args: any[]) => any. Publishes from handler
+			// bodies are not captured in the workflow's requirements type.
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					go: function* (_payload: undefined, done) {
 						yield* publish(42);
 						yield* done("result");
@@ -356,7 +357,6 @@ describe("Monad laws", () => {
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			// Currently only Signal propagates; Publishes will work after loop rebuild
 			const _check: AssertEqual<R, Signal<"go", undefined>> = true;
 			void _check;
 			void w;
@@ -565,9 +565,9 @@ describe("Monad laws", () => {
 			void _check;
 		});
 
-		it("handle free function dispatches to matching handler", async () => {
+		it("receive (N signals) dispatches to matching handler", async () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					greet: function* (name, done) {
 						yield* done(name as string);
 					},
@@ -580,9 +580,9 @@ describe("Monad laws", () => {
 			expect(result).toBe("Max");
 		});
 
-		it("handle handlers can use free functions", async () => {
+		it("receive (N signals) handlers can use free functions", async () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* receive<string>({
 					go: function* (_payload, done) {
 						const result = yield* activity("fetch", async () => "fetched");
 						yield* done(result);

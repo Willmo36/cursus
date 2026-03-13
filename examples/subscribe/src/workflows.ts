@@ -1,6 +1,6 @@
 // ABOUTME: Account and points store workflows demonstrating subscribe with takeLatest.
 // ABOUTME: Points store reactively refetches whenever the account changes.
-import { activity, handle, publish, receive, subscribe, workflow } from "cursus";
+import { activity, publish, receive, subscribe, workflow } from "cursus";
 
 type Account = { id: string; name: string; tier: string };
 
@@ -33,7 +33,7 @@ export const accountWorkflow = workflow(function* () {
 
 	yield* publish({ status: "ready" as const, account });
 
-	yield* handle<never>({
+	yield* receive<never>({
 		upgrade: function* (payload) {
 			const { tier } = payload as { tier: string };
 			const updated = yield* activity(

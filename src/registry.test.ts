@@ -6,7 +6,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import { activity, all, handle, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import { activity, all, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type {
 	WorkflowEvent,
 	WorkflowEventObserver,
@@ -1322,7 +1322,7 @@ describe("WorkflowRegistry", () => {
 			const wf = workflow(function* () {
 				let count = 0;
 				yield* publish({ count });
-				yield* handle<void>({
+				yield* receive<void>({
 					inc: function* () {
 						count++;
 						yield* publish({ count });
@@ -1370,7 +1370,7 @@ describe("WorkflowRegistry", () => {
 
 			const accountWf = workflow(function* () {
 				yield* publish({ name: "max" });
-				yield* handle<void>({
+				yield* receive<void>({
 					update: function* (payload) {
 						yield* publish(payload as { name: string });
 					},
@@ -1417,7 +1417,7 @@ describe("WorkflowRegistry", () => {
 
 			const sourceWf = workflow(function* () {
 				yield* publish(1);
-				yield* handle<void>({
+				yield* receive<void>({
 					bump: function* () {
 						yield* publish(2);
 					},
@@ -1504,7 +1504,7 @@ describe("WorkflowRegistry", () => {
 		it("done() exits the subscribe loop and returns a value", async () => {
 			const sourceWf = workflow(function* () {
 				yield* publish(1);
-				yield* handle<void>({
+				yield* receive<void>({
 					bump: function* () {
 						yield* publish(2);
 					},

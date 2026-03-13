@@ -489,21 +489,75 @@ export function activity<T>(
 	})();
 }
 
+// Extracts Signal<K, V> for each handler key K with payload type V
+type HandleReqs<H> = {
+	// biome-ignore lint/suspicious/noExplicitAny: need any to match handler function shapes
+	[K in keyof H & string]: H[K] extends (payload: infer V, ...args: any[]) => any
+		? Signal<K, V>
+		: never;
+}[keyof H & string];
+
 type ReceiveBuilder<K extends string> = Generator<ReceiveDescriptor & Step<Signal<K, unknown>>, unknown, unknown> & {
 	as: <V>() => Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown>;
 };
 
+// Overload 1: one signal, once — primitive command
 export function receive<V, K extends string = string>(
 	signal: K,
 ): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> & {
 	as: <W>() => Generator<ReceiveDescriptor & Step<Signal<K, W>>, W, unknown>;
-} {
-	const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> {
-		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<K, V>>;
-		return result as V;
-	})();
-	(gen as any).as = <W>() => receive<W, K>(signal);
-	return gen as any;
+};
+// Overload 2: one signal, loop — utility over loop + receive
+// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
+export function receive<T, K extends string = string>(
+	signal: K,
+	handler: (payload: any, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
+): Workflow<T, Signal<K, any>>;
+// Overload 3: N signals, loop — utility over loop + race + receive
+// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
+export function receive<T, H extends Record<string, (...args: any[]) => any> = Record<string, (...args: any[]) => any>>(
+	handlers: H,
+): Workflow<T, HandleReqs<H>>;
+// biome-ignore lint/suspicious/noExplicitAny: overloaded function implementation
+export function receive(
+	signalOrHandlers: string | Record<string, (...args: any[]) => any>,
+	handler?: (...args: any[]) => Generator<any, void, any>,
+): any {
+	// Overload 1: one signal, once
+	if (typeof signalOrHandlers === "string" && !handler) {
+		const signal = signalOrHandlers;
+		const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<string, unknown>>, unknown, unknown> {
+			const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<string, unknown>>;
+			return result;
+		})();
+		(gen as any).as = <W>() => receive<W>(signal);
+		return gen;
+	}
+
+	const doneFn = <D>(value: D): Workflow<never> => loopBreak(value) as Workflow<never>;
+
+	// Overload 2: one signal, loop
+	if (typeof signalOrHandlers === "string" && handler) {
+		const signal = signalOrHandlers;
+		return loop(function* () {
+			const payload = yield* receive(signal);
+			yield* handler(payload, doneFn);
+		});
+	}
+
+	// Overload 3: N signals, loop
+	const handlers = signalOrHandlers as Record<string, (...args: any[]) => any>;
+	const handlerNames = Object.keys(handlers);
+	return loop(function* () {
+		const result = yield* (race(
+			...handlerNames.map((n) => receive(n)),
+		) as Generator<any, { winner: number; value: unknown }, unknown>);
+		const name = handlerNames[result.winner];
+		const h = handlers[name];
+		if (h) {
+			yield* h(result.value, doneFn);
+		}
+	});
 }
 
 export function sleep(durationMs: number): Generator<SleepDescriptor & Step<never>, void, unknown> {
@@ -670,7 +724,7 @@ export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Step<
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
 type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
 
-// Sentinel thrown by done() callbacks inside handle/subscribe to exit the loop.
+// Sentinel thrown by done() callbacks inside subscribe to exit the loop.
 export class DoneSignal {
 	constructor(public readonly value: unknown) {}
 }
@@ -682,43 +736,6 @@ export type SignalHandler<V = unknown> = (
 	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
 ) => Generator<any, void, any>;
 
-// Extracts Signal<K, V> for each handler key K with payload type V
-type HandleReqs<H> = {
-	// biome-ignore lint/suspicious/noExplicitAny: need any to match handler function shapes
-	[K in keyof H & string]: H[K] extends (payload: infer V, ...args: any[]) => any
-		? Signal<K, V>
-		: never;
-}[keyof H & string];
-
-// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
-export function handle<T, H extends Record<string, (...args: any[]) => any> = Record<string, (...args: any[]) => any>>(
-	handlers: H,
-): Workflow<T, HandleReqs<H>> {
-	const handlerNames = Object.keys(handlers);
-	const doneFn = <D>(value: D): Workflow<never> => {
-		return (function* (): Generator<never, never, unknown> {
-			throw new DoneSignal(value);
-		})();
-	};
-	return (function* (): Generator<Descriptor & Step<HandleReqs<H>>, T, unknown> {
-		for (;;) {
-			const result = yield* (race(
-				...handlerNames.map((n) => receive(n)),
-			) as Generator<Descriptor & Step<HandleReqs<H>>, { winner: number; value: unknown }, unknown>);
-			const signal = handlerNames[result.winner];
-			const handler = handlers[signal];
-			if (!handler) continue;
-			try {
-				yield* (handler as SignalHandler)(result.value, doneFn);
-			} catch (err) {
-				if (err instanceof DoneSignal) {
-					return err.value as T;
-				}
-				throw err;
-			}
-		}
-	})();
-}
 
 // Accepts any workflow function regardless of parameter or return types.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
