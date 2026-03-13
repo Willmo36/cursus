@@ -313,10 +313,10 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle propagates specific Signal requirements with payload types", () => {
+		it("handle propagates specific Signal requirements inferred from handler payload", () => {
 			const w = workflow(function* () {
-				return yield* handle<string, { greet: string }>({
-					greet: function* (payload, done) {
+				return yield* handle<string>({
+					greet: function* (payload: string, done) {
 						yield* done(payload);
 					},
 				});
@@ -329,11 +329,11 @@ describe("Monad laws", () => {
 
 		it("handle with multiple handlers propagates union of typed Signal requirements", () => {
 			const w = workflow(function* () {
-				return yield* handle<string, { greet: string; farewell: number }>({
-					greet: function* (payload, done) {
+				return yield* handle<string>({
+					greet: function* (payload: string, done) {
 						yield* done(payload);
 					},
-					farewell: function* (payload, done) {
+					farewell: function* (payload: number, done) {
 						yield* done(String(payload));
 					},
 				});
@@ -346,8 +346,8 @@ describe("Monad laws", () => {
 
 		it("handle propagates Publishes from handler bodies", () => {
 			const w = workflow(function* () {
-				return yield* handle<string, { go: undefined }>({
-					go: function* (_payload, done) {
+				return yield* handle<string>({
+					go: function* (_payload: undefined, done) {
 						yield* publish(42);
 						yield* done("result");
 					},
