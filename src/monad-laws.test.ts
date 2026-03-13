@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handle, join, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, handle, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
@@ -259,6 +259,121 @@ describe("Monad laws", () => {
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Publishes<number>> = true;
+			void _check;
+			void w;
+		});
+
+		it("sleep has no requirements", () => {
+			const w = workflow(function* () {
+				yield* sleep(100);
+				return "done";
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, never> = true;
+			void _check;
+			void w;
+		});
+
+		it("child has no requirements", () => {
+			const childWf = workflow(function* () {
+				return yield* activity("fetch", async () => 42);
+			});
+			const w = workflow(function* () {
+				return yield* child<number>("sub", childWf);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, never> = true;
+			void _check;
+			void w;
+		});
+
+		it("race propagates union of branch requirements", () => {
+			const w = workflow(function* () {
+				return yield* race(
+					receive("login").as<{ user: string }>(),
+					join("payment").as<number>(),
+				);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"login", { user: string }> | Result<"payment", number>> = true;
+			void _check;
+			void w;
+		});
+
+		it("all propagates union of branch requirements", () => {
+			const w = workflow(function* () {
+				return yield* all(
+					receive("login").as<{ user: string }>(),
+					published("config").as<{ url: string }>(),
+				);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"login", { user: string }> | Published<"config", { url: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("handle propagates specific Signal requirements for handler names", () => {
+			const w = workflow(function* () {
+				return yield* handle<string>({
+					greet: function* (payload, done) {
+						yield* done(payload as string);
+					},
+				});
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			// handle should carry Signal<"greet", ...> — not generic Signal<string, unknown>
+			const _check: AssertEqual<R, Signal<"greet", unknown>> = true;
+			void _check;
+			void w;
+		});
+
+		it("handle with multiple handlers propagates union of Signal requirements", () => {
+			const w = workflow(function* () {
+				return yield* handle<string>({
+					greet: function* (payload, done) {
+						yield* done(payload as string);
+					},
+					farewell: function* (payload, done) {
+						yield* done(payload as string);
+					},
+				});
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"greet", unknown> | Signal<"farewell", unknown>> = true;
+			void _check;
+			void w;
+		});
+
+		it("handle propagates Publishes from handler bodies", () => {
+			const w = workflow(function* () {
+				return yield* handle<string>({
+					go: function* (payload, done) {
+						yield* publish(42);
+						yield* done(payload as string);
+					},
+				});
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"go", unknown> | Publishes<number>> = true;
+			void _check;
+			void w;
+		});
+
+		it("subscribe propagates Published requirement for the subscribed workflow", () => {
+			type Account = { id: string; name: string };
+			const w = workflow(function* () {
+				yield* subscribe(
+					"account",
+					{ where: (s): s is Account => typeof s === "object" && s !== null },
+					function* (_value) {
+						yield* activity("process", async () => {});
+					},
+				);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			type HasPublished = Published<"account", Account> extends R ? true : false;
+			const _check: HasPublished = true;
 			void _check;
 			void w;
 		});
