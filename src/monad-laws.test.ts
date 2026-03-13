@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
-import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
+import { activity, all, child, handler, join, loop, loopBreak, output, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import type { Output, Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -469,6 +469,53 @@ describe("Monad laws", () => {
 			const _check: HasPublished = true;
 			void _check;
 			void w;
+		});
+
+		it("output().as<V>() infers workflow id and types value", () => {
+			const w = workflow(function* () {
+				const config = yield* output("config").as<{ url: string }>();
+				return config.url;
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Output<"config", { url: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("output() without .as() infers unknown value", () => {
+			const w = workflow(function* () {
+				const data = yield* output("payment");
+				return data;
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Output<"payment", unknown>> = true;
+			void _check;
+			void w;
+		});
+
+		it("output requirements do not widen to Output<string, any>", () => {
+			const w = workflow(function* () {
+				return yield* output("config").as<{ url: string }>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _notWide: AssertNotEqual<R, Output<string, any>> = true;
+			const _exact: AssertEqual<R, Output<"config", { url: string }>> = true;
+			void _notWide; void _exact; void w;
+		});
+
+		it("output in handler body propagates Output requirement up", () => {
+			const w = workflow(function* () {
+				return yield* handler()
+					.on("go", function* (_payload: undefined, done) {
+						const config = yield* output("config").as<{ url: string }>();
+						yield* done(config.url);
+					})
+					.as<string>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
+			const _hasOutput: AssertEqual<Output<"config", { url: string }> extends R ? true : false, true> = true;
+			void _hasSignal; void _hasOutput; void w;
 		});
 
 		it("multiple operations accumulate requirements as union", () => {
