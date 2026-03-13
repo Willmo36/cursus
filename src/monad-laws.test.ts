@@ -313,49 +313,48 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handle propagates specific Signal requirements for handler names", () => {
+		it("handle propagates specific Signal requirements with payload types", () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* handle<string, { greet: string }>({
 					greet: function* (payload, done) {
-						yield* done(payload as string);
+						yield* done(payload);
 					},
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			// handle should carry Signal<"greet", ...> — not generic Signal<string, unknown>
-			const _check: AssertEqual<R, Signal<"greet", unknown>> = true;
+			const _check: AssertEqual<R, Signal<"greet", string>> = true;
 			void _check;
 			void w;
 		});
 
-		it("handle with multiple handlers propagates union of Signal requirements", () => {
+		it("handle with multiple handlers propagates union of typed Signal requirements", () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
+				return yield* handle<string, { greet: string; farewell: number }>({
 					greet: function* (payload, done) {
-						yield* done(payload as string);
+						yield* done(payload);
 					},
 					farewell: function* (payload, done) {
-						yield* done(payload as string);
+						yield* done(String(payload));
 					},
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"greet", unknown> | Signal<"farewell", unknown>> = true;
+			const _check: AssertEqual<R, Signal<"greet", string> | Signal<"farewell", number>> = true;
 			void _check;
 			void w;
 		});
 
 		it("handle propagates Publishes from handler bodies", () => {
 			const w = workflow(function* () {
-				return yield* handle<string>({
-					go: function* (payload, done) {
+				return yield* handle<string, { go: undefined }>({
+					go: function* (_payload, done) {
 						yield* publish(42);
-						yield* done(payload as string);
+						yield* done("result");
 					},
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"go", unknown> | Publishes<number>> = true;
+			const _check: AssertEqual<R, Signal<"go", undefined> | Publishes<number>> = true;
 			void _check;
 			void w;
 		});
