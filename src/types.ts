@@ -508,11 +508,11 @@ export function receive<V, K extends string = string>(
 
 // Builder type that accumulates Signal requirements via .on() calls
 export type SignalReceiver<Reqs extends Requirement = never> = {
-	on: <K extends string, V>(
+	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
+	on: <K extends string, V, G extends Generator<any, void, any>>(
 		signal: K,
-		// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
-		fn: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
-	) => SignalReceiver<Reqs | Signal<K, V>>;
+		fn: (payload: V, done: <D>(value: D) => Workflow<never>) => G,
+	) => SignalReceiver<Reqs | Signal<K, V> | Req<G>>;
 	as: <T>() => Workflow<T, Reqs>;
 };
 

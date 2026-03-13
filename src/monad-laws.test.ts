@@ -390,9 +390,6 @@ describe("Monad laws", () => {
 		});
 
 		it("handler propagates Publishes from handler bodies", () => {
-			// TODO: TypeScript widens handler generator yield types to any when
-			// the constraint uses (...args: any[]) => any. Publishes from handler
-			// bodies are not captured in the workflow's requirements type.
 			const w = workflow(function* () {
 				return yield* handler()
 					.on("go", function* (_payload: undefined, done) {
@@ -402,7 +399,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"go", undefined>> = true;
+			const _check: AssertEqual<R, Signal<"go", undefined> | Publishes<number>> = true;
 			void _check;
 			void w;
 		});
