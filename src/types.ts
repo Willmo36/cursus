@@ -185,6 +185,17 @@ export type SubscribeDescriptor = {
 	) => Workflow<void, Requirement>;
 };
 
+export type LoopDescriptor = {
+	type: "loop";
+	// biome-ignore lint/suspicious/noExplicitAny: body factory returns any generator
+	body: () => Generator<any, void, any>;
+};
+
+export type LoopBreakDescriptor<V = unknown> = {
+	type: "loop_break";
+	value: V;
+};
+
 export type Descriptor =
 	| ActivityDescriptor
 	| ReceiveDescriptor
@@ -195,7 +206,9 @@ export type Descriptor =
 	| RaceDescriptor
 	| AllDescriptor
 	| PublishDescriptor
-	| SubscribeDescriptor;
+	| SubscribeDescriptor
+	| LoopDescriptor
+	| LoopBreakDescriptor;
 
 // --- Commands (descriptors with seq, internal to interpreter) ---
 
@@ -210,6 +223,9 @@ export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
 export type SubscribeCommand = SubscribeDescriptor & { seq: number };
 
+export type LoopCommand = LoopDescriptor & { seq: number };
+export type LoopBreakCommand = LoopBreakDescriptor & { seq: number };
+
 export type Command =
 	| ActivityCommand
 	| ReceiveCommand
@@ -220,7 +236,9 @@ export type Command =
 	| RaceCommand
 	| AllCommand
 	| PublishCommand
-	| SubscribeCommand;
+	| SubscribeCommand
+	| LoopCommand
+	| LoopBreakCommand;
 
 // --- Events (recorded in the event log) ---
 
@@ -383,6 +401,19 @@ export type WorkflowCancelledEvent = {
 	timestamp: number;
 };
 
+export type LoopStartedEvent = {
+	type: "loop_started";
+	seq: number;
+	timestamp: number;
+};
+
+export type LoopCompletedEvent = {
+	type: "loop_completed";
+	seq: number;
+	value: unknown;
+	timestamp: number;
+};
+
 export type WorkflowEvent =
 	| WorkflowStartedEvent
 	| ActivityScheduledEvent
@@ -405,7 +436,9 @@ export type WorkflowEvent =
 	| RaceCompletedEvent
 	| WorkflowCompletedEvent
 	| WorkflowFailedEvent
-	| WorkflowCancelledEvent;
+	| WorkflowCancelledEvent
+	| LoopStartedEvent
+	| LoopCompletedEvent;
 
 // --- Trace envelope ---
 
@@ -604,6 +637,38 @@ export function subscribe<T, V, K extends string = string>(
 		return result as T;
 	})();
 }
+
+// Extracts the break value type from a loop body's yield type
+type LoopBreakValue<Y> = Y extends LoopBreakDescriptor<infer V> ? V : never;
+
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
+export function loop<F extends () => Generator<any, void, any>>(
+	body: F,
+): Generator<
+	LoopDescriptor & Step<Exclude<Req<ReturnType<F>>, never>>,
+	LoopBreakValue<YieldOf<ReturnType<F>>>,
+	unknown
+> {
+	return (function* () {
+		const result = yield {
+			type: "loop" as const,
+			body,
+		} as LoopDescriptor & Step<Exclude<Req<ReturnType<F>>, never>>;
+		return result as LoopBreakValue<YieldOf<ReturnType<F>>>;
+	})();
+}
+
+export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Step<never>, never, unknown> {
+	return (function* (): Generator<LoopBreakDescriptor<V> & Step<never>, never, unknown> {
+		yield { type: "loop_break" as const, value } as LoopBreakDescriptor<V> & Step<never>;
+		// The interpreter will intercept this — control never returns here
+		throw new Error("loopBreak must be used inside a loop");
+	})();
+}
+
+// Helper to extract yield type from a generator
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
+type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
 
 // Sentinel thrown by done() callbacks inside handle/subscribe to exit the loop.
 export class DoneSignal {

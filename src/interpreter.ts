@@ -383,6 +383,10 @@ export class Interpreter {
 				return this.executePublish(command);
 			case "subscribe":
 				return this.executeSubscribe(command);
+			case "loop":
+				return this.executeLoop(command);
+			case "loop_break":
+				return this.executeLoopBreak(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -792,6 +796,50 @@ export class Interpreter {
 		}
 	}
 
+	private async executeLoop(
+		command: Extract<Command, { type: "loop" }>,
+	): Promise<unknown> {
+		// Replay path
+		const completed = this.log.findCompleted(command.seq, "loop_completed");
+		if (completed) {
+			return (completed as { value: unknown }).value;
+		}
+
+		this.log.append({
+			type: "loop_started",
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		for (;;) {
+			const bodyGen = command.body();
+			let next = bodyGen.next();
+			while (!next.done) {
+				const desc = next.value as Descriptor;
+				const cmd = this.assignSeq(desc);
+				if (cmd.type === "loop_break") {
+					const value = cmd.value;
+					this.log.append({
+						type: "loop_completed",
+						seq: command.seq,
+						value,
+						timestamp: Date.now(),
+					});
+					return value;
+				}
+				const result = await this.executeCommand(cmd);
+				next = bodyGen.next(result);
+			}
+			// Body completed without loopBreak — iterate again
+		}
+	}
+
+	private async executeLoopBreak(
+		_command: Extract<Command, { type: "loop_break" }>,
+	): Promise<never> {
+		throw new Error("loopBreak must be used inside a loop");
+	}
+
 	private async executeAll(
 		command: Extract<Command, { type: "all" }>,
 	): Promise<unknown[]> {
@@ -924,6 +972,12 @@ export class Interpreter {
 				}
 				case "subscribe": {
 					throw new Error("subscribe cannot be used inside an all branch");
+				}
+				case "loop": {
+					throw new Error("loop cannot be used inside an all branch");
+				}
+				case "loop_break": {
+					throw new Error("loop_break cannot be used inside an all branch");
 				}
 				default: {
 					const _exhaustive: never = item;
@@ -1125,6 +1179,15 @@ export class Interpreter {
 				}
 				case "subscribe": {
 					throw new Error("subscribe cannot be used inside a race branch");
+				}
+				case "loop": {
+					return this.executeLoop(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "loop_break": {
+					throw new Error("loop_break cannot be used inside a race branch");
 				}
 				default: {
 					const _exhaustive: never = item;

@@ -3728,9 +3728,22 @@ describe("Interpreter", () => {
 			const log = new EventLog();
 			const interpreter = new Interpreter(wf, log);
 			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
 			interpreter.signal("input", "hello");
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
 			interpreter.signal("input", "world");
+
+			await vi.waitFor(() => {
+				expect(interpreter.receiving).toBe("input");
+			});
 			interpreter.signal("input", "quit");
+
 			const result = await promise;
 
 			expect(result).toBe("done");
@@ -3841,7 +3854,15 @@ describe("Interpreter", () => {
 			const log = new EventLog();
 			const interp1 = new Interpreter(wf, log);
 			const promise = interp1.run();
+
+			await vi.waitFor(() => {
+				expect(interp1.receiving).toBe("input");
+			});
 			interp1.signal("input", "hello");
+
+			await vi.waitFor(() => {
+				expect(interp1.receiving).toBe("input");
+			});
 			interp1.signal("input", "quit");
 			await promise;
 
@@ -3867,8 +3888,17 @@ describe("Interpreter", () => {
 			const log = new EventLog();
 			const interpreter = new Interpreter(wf, log);
 			const promise = interpreter.run();
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
 			interpreter.signal("chat", "hello");
+
+			await vi.waitFor(() => {
+				expect(interpreter.status).toBe("waiting");
+			});
 			interpreter.signal("chat", "quit");
+
 			const result = await promise;
 
 			expect(result).toEqual({ winner: 0, value: "chat-done" });
