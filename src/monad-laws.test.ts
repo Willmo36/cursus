@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import { activity, all, child, handler, join, loop, loopBreak, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
 import type { Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
 
 /**
@@ -169,7 +169,8 @@ describe("Monad laws", () => {
 		});
 	});
 
-	type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
+	type AssertEqual<T, U> =
+		(<X>() => X extends T ? 1 : 2) extends (<X>() => X extends U ? 1 : 2) ? true : false;
 	type AssertNotEqual<T, U> = AssertEqual<T, U> extends true ? false : true;
 
 	describe("Requirement inference", () => {
@@ -314,13 +315,15 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("receive (single signal, loop) propagates Signal requirement with inferred payload", () => {
+		it("handler with single .on() propagates Signal requirement with inferred payload", () => {
 			const w = workflow(function* () {
-				return yield* receive("input", function* (msg: string, done) {
-					if (msg === "quit") {
-						yield* done("done");
-					}
-				});
+				return yield* handler()
+					.on("input", function* (msg: string, done) {
+						if (msg === "quit") {
+							yield* done("done");
+						}
+					})
+					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Signal<"input", string>> = true;
@@ -328,13 +331,13 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("receive (N signals) propagates specific Signal requirements inferred from handler payload", () => {
+		it("handler propagates specific Signal requirements inferred from handler payload", () => {
 			const w = workflow(function* () {
-				return yield* receive<string>({
-					greet: function* (payload: string, done) {
+				return yield* handler()
+					.on("greet", function* (payload: string, done) {
 						yield* done(payload);
-					},
-				});
+					})
+					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Signal<"greet", string>> = true;
@@ -342,16 +345,16 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("receive (N signals) with multiple handlers propagates union of typed Signal requirements", () => {
+		it("handler with multiple .on() calls propagates union of typed Signal requirements", () => {
 			const w = workflow(function* () {
-				return yield* receive<string>({
-					greet: function* (payload: string, done) {
+				return yield* handler()
+					.on("greet", function* (payload: string, done) {
 						yield* done(payload);
-					},
-					farewell: function* (payload: number, done) {
+					})
+					.on("farewell", function* (payload: number, done) {
 						yield* done(String(payload));
-					},
-				});
+					})
+					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Signal<"greet", string> | Signal<"farewell", number>> = true;
@@ -360,7 +363,7 @@ describe("Monad laws", () => {
 		});
 
 		it("receive requirements do not widen to Signal<string, any>", () => {
-			// Overload 1: signal name stays literal
+			// receive: signal name stays literal
 			const w1 = workflow(function* () {
 				return yield* receive("submit").as<{ data: number }>();
 			});
@@ -369,45 +372,34 @@ describe("Monad laws", () => {
 			const _exact1: AssertEqual<R1, Signal<"submit", { data: number }>> = true;
 			void _notWide1; void _exact1; void w1;
 
-			// Overload 2: signal name + payload stay specific
+			// handler: stays as union of specific signals
 			const w2 = workflow(function* () {
-				return yield* receive("input", function* (msg: string, done) {
-					yield* done(msg);
-				});
+				return yield* handler()
+					.on("greet", function* (payload: string, done) {
+						yield* done(payload);
+					})
+					.on("farewell", function* (payload: number, done) {
+						yield* done(String(payload));
+					})
+					.as<string>();
 			});
 			type R2 = Requirements<ReturnType<typeof w2>>;
 			const _notWide2: AssertNotEqual<R2, Signal<string, any>> = true;
-			const _exact2: AssertEqual<R2, Signal<"input", string>> = true;
+			const _exact2: AssertEqual<R2, Signal<"greet", string> | Signal<"farewell", number>> = true;
 			void _notWide2; void _exact2; void w2;
-
-			// Overload 3: handler map stays as union of specific signals
-			const w3 = workflow(function* () {
-				return yield* receive<string>({
-					greet: function* (payload: string, done) {
-						yield* done(payload);
-					},
-					farewell: function* (payload: number, done) {
-						yield* done(String(payload));
-					},
-				});
-			});
-			type R3 = Requirements<ReturnType<typeof w3>>;
-			const _notWide3: AssertNotEqual<R3, Signal<string, any>> = true;
-			const _exact3: AssertEqual<R3, Signal<"greet", string> | Signal<"farewell", number>> = true;
-			void _notWide3; void _exact3; void w3;
 		});
 
-		it("receive (N signals) propagates Publishes from handler bodies", () => {
+		it("handler propagates Publishes from handler bodies", () => {
 			// TODO: TypeScript widens handler generator yield types to any when
 			// the constraint uses (...args: any[]) => any. Publishes from handler
 			// bodies are not captured in the workflow's requirements type.
 			const w = workflow(function* () {
-				return yield* receive<string>({
-					go: function* (_payload: undefined, done) {
+				return yield* handler()
+					.on("go", function* (_payload: undefined, done) {
 						yield* publish(42);
 						yield* done("result");
-					},
-				});
+					})
+					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<R, Signal<"go", undefined>> = true;
@@ -618,13 +610,13 @@ describe("Monad laws", () => {
 			void _check;
 		});
 
-		it("receive (N signals) dispatches to matching handler", async () => {
+		it("handler dispatches to matching handler", async () => {
 			const w = workflow(function* () {
-				return yield* receive<string>({
-					greet: function* (name, done) {
-						yield* done(name as string);
-					},
-				});
+				return yield* handler()
+					.on("greet", function* (name: string, done) {
+						yield* done(name);
+					})
+					.as<string>();
 			});
 
 			const result = await createTestRuntime(w, {
@@ -633,14 +625,14 @@ describe("Monad laws", () => {
 			expect(result).toBe("Max");
 		});
 
-		it("receive (N signals) handlers can use free functions", async () => {
+		it("handler handlers can use free functions", async () => {
 			const w = workflow(function* () {
-				return yield* receive<string>({
-					go: function* (_payload, done) {
+				return yield* handler()
+					.on("go", function* (_payload: undefined, done) {
 						const result = yield* activity("fetch", async () => "fetched");
 						yield* done(result);
-					},
-				});
+					})
+					.as<string>();
 			});
 
 			const result = await createTestRuntime(w, {

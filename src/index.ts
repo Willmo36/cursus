@@ -56,6 +56,7 @@ export type {
 	Signal,
 	SignalHandler,
 	SignalMapOf,
+	SignalReceiver,
 	SleepCommand,
 	SleepDescriptor,
 	SubscribeCommand,
@@ -73,5 +74,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CANCELLED, CancelledError, child, COMPLETED, DoneSignal, FAILED, join, loop, loopBreak, publish, published, race, receive, RUNNING, sleep, subscribe, WAITING, workflow } from "./types";
+export { activity, all, CANCELLED, CancelledError, child, COMPLETED, DoneSignal, FAILED, handler, join, loop, loopBreak, publish, published, race, receive, RUNNING, sleep, subscribe, WAITING, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";

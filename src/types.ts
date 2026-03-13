@@ -489,75 +489,55 @@ export function activity<T>(
 	})();
 }
 
-// Extracts Signal<K, V> for each handler key K with payload type V
-type HandleReqs<H> = {
-	// biome-ignore lint/suspicious/noExplicitAny: need any to match handler function shapes
-	[K in keyof H & string]: H[K] extends (payload: infer V, ...args: any[]) => any
-		? Signal<K, V>
-		: never;
-}[keyof H & string];
+// --- receive: primitive signal-waiting command ---
 
-type ReceiveBuilder<K extends string> = Generator<ReceiveDescriptor & Step<Signal<K, unknown>>, unknown, unknown> & {
-	as: <V>() => Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown>;
-};
-
-// Overload 1: one signal, once — primitive command
 export function receive<V, K extends string = string>(
 	signal: K,
 ): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> & {
 	as: <W>() => Generator<ReceiveDescriptor & Step<Signal<K, W>>, W, unknown>;
+} {
+	const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<string, unknown>>, unknown, unknown> {
+		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<string, unknown>>;
+		return result;
+	})();
+	(gen as any).as = <W>() => receive<W>(signal);
+	return gen as any;
+}
+
+// --- handler: multi-signal loop builder ---
+
+// Builder type that accumulates Signal requirements via .on() calls
+export type SignalReceiver<Reqs extends Requirement = never> = {
+	on: <K extends string, V>(
+		signal: K,
+		// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
+		fn: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
+	) => SignalReceiver<Reqs | Signal<K, V>>;
+	as: <T>() => Workflow<T, Reqs>;
 };
-// Overload 2: one signal, loop — utility over loop + receive
-// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
-export function receive<T, V = unknown, K extends string = string>(
-	signal: K,
-	handler: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
-): Workflow<T, Signal<K, V>>;
-// Overload 3: N signals, loop — utility over loop + race + receive
-// biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
-export function receive<T, H extends Record<string, (...args: any[]) => any> = Record<string, (...args: any[]) => any>>(
-	handlers: H,
-): Workflow<T, HandleReqs<H>>;
-// biome-ignore lint/suspicious/noExplicitAny: overloaded function implementation
-export function receive(
-	signalOrHandlers: string | Record<string, (...args: any[]) => any>,
-	handler?: (...args: any[]) => Generator<any, void, any>,
-): any {
-	// Overload 1: one signal, once
-	if (typeof signalOrHandlers === "string" && !handler) {
-		const signal = signalOrHandlers;
-		const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<string, unknown>>, unknown, unknown> {
-			const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<string, unknown>>;
-			return result;
-		})();
-		(gen as any).as = <W>() => receive<W>(signal);
-		return gen;
-	}
 
-	const doneFn = <D>(value: D): Workflow<never> => loopBreak(value) as Workflow<never>;
-
-	// Overload 2: one signal, loop
-	if (typeof signalOrHandlers === "string" && handler) {
-		const signal = signalOrHandlers;
-		return loop(function* () {
-			const payload = yield* receive(signal);
-			yield* handler(payload, doneFn);
-		});
-	}
-
-	// Overload 3: N signals, loop
-	const handlers = signalOrHandlers as Record<string, (...args: any[]) => any>;
-	const handlerNames = Object.keys(handlers);
-	return loop(function* () {
-		const result = yield* (race(
-			...handlerNames.map((n) => receive(n)),
-		) as Generator<any, { winner: number; value: unknown }, unknown>);
-		const name = handlerNames[result.winner];
-		const h = handlers[name];
-		if (h) {
-			yield* h(result.value, doneFn);
-		}
-	});
+export function handler(): SignalReceiver {
+	// biome-ignore lint/suspicious/noExplicitAny: internal handler storage
+	const handlers: Array<{ signal: string; fn: (...args: any[]) => Generator<any, void, any> }> = [];
+	const builder: SignalReceiver = {
+		on(sig, fn) {
+			handlers.push({ signal: sig, fn: fn as any });
+			return builder as any;
+		},
+		as() {
+			const doneFn = <D>(value: D): Workflow<never> => loopBreak(value) as Workflow<never>;
+			return loop(function* () {
+				const result = yield* (race(
+					...handlers.map((h) => receive(h.signal)),
+				) as Generator<any, { winner: number; value: unknown }, unknown>);
+				const h = handlers[result.winner];
+				if (h) {
+					yield* h.fn(result.value, doneFn);
+				}
+			}) as any;
+		},
+	};
+	return builder;
 }
 
 export function sleep(durationMs: number): Generator<SleepDescriptor & Step<never>, void, unknown> {

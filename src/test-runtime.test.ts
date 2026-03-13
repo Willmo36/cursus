@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, join, race, receive, workflow } from "./types";
+import { activity, all, child, handler, join, race, receive, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -189,17 +189,17 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("b:bee");
 	});
 
-	it("runs an on/done loop with pre-queued signals", async () => {
+	it("runs a handler loop with pre-queued signals", async () => {
 		const wf = workflow(function* () {
 			let count = 0;
-			return yield* receive<number>({
-				inc: function* () {
+			return yield* handler()
+				.on("inc", function* () {
 					count++;
-				},
-				finish: function* (_payload, done) {
+				})
+				.on("finish", function* (_payload: undefined, done) {
 					yield* done(count);
-				},
-			});
+				})
+				.as<number>();
 		});
 
 		const result = await createTestRuntime(wf, {
