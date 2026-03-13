@@ -509,10 +509,10 @@ export function receive<V, K extends string = string>(
 };
 // Overload 2: one signal, loop — utility over loop + receive
 // biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
-export function receive<T, K extends string = string>(
+export function receive<T, V = unknown, K extends string = string>(
 	signal: K,
-	handler: (payload: any, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
-): Workflow<T, Signal<K, any>>;
+	handler: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator<any, void, any>,
+): Workflow<T, Signal<K, V>>;
 // Overload 3: N signals, loop — utility over loop + race + receive
 // biome-ignore lint/suspicious/noExplicitAny: need any for handler inference
 export function receive<T, H extends Record<string, (...args: any[]) => any> = Record<string, (...args: any[]) => any>>(

@@ -170,6 +170,7 @@ describe("Monad laws", () => {
 	});
 
 	type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
+	type AssertNotEqual<T, U> = AssertEqual<T, U> extends true ? false : true;
 
 	describe("Requirement inference", () => {
 
@@ -313,6 +314,20 @@ describe("Monad laws", () => {
 			void w;
 		});
 
+		it("receive (single signal, loop) propagates Signal requirement with inferred payload", () => {
+			const w = workflow(function* () {
+				return yield* receive("input", function* (msg: string, done) {
+					if (msg === "quit") {
+						yield* done("done");
+					}
+				});
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Signal<"input", string>> = true;
+			void _check;
+			void w;
+		});
+
 		it("receive (N signals) propagates specific Signal requirements inferred from handler payload", () => {
 			const w = workflow(function* () {
 				return yield* receive<string>({
@@ -342,6 +357,44 @@ describe("Monad laws", () => {
 			const _check: AssertEqual<R, Signal<"greet", string> | Signal<"farewell", number>> = true;
 			void _check;
 			void w;
+		});
+
+		it("receive requirements do not widen to Signal<string, any>", () => {
+			// Overload 1: signal name stays literal
+			const w1 = workflow(function* () {
+				return yield* receive("submit").as<{ data: number }>();
+			});
+			type R1 = Requirements<ReturnType<typeof w1>>;
+			const _notWide1: AssertNotEqual<R1, Signal<string, any>> = true;
+			const _exact1: AssertEqual<R1, Signal<"submit", { data: number }>> = true;
+			void _notWide1; void _exact1; void w1;
+
+			// Overload 2: signal name + payload stay specific
+			const w2 = workflow(function* () {
+				return yield* receive("input", function* (msg: string, done) {
+					yield* done(msg);
+				});
+			});
+			type R2 = Requirements<ReturnType<typeof w2>>;
+			const _notWide2: AssertNotEqual<R2, Signal<string, any>> = true;
+			const _exact2: AssertEqual<R2, Signal<"input", string>> = true;
+			void _notWide2; void _exact2; void w2;
+
+			// Overload 3: handler map stays as union of specific signals
+			const w3 = workflow(function* () {
+				return yield* receive<string>({
+					greet: function* (payload: string, done) {
+						yield* done(payload);
+					},
+					farewell: function* (payload: number, done) {
+						yield* done(String(payload));
+					},
+				});
+			});
+			type R3 = Requirements<ReturnType<typeof w3>>;
+			const _notWide3: AssertNotEqual<R3, Signal<string, any>> = true;
+			const _exact3: AssertEqual<R3, Signal<"greet", string> | Signal<"farewell", number>> = true;
+			void _notWide3; void _exact3; void w3;
 		});
 
 		it("receive (N signals) propagates Publishes from handler bodies", () => {
