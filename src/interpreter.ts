@@ -375,6 +375,8 @@ export class Interpreter {
 				return this.executePublishedCommand(command);
 			case "join":
 				return this.executeJoinCommand(command);
+			case "output":
+				return this.executeOutput(command);
 			case "race":
 				return this.executeRace(command);
 			case "all":
@@ -725,6 +727,71 @@ export class Interpreter {
 		}
 	}
 
+	private async executeOutput(
+		command: Extract<Command, { type: "output" }>,
+	): Promise<unknown> {
+		// Check for replay
+		const completed = this.log.findCompleted(
+			command.seq,
+			"workflow_output_resolved",
+		);
+		if (completed) {
+			return (completed as { result: unknown }).result;
+		}
+
+		// Check for replay: failed
+		const failed = this.log.findCompleted(
+			command.seq,
+			"workflow_dependency_failed",
+		);
+		if (failed) {
+			throw new Error((failed as { error: string }).error);
+		}
+
+		// Live: require registry
+		if (!this.registry) {
+			throw new Error(
+				"output requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
+			);
+		}
+
+		this.log.append({
+			type: "workflow_dependency_started",
+			workflowId: command.workflowId,
+			seq: command.seq,
+			timestamp: Date.now(),
+		});
+
+		try {
+			const result = await this.registry.waitFor(command.workflowId, {
+				start: command.start,
+				caller: this._workflowId,
+			});
+
+			this.log.append({
+				type: "workflow_output_resolved",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				result,
+				timestamp: Date.now(),
+			});
+
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
+			this.log.append({
+				type: "workflow_dependency_failed",
+				workflowId: command.workflowId,
+				seq: command.seq,
+				error: message,
+				stack,
+				timestamp: Date.now(),
+			});
+			throw err;
+		}
+	}
+
 	private async executePublish(
 		command: Extract<Command, { type: "publish" }>,
 	): Promise<void> {
@@ -916,6 +983,12 @@ export class Interpreter {
 				}
 				case "join": {
 					return this.executeJoinCommand(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "output": {
+					return this.executeOutput(item).then((value) => ({
 						index,
 						value,
 					}));
@@ -1158,6 +1231,12 @@ export class Interpreter {
 				}
 				case "join": {
 					return this.executeJoinCommand(item).then((value) => ({
+						index,
+						value,
+					}));
+				}
+				case "output": {
+					return this.executeOutput(item).then((value) => ({
 						index,
 						value,
 					}));
