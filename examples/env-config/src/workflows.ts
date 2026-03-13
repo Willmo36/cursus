@@ -1,6 +1,6 @@
 // ABOUTME: Environment and user profile workflows demonstrating infrastructure dependencies.
 // ABOUTME: The env workflow parses config; the user workflow consumes it via join.
-import { activity, join, workflow } from "cursus";
+import { activity, output, workflow } from "cursus";
 
 // --- Types ---
 
@@ -34,7 +34,7 @@ export const envWorkflow = workflow(function* () {
 // --- User workflow (local, depends on env) ---
 
 export const userWorkflow = workflow(function* () {
-	const env = yield* join("env").as<EnvConfig>();
+	const env = yield* output("env").as<EnvConfig>();
 
 	const user = yield* activity("fetch-user", async () => {
 		const url = `${env.baseUrl}/user`;

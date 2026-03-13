@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, join, output, race, receive, workflow } from "./types";
+import { activity, all, child, handler, output, race, receive, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -106,9 +106,9 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("test@example.com:secret123");
 	});
 
-	it("mocks join with workflowResults", async () => {
+	it("mocks output with workflowResults", async () => {
 		const wf = workflow(function* () {
-			const user = yield* join("login");
+			const user = yield* output("login");
 			return `got: ${user}`;
 		});
 
@@ -123,7 +123,7 @@ describe("createTestRuntime", () => {
 
 	it("workflowResults works alongside activities and signals", async () => {
 		const wf = workflow(function* () {
-			const user = yield* join("login");
+			const user = yield* output("login");
 			const greeting = yield* activity("greet", async () => "real");
 			const confirm = yield* receive("confirm");
 			return `${user}:${greeting}:${confirm}`;
@@ -136,21 +136,6 @@ describe("createTestRuntime", () => {
 		});
 
 		expect(result).toBe("mock-user:mock-hello:yes");
-	});
-
-	it("mocks output with workflowResults", async () => {
-		const wf = workflow(function* () {
-			const config = yield* output("config");
-			return `got: ${config}`;
-		});
-
-		const result = await createTestRuntime(wf, {
-			workflowResults: {
-				config: "test-config",
-			},
-		});
-
-		expect(result).toBe("got: test-config");
 	});
 
 	it("handles workflow that catches activity error", async () => {
@@ -177,7 +162,7 @@ describe("createTestRuntime", () => {
 
 	it("runs mixed all with signals and workflowResults", async () => {
 		const wf = workflow(function* () {
-			return yield* all(receive("payment"), join("profile"));
+			return yield* all(receive("payment"), output("profile"));
 		});
 
 		const result = await createTestRuntime(wf, {

@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, join, loop, loopBreak, output, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
-import type { Output, Published, Publishes, Requirements, Result, Signal, Workflow } from "./types";
+import { activity, all, child, handler, loop, loopBreak, output, publish, race, receive, sleep, workflow } from "./types";
+import type { Output, Publishes, Requirements, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -196,65 +196,6 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("published propagates Published requirement", () => {
-			const w = workflow(function* () {
-				const config = yield* published("config").as<{ url: string }>();
-				return config.url;
-			});
-			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Published<"config", { url: string }>> = true;
-			void _check;
-			void w;
-		});
-
-		it("published().as<V>() infers workflow id and types value", async () => {
-			const w = workflow(function* () {
-				const config = yield* published("config").as<{ url: string }>();
-				return config.url;
-			});
-
-			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Published<"config", { url: string }>> = true;
-			void _check;
-			void w;
-		});
-
-		it("published() without .as() infers unknown value", () => {
-			const w = workflow(function* () {
-				const data = yield* published("config");
-				return data;
-			});
-
-			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Published<"config", unknown>> = true;
-			void _check;
-			void w;
-		});
-
-		it("join().as<V>() infers workflow id and types result", () => {
-			const w = workflow(function* () {
-				const result = yield* join("payment").as<{ receipt: string }>();
-				return result.receipt;
-			});
-
-			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Result<"payment", { receipt: string }>> = true;
-			void _check;
-			void w;
-		});
-
-		it("join() without .as() infers unknown result", () => {
-			const w = workflow(function* () {
-				const data = yield* join("payment");
-				return data;
-			});
-
-			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Result<"payment", unknown>> = true;
-			void _check;
-			void w;
-		});
-
 		it("publish propagates Publishes requirement", () => {
 			const w = workflow(function* () {
 				yield* publish(42);
@@ -293,11 +234,11 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* race(
 					receive("login").as<{ user: string }>(),
-					join("payment").as<number>(),
+					output("payment").as<number>(),
 				);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", { user: string }> | Result<"payment", number>> = true;
+			const _check: AssertEqual<R, Signal<"login", { user: string }> | Output<"payment", number>> = true;
 			void _check;
 			void w;
 		});
@@ -306,11 +247,11 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* all(
 					receive("login").as<{ user: string }>(),
-					published("config").as<{ url: string }>(),
+					output("config").as<{ url: string }>(),
 				);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", { user: string }> | Published<"config", { url: string }>> = true;
+			const _check: AssertEqual<R, Signal<"login", { user: string }> | Output<"config", { url: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -404,34 +345,19 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handler propagates Published requirement from handler body", () => {
+		it("handler propagates Output requirement from handler body", () => {
 			const w = workflow(function* () {
 				return yield* handler()
 					.on("go", function* (_payload: undefined, done) {
-						const config = yield* published("config").as<{ url: string }>();
+						const config = yield* output("config").as<{ url: string }>();
 						yield* done(config.url);
 					})
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
-			const _hasPublished: AssertEqual<Published<"config", { url: string }> extends R ? true : false, true> = true;
-			void _hasSignal; void _hasPublished; void w;
-		});
-
-		it("handler propagates Result requirement from join in handler body", () => {
-			const w = workflow(function* () {
-				return yield* handler()
-					.on("go", function* (_payload: undefined, done) {
-						const user = yield* join("login").as<string>();
-						yield* done(user);
-					})
-					.as<string>();
-			});
-			type R = Requirements<ReturnType<typeof w>>;
-			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
-			const _hasResult: AssertEqual<Result<"login", string> extends R ? true : false, true> = true;
-			void _hasSignal; void _hasResult; void w;
+			const _hasOutput: AssertEqual<Output<"config", { url: string }> extends R ? true : false, true> = true;
+			void _hasSignal; void _hasOutput; void w;
 		});
 
 		it("nested handler propagates inner signals up through outer handler", () => {
@@ -451,24 +377,6 @@ describe("Monad laws", () => {
 			const _hasOuter: AssertEqual<Signal<"start", undefined> extends R ? true : false, true> = true;
 			const _hasInner: AssertEqual<Signal<"confirm", string> extends R ? true : false, true> = true;
 			void _hasOuter; void _hasInner; void w;
-		});
-
-		it("subscribe propagates Published requirement for the subscribed workflow", () => {
-			type Account = { id: string; name: string };
-			const w = workflow(function* () {
-				yield* subscribe(
-					"account",
-					{ where: (s): s is Account => typeof s === "object" && s !== null },
-					function* (_value) {
-						yield* activity("process", async () => {});
-					},
-				);
-			});
-			type R = Requirements<ReturnType<typeof w>>;
-			type HasPublished = Published<"account", Account> extends R ? true : false;
-			const _check: HasPublished = true;
-			void _check;
-			void w;
 		});
 
 		it("output().as<V>() infers workflow id and types value", () => {
@@ -520,7 +428,7 @@ describe("Monad laws", () => {
 
 		it("multiple operations accumulate requirements as union", () => {
 			const w = workflow(function* () {
-				const config = yield* published("config").as<{ url: string }>();
+				const config = yield* output("config").as<{ url: string }>();
 				const user = yield* receive("login").as<{ name: string }>();
 				yield* publish(42);
 				return `${config.url}-${user.name}`;
@@ -528,7 +436,7 @@ describe("Monad laws", () => {
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<
 				R,
-				| Published<"config", { url: string }>
+				| Output<"config", { url: string }>
 				| Signal<"login", { name: string }>
 				| Publishes<number>
 			> = true;

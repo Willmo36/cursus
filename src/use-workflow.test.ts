@@ -12,7 +12,7 @@ import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
-import { activity, all, join, publish, race, receive, workflow } from "./types";
+import { activity, all, output, publish, race, receive, workflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -645,7 +645,7 @@ describe("useWorkflow", () => {
 			});
 
 			const localWorkflow = workflow(function* () {
-				const user = yield* join("login");
+				const user = yield* output("login");
 				return `local got: ${user}`;
 			});
 
@@ -673,7 +673,7 @@ describe("useWorkflow", () => {
 
 			const checkoutWorkflow = workflow(function* () {
 				const payment = yield* receive("payment");
-				const profile = yield* join("profile");
+				const profile = yield* output("profile");
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
 				});
@@ -728,7 +728,7 @@ describe("useWorkflow", () => {
 			const checkoutWf = workflow(function* () {
 				const [payment, profile] = yield* all(
 					receive("payment"),
-					join("profile"),
+					output("profile"),
 				);
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
@@ -1116,7 +1116,7 @@ describe("useWorkflow", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* join("profile").as<{ name: string }>();
+				const profile = yield* output("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 

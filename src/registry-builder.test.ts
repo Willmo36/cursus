@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
-import { activity, join, publish, published, receive, workflow } from "./types";
-import type { Published, Publishes, Requirements, Result, Signal } from "./types";
+import { activity, join, output, publish, published, receive, workflow } from "./types";
+import type { Output, Published, Publishes, Requirements, Result, Signal } from "./types";
 
 type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
 
@@ -26,13 +26,13 @@ describe("Registry builder", () => {
 		expect(registry).toBeDefined();
 	});
 
-	it("adds a workflow that depends on a previously added workflow via join", () => {
+	it("adds a workflow that depends on a previously added workflow via output", () => {
 		const profileWorkflow = workflow(function* () {
 			return yield* activity("fetch", async () => ({ name: "Max" }));
 		});
 
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* join("profile").as<{ name: string }>();
+			const profile = yield* output("profile").as<{ name: string }>();
 			return yield* activity("checkout", async () => `order for ${profile.name}`);
 		});
 
@@ -44,14 +44,14 @@ describe("Registry builder", () => {
 		expect(registry).toBeDefined();
 	});
 
-	it("adds a workflow that depends on a published value", () => {
+	it("adds a workflow that depends on a published value via output", () => {
 		const sessionWorkflow = workflow(function* () {
 			yield* publish({ token: "abc" });
 			return "done";
 		});
 
 		const dashboardWorkflow = workflow(function* () {
-			const session = yield* published("session").as<{ token: string }>();
+			const session = yield* output("session").as<{ token: string }>();
 			return `dashboard: ${session.token}`;
 		});
 
@@ -86,24 +86,14 @@ describe("Registry builder", () => {
 		expect(registry).toBeDefined();
 	});
 
-	it("rejects workflow with unsatisfied Result dependency (type-level)", () => {
+	it("rejects workflow with unsatisfied Output dependency (type-level)", () => {
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* join("profile").as<{ name: string }>();
+			const profile = yield* output("profile").as<{ name: string }>();
 			return profile.name;
 		});
 
 		// @ts-expect-error — "profile" is not provided, should fail
 		createRegistry(new MemoryStorage()).add("checkout", checkoutWorkflow);
-	});
-
-	it("rejects workflow with unsatisfied Published dependency (type-level)", () => {
-		const dashboardWorkflow = workflow(function* () {
-			const session = yield* published("session").as<{ token: string }>();
-			return session.token;
-		});
-
-		// @ts-expect-error — "session" is not provided, should fail
-		createRegistry(new MemoryStorage()).add("dashboard", dashboardWorkflow);
 	});
 
 	describe("build()", () => {
@@ -130,7 +120,7 @@ describe("Registry builder", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* join("profile").as<{ name: string }>();
+				const profile = yield* output("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 

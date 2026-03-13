@@ -1,6 +1,6 @@
 // ABOUTME: Profile and checkout workflows demonstrating cross-workflow dependencies.
 // ABOUTME: The checkout workflow uses all() to wait for payment and the profile workflow.
-import { activity, all, join, receive, workflow } from "cursus";
+import { activity, all, output, receive, workflow } from "cursus";
 
 // --- Profile workflow (registered globally) ---
 
@@ -36,7 +36,7 @@ type OrderConfirmation = {
 export const checkoutWorkflow = workflow(function* () {
 	const [payment, profile] = yield* all(
 		receive("payment").as<PaymentInfo>(),
-		join("profile").as<UserProfile>(),
+		output("profile").as<UserProfile>(),
 	);
 
 	const order = yield* activity("place-order", async () => {

@@ -6,7 +6,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import { activity, all, handler, join, publish, published, race, receive, sleep, subscribe, workflow } from "./types";
+import { activity, all, handler, output, publish, race, receive, sleep, workflow } from "./types";
 import type {
 	WorkflowEvent,
 	WorkflowEventObserver,
@@ -592,11 +592,11 @@ describe("WorkflowRegistry", () => {
 	describe("circular dependency detection", () => {
 		it("detects a direct cycle (A → B → A)", async () => {
 			const wfA = workflow(function* () {
-				return yield* join("B");
+				return yield* output("B");
 			});
 
 			const wfB = workflow(function* () {
-				return yield* join("A");
+				return yield* output("A");
 			});
 
 			const storage = new MemoryStorage();
@@ -616,15 +616,15 @@ describe("WorkflowRegistry", () => {
 
 		it("detects a transitive cycle (A → B → C → A)", async () => {
 			const wfA = workflow(function* () {
-				return yield* join("B");
+				return yield* output("B");
 			});
 
 			const wfB = workflow(function* () {
-				return yield* join("C");
+				return yield* output("C");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* join("A");
+				return yield* output("A");
 			});
 
 			const storage = new MemoryStorage();
@@ -649,11 +649,11 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const wfA = workflow(function* () {
-				return yield* join("target");
+				return yield* output("target");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* join("target");
+				return yield* output("target");
 			});
 
 			const storage = new MemoryStorage();
@@ -673,12 +673,12 @@ describe("WorkflowRegistry", () => {
 
 		it("detects a cycle through all() with workflow refs", async () => {
 			const wfA = workflow(function* () {
-				const [result] = yield* all(join("B"));
+				const [result] = yield* all(output("B"));
 				return result;
 			});
 
 			const wfB = workflow(function* () {
-				return yield* join("A");
+				return yield* output("A");
 			});
 
 			const storage = new MemoryStorage();
@@ -700,11 +700,11 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const wfB = workflow(function* () {
-				return yield* join("A");
+				return yield* output("A");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* join("B");
+				return yield* output("B");
 			});
 
 			const storage = new MemoryStorage();
@@ -984,7 +984,7 @@ describe("WorkflowRegistry", () => {
 			expect(result).toBe("hello");
 		});
 
-		it("integration: published() gets published value from another workflow", async () => {
+		it("integration: output() gets published value from another workflow", async () => {
 			const sessionWf = workflow(function* () {
 				const { user } = yield* receive<{ user: string }>("login");
 				yield* publish({ user });
@@ -992,7 +992,7 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const checkoutWf = workflow(function* () {
-				const account = yield* published<{ user: string }>("session");
+				const account = yield* output<{ user: string }>("session");
 				return `checkout for ${account.user}`;
 			});
 
@@ -1361,187 +1361,6 @@ describe("WorkflowRegistry", () => {
 			registry.signal("counter", "inc", undefined);
 			await new Promise((r) => setTimeout(r, 10));
 			expect(resolvedValue).toEqual({ count: 3 });
-		});
-	});
-
-	describe("ctx.subscribe()", () => {
-		it("runs callback each time dependency publishes a new value", async () => {
-			const fetchCalls: number[] = [];
-
-			const accountWf = workflow(function* () {
-				yield* publish({ name: "max" });
-				yield* handler()
-					.on("update", function* (payload: { name: string }) {
-						yield* publish(payload);
-					})
-					.as<void>();
-			});
-
-			const pointsWf = workflow(function* () {
-				let callCount = 0;
-				yield* subscribe("account", {}, function* (account) {
-					callCount++;
-					fetchCalls.push(callCount);
-					const points = yield* activity(
-						"fetchPoints",
-						async () => callCount * 100,
-					);
-					yield* publish(points);
-				});
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry(
-				{ account: accountWf, points: pointsWf },
-				storage,
-			);
-
-			// Start both
-			const accountPromise = registry.start("account");
-			await new Promise((r) => setTimeout(r, 10));
-			const pointsPromise = registry.start("points");
-			await new Promise((r) => setTimeout(r, 10));
-
-			// Points should have fetched once for initial publish
-			expect(fetchCalls).toEqual([1]);
-
-			// Update account — should trigger points to refetch
-			registry.signal("account", "update", { name: "max2" });
-			await new Promise((r) => setTimeout(r, 50));
-
-			expect(fetchCalls).toEqual([1, 2]);
-		});
-
-		it("runs body to completion before waiting for next publish", async () => {
-			const bodyCalls: number[] = [];
-
-			const sourceWf = workflow(function* () {
-				yield* publish(1);
-				yield* handler()
-					.on("bump", function* () {
-						yield* publish(2);
-					})
-					.as<void>();
-			});
-
-			const reactiveWf = workflow(function* () {
-				yield* subscribe("source", {}, function* (value) {
-					const result = yield* activity(
-						"fetch",
-						async () => `result-${value}`,
-					);
-					bodyCalls.push(value as number);
-					yield* publish(result);
-				});
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry(
-				{ source: sourceWf, reactive: reactiveWf },
-				storage,
-			);
-
-			registry.start("source");
-			await new Promise((r) => setTimeout(r, 10));
-			registry.start("reactive");
-			await new Promise((r) => setTimeout(r, 50));
-
-			// First body completed with value 1
-			expect(bodyCalls).toEqual([1]);
-
-			// Bump to value 2 — should trigger second body
-			registry.signal("source", "bump", undefined);
-			await new Promise((r) => setTimeout(r, 50));
-
-			expect(bodyCalls).toEqual([1, 2]);
-		});
-
-		it("subscribe with where filters values", async () => {
-			type UserState = { status: "loading" } | { status: "ready"; user: string };
-			const receivedUsers: string[] = [];
-
-			const userWf = workflow(function* () {
-				yield* publish({ status: "loading" as const });
-				yield* receive("go");
-				yield* publish({ status: "ready" as const, user: "max" });
-				yield* receive("go");
-			});
-
-			const consumerWf = workflow(function* () {
-				yield* subscribe(
-					"user",
-					{
-						where: (s): s is { status: "ready"; user: string } =>
-							(s as { status: string }).status === "ready",
-					},
-					function* (state) {
-						receivedUsers.push((state as { status: "ready"; user: string }).user);
-					},
-				);
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry(
-				{ user: userWf, consumer: consumerWf },
-				storage,
-			);
-
-			registry.start("user");
-			await new Promise((r) => setTimeout(r, 10));
-			registry.start("consumer");
-			await new Promise((r) => setTimeout(r, 10));
-
-			// Loading state should be filtered out
-			expect(receivedUsers).toEqual([]);
-
-			// Trigger ready state
-			registry.signal("user", "go", undefined);
-			await new Promise((r) => setTimeout(r, 50));
-
-			expect(receivedUsers).toEqual(["max"]);
-		});
-
-		it("done() exits the subscribe loop and returns a value", async () => {
-			const sourceWf = workflow(function* () {
-				yield* publish(1);
-				yield* handler()
-					.on("bump", function* () {
-						yield* publish(2);
-					})
-					.as<void>();
-			});
-
-			const consumerWf = workflow(function* () {
-				const result = yield* subscribe(
-					"source",
-					{},
-					function* (value, done) {
-						if (value === 2) {
-							yield* done("stopped at 2");
-						}
-					},
-				);
-				return `result: ${result}`;
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry(
-				{ source: sourceWf, consumer: consumerWf },
-				storage,
-			);
-
-			registry.start("source");
-			await new Promise((r) => setTimeout(r, 10));
-			const consumerPromise = registry.start("consumer");
-			await new Promise((r) => setTimeout(r, 10));
-
-			// First publish (value=1) — body runs but doesn't call done
-			// Bump to value=2 — body calls done("stopped at 2")
-			registry.signal("source", "bump", undefined);
-			await consumerPromise;
-
-			const result = await registry.waitForCompletion<string>("consumer");
-			expect(result).toBe("result: stopped at 2");
 		});
 	});
 

@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { activity, all, child, handler, join, loop, loopBreak, output, publish, published, race, receive, sleep, workflow } from "./types";
+import { activity, all, child, handler, loop, loopBreak, output, publish, race, receive, sleep, workflow } from "./types";
 import type { WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
@@ -528,16 +528,16 @@ describe("Interpreter", () => {
 
 		it("collects signal and workflow result concurrently via all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue({ name: "Max" }),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -553,7 +553,7 @@ describe("Interpreter", () => {
 			const result = await runPromise;
 			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
 			expect(interpreter.status).toBe("completed");
-			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("profile", {
+			expect(mockRegistry.waitFor).toHaveBeenCalledWith("profile", {
 				start: true,
 				caller: undefined,
 			});
@@ -561,16 +561,16 @@ describe("Interpreter", () => {
 
 		it("records events for mixed signal + workflow all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockResolvedValue("profile-data"),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("profile-data"),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const log = new EventLog();
@@ -588,7 +588,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_started",
-					items: [{ type: "receive" }, { type: "join" }],
+					items: [{ type: "receive" }, { type: "output" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -599,7 +599,7 @@ describe("Interpreter", () => {
 			);
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "workflow_dependency_completed",
+					type: "workflow_output_resolved",
 					workflowId: "profile",
 					result: "profile-data",
 				}),
@@ -612,9 +612,9 @@ describe("Interpreter", () => {
 			);
 		});
 
-		it("throws without registry when all() has join items", async () => {
+		it("throws without registry when all() has output items", async () => {
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -635,16 +635,16 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
-			// seq 1 = receive "payment", seq 2 = join "profile", seq 3 = all command
+			// seq 1 = receive "payment", seq 2 = output "profile", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "receive" }, { type: "join" }],
+					items: [{ type: "receive" }, { type: "output" }],
 					timestamp: 2,
 				},
 				{
@@ -664,7 +664,7 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
-			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
+			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 
 		it("handles signal arriving after workflow completes in all()", async () => {
@@ -674,16 +674,16 @@ describe("Interpreter", () => {
 			});
 
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockReturnValue(workflowPromise),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockReturnValue(workflowPromise),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -709,17 +709,16 @@ describe("Interpreter", () => {
 
 		it("fails the workflow when a dependency workflow rejects in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockRejectedValue(new Error("dependency failed")),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi
-					.fn()
-					.mockRejectedValue(new Error("dependency failed")),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -731,16 +730,16 @@ describe("Interpreter", () => {
 
 		it("records workflow_dependency_failed when dependency fails in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const log = new EventLog();
@@ -766,16 +765,16 @@ describe("Interpreter", () => {
 
 		it("cleans up waiting state on dependency failure in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -787,9 +786,9 @@ describe("Interpreter", () => {
 
 		it("workflow can catch all() dependency failure and recover", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockRejectedValue(new Error("dep boom")),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockRejectedValue(new Error("dep boom")),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
@@ -797,7 +796,7 @@ describe("Interpreter", () => {
 
 			const wf = workflow(function* () {
 				try {
-					yield* all(receive("payment"), join("profile"));
+					yield* all(receive("payment"), output("profile"));
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -1225,604 +1224,6 @@ describe("Interpreter", () => {
 			await interpreter.run();
 
 			expect(interpreter.published).toEqual({ user: "max" });
-		});
-	});
-
-	describe("Phase H: join (workflow dependency)", () => {
-		it("delegates to registry and returns the result", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("login-result"),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const user = yield* join("login");
-				return `got: ${user}`;
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: login-result");
-			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("login", {
-				start: true,
-				caller: undefined,
-			});
-		});
-
-		it("passes start: false option to registry", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("result"),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("login", { start: false });
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			await interpreter.run();
-
-			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("login", {
-				start: false,
-				caller: undefined,
-			});
-		});
-
-		it("throws without a registry", async () => {
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog());
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			expect(interpreter.error).toContain("WorkflowRegistry");
-		});
-
-		it("records dependency_started and dependency_completed events", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("user-data"),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			const events = log.events();
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-				}),
-			);
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_completed",
-					workflowId: "login",
-					seq: 1,
-					result: "user-data",
-				}),
-			);
-		});
-
-		it("records workflow_dependency_failed event when dependency rejects", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi
-					.fn()
-					.mockRejectedValue(new Error("dependency failed")),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			const events = log.events();
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_failed",
-					workflowId: "login",
-					seq: 1,
-					error: "dependency failed",
-				}),
-			);
-			const failedEvent = events.find(
-				(e) => e.type === "workflow_dependency_failed",
-			);
-			expect(
-				failedEvent?.type === "workflow_dependency_failed" && failedEvent.stack,
-			).toMatch(/Error: dependency failed/);
-		});
-
-		it("replays dependency failure from event log without calling registry", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				{
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-					timestamp: 2,
-				},
-				{
-					type: "workflow_dependency_failed",
-					workflowId: "login",
-					seq: 1,
-					error: "dependency failed",
-					timestamp: 3,
-				},
-				{
-					type: "workflow_failed",
-					error: "dependency failed",
-					timestamp: 4,
-				},
-			]);
-
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			expect(interpreter.error).toBe("dependency failed");
-			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
-		});
-
-		it("workflow can catch dependency failure and recover", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi
-					.fn()
-					.mockRejectedValue(new Error("dependency failed")),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				try {
-					yield* join("login");
-					return "unreachable";
-				} catch {
-					return "recovered";
-				}
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("recovered");
-			expect(interpreter.status).toBe("completed");
-			expect(log.events()).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_failed",
-					workflowId: "login",
-					seq: 1,
-					error: "dependency failed",
-				}),
-			);
-		});
-
-		it("replays from event log without calling registry", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const user = yield* join("login");
-				return `got: ${user}`;
-			});
-
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				{
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-					timestamp: 2,
-				},
-				{
-					type: "workflow_dependency_completed",
-					workflowId: "login",
-					seq: 1,
-					result: "cached-user",
-					timestamp: 3,
-				},
-				{
-					type: "workflow_completed",
-					result: "got: cached-user",
-					timestamp: 4,
-				},
-			]);
-
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: cached-user");
-			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
-		});
-	});
-
-	describe("ctx.published()", () => {
-		it("resolves when dependency publishes a value", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn().mockResolvedValue({ user: "max" }),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const account = yield* published("session");
-				return `got: ${account}`;
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: [object Object]");
-			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("session", {
-				start: true,
-				caller: undefined,
-			});
-		});
-
-		it("records workflow_dependency_published event", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn().mockResolvedValue("published-data"),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* published("login");
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			const events = log.events();
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-				}),
-			);
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_published",
-					workflowId: "login",
-					seq: 1,
-					result: "published-data",
-				}),
-			);
-		});
-
-		it("replays from workflow_dependency_published event", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const user = yield* published("login");
-				return `got: ${user}`;
-			});
-
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				{
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-					timestamp: 2,
-				},
-				{
-					type: "workflow_dependency_published",
-					workflowId: "login",
-					seq: 1,
-					result: "cached-pub",
-					timestamp: 3,
-				},
-				{
-					type: "workflow_completed",
-					result: "got: cached-pub",
-					timestamp: 4,
-				},
-			]);
-
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: cached-pub");
-			expect(mockRegistry.waitForPublished).not.toHaveBeenCalled();
-		});
-
-		it("throws without a registry", async () => {
-			const wf = workflow(function* () {
-				return yield* published("login");
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog());
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			expect(interpreter.error).toContain("WorkflowRegistry");
-		});
-
-		it("passes start: false option to registry", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn().mockResolvedValue("result"),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* published("login", { start: false });
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			await interpreter.run();
-
-			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("login", {
-				start: false,
-				caller: undefined,
-			});
-		});
-
-		it("passes where predicate to registry", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn().mockResolvedValue({ status: "ready", user: "max" }),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			type UserState = { status: "loading" } | { status: "ready"; user: string };
-
-			const wf = workflow(function* () {
-				const state = yield* published<UserState>("user", {
-					where: (s): s is { status: "ready"; user: string } => s.status === "ready",
-				});
-				return `got: ${(state as { status: "ready"; user: string }).user}`;
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: max");
-			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("user", {
-				start: true,
-				caller: undefined,
-				where: expect.any(Function),
-			});
-		});
-
-		it("passes afterSeq to registry for cursor-based waiting", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitForPublished: vi.fn().mockResolvedValue("value"),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* published("dep", { afterSeq: 5 });
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			await interpreter.run();
-
-			expect(mockRegistry.waitForPublished).toHaveBeenCalledWith("dep", {
-				start: true,
-				caller: undefined,
-				afterSeq: 5,
-			});
-		});
-	});
-
-	describe("ctx.join()", () => {
-		it("resolves when dependency completes", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("final-result"),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const result = yield* join("task");
-				return `joined: ${result}`;
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("joined: final-result");
-			expect(mockRegistry.waitForCompletion).toHaveBeenCalledWith("task", {
-				start: true,
-				caller: undefined,
-			});
-		});
-
-		it("records workflow_dependency_completed event", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("join-data"),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			const events = log.events();
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-				}),
-			);
-			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_completed",
-					workflowId: "login",
-					seq: 1,
-					result: "join-data",
-				}),
-			);
-		});
-
-		it("replays from workflow_dependency_completed event", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn(),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				const user = yield* join("login");
-				return `got: ${user}`;
-			});
-
-			const log = new EventLog([
-				{ type: "workflow_started", timestamp: 1 },
-				{
-					type: "workflow_dependency_started",
-					workflowId: "login",
-					seq: 1,
-					timestamp: 2,
-				},
-				{
-					type: "workflow_dependency_completed",
-					workflowId: "login",
-					seq: 1,
-					result: "cached-user",
-					timestamp: 3,
-				},
-				{
-					type: "workflow_completed",
-					result: "got: cached-user",
-					timestamp: 4,
-				},
-			]);
-
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			const result = await interpreter.run();
-
-			expect(result).toBe("got: cached-user");
-			expect(mockRegistry.waitForCompletion).not.toHaveBeenCalled();
-		});
-
-		it("throws without a registry", async () => {
-			const wf = workflow(function* () {
-				return yield* join("login");
-			});
-
-			const interpreter = new Interpreter(wf, new EventLog());
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			expect(interpreter.error).toContain("WorkflowRegistry");
-		});
-
-		it("records workflow_dependency_failed event on rejection", async () => {
-			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
-				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockRejectedValue(new Error("join failed")),
-				start: vi.fn(),
-				publish: vi.fn(),
-			getPublishSeq: vi.fn().mockReturnValue(0),
-			};
-
-			const wf = workflow(function* () {
-				return yield* join("task");
-			});
-
-			const log = new EventLog();
-			const interpreter = new Interpreter(wf, log, mockRegistry);
-			await interpreter.run();
-
-			expect(interpreter.status).toBe("failed");
-			expect(log.events()).toContainEqual(
-				expect.objectContaining({
-					type: "workflow_dependency_failed",
-					workflowId: "task",
-					seq: 1,
-					error: "join failed",
-				}),
-			);
 		});
 	});
 
@@ -3127,20 +2528,20 @@ describe("Interpreter", () => {
 			vi.useRealTimers();
 		});
 
-		it("races join against sleep", async () => {
+		it("races output against sleep", async () => {
 			vi.useFakeTimers();
 
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockResolvedValue("workflow-result"),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue("workflow-result"),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* race(join("dep"), sleep(5000));
+				return yield* race(output("dep"), sleep(5000));
 			});
 
 			const interpreter = new Interpreter(
@@ -3580,18 +2981,18 @@ describe("Interpreter", () => {
 			expect(interpreter.status).toBe("cancelled");
 		});
 
-		it("mixes signal and workflow join in all()", async () => {
+		it("mixes signal and workflow output in all()", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
 				waitForPublished: vi.fn(),
-				waitForCompletion: vi.fn().mockResolvedValue({ name: "Max" }),
+				waitForCompletion: vi.fn(),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(receive("payment"), join("profile"));
+				return yield* all(receive("payment"), output("profile"));
 			});
 
 			const interpreter = new Interpreter(
@@ -4229,6 +3630,41 @@ describe("Interpreter", () => {
 					type: "workflow_dependency_failed",
 					workflowId: "config",
 					error: "not found",
+				}),
+			);
+		});
+
+		it("workflow can catch dependency failure and recover", async () => {
+			const mockRegistry: WorkflowRegistryInterface = {
+				waitFor: vi.fn().mockRejectedValue(new Error("dependency failed")),
+				waitForPublished: vi.fn(),
+				waitForCompletion: vi.fn(),
+				start: vi.fn(),
+				publish: vi.fn(),
+				getPublishSeq: vi.fn().mockReturnValue(0),
+			};
+
+			const wf = workflow(function* () {
+				try {
+					yield* output("config");
+					return "unreachable";
+				} catch {
+					return "recovered";
+				}
+			});
+
+			const log = new EventLog();
+			const interpreter = new Interpreter(wf, log, mockRegistry);
+			const result = await interpreter.run();
+
+			expect(result).toBe("recovered");
+			expect(interpreter.status).toBe("completed");
+			expect(log.events()).toContainEqual(
+				expect.objectContaining({
+					type: "workflow_dependency_failed",
+					workflowId: "config",
+					seq: 1,
+					error: "dependency failed",
 				}),
 			);
 		});

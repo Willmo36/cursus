@@ -134,8 +134,7 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | Method | Description |
 |--------|-------------|
 | `start(id)` | Start a workflow. Idempotent. |
-| `waitForPublished<T>(id, options?)` | Wait for a workflow's published value. Auto-starts by default. |
-| `waitForCompletion<T>(id, options?)` | Wait for a workflow to complete. Auto-starts by default. |
+| `waitFor<T>(id, options?)` | Wait for a workflow's output (published or completed). Auto-starts by default. |
 | `publish(id, value)` | Mark a workflow as published and resolve all waiters. |
 | `reset(id)` | Cancel, clear storage, allow restart. |
 | `signal(id, name, payload?)` | Send a signal to a running workflow. |
@@ -200,8 +199,8 @@ Free functions imported from `"cursus"` for building workflows:
 
 ```ts
 import {
-  workflow, activity, receive, sleep, publish, join,
-  published, race, all, child, loop, loopBreak,
+  workflow, activity, receive, sleep, publish, output,
+  race, all, child, loop, loopBreak,
 } from "cursus";
 ```
 
@@ -305,29 +304,19 @@ function child<T>(
 
 Delegate to a child workflow with its own event log scope.
 
-### join
+### output
 
 ```ts
-function join(workflowId: K): Generator & { as: <V>() => Generator };
+function output(workflowId: K): Generator & { as: <V>() => Generator };
 ```
 
-Wait for another workflow to complete. Auto-starts by default. Use `.as<V>()` to type the result:
+Wait for another workflow's output (published value or completion result). Auto-starts by default. Use `.as<V>()` to type the value:
 
 ```ts
-const profile = yield* join("profile").as<UserProfile>();
+const profile = yield* output("profile").as<UserProfile>();
 ```
 
-### published
-
-```ts
-function published(workflowId: K): Generator & { as: <V>() => Generator };
-```
-
-Wait for another workflow to publish a value. Use `.as<V>()` to type the value:
-
-```ts
-const config = yield* published("config").as<{ url: string }>();
-```
+Whether the producer uses `publish()` or `return`, the consumer just uses `output()` — the producer's implementation detail is hidden.
 
 ### publish
 
@@ -404,8 +393,7 @@ Thrown into the generator when a workflow is cancelled.
 
 ```ts
 type WorkflowRegistryInterface = {
-  waitForPublished<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
-  waitForCompletion<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
+  waitFor<T>(workflowId: string, options?: { start?: boolean; caller?: string }): Promise<T>;
   start(workflowId: string): Promise<void>;
   publish(workflowId: string, value: unknown): void;
 };
@@ -495,7 +483,7 @@ function createTestRuntime<T>(
 |-------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock activity implementations |
 | `signals` | `Array<{ name: K; payload: SignalMap[K] }>` | Pre-queued signals |
-| `workflowResults` | `Record<string, unknown>` | Mock `join` / `published` results |
+| `workflowResults` | `Record<string, unknown>` | Mock `output` results |
 
 ## Observability
 
@@ -562,8 +550,7 @@ These are the internal command types yielded by workflow generators. Exported fo
 | `AllCommand` | Wait for multiple items to all complete |
 | `SleepCommand` | Durable timer |
 | `ChildCommand` | Child workflow delegation |
-| `JoinCommand` | Wait for workflow completion |
-| `PublishedCommand` | Wait for workflow published value |
+| `OutputCommand` | Wait for workflow output (published or completed) |
 | `RaceCommand` | Race branches |
 | `PublishCommand` | Publish a value to waiters |
 | `LoopCommand` | Repeat a body until break |
