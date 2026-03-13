@@ -201,7 +201,7 @@ Free functions imported from `"cursus"` for building workflows:
 ```ts
 import {
   workflow, activity, receive, sleep, publish, join,
-  published, race, all, handle, child,
+  published, race, all, child, loop, loopBreak,
 } from "cursus";
 ```
 
@@ -226,13 +226,65 @@ Run an async activity. On replay, the stored result is returned without calling 
 
 ### receive
 
+`receive` has three overloads covering all signal-waiting patterns:
+
+**1. One signal, once** — wait for a single signal and return its payload:
+
 ```ts
-function receive<V, K extends string = string>(
-  signal: K,
-): Generator<ReceiveDescriptor, V, unknown>;
+function receive<V, K extends string>(signal: K): Workflow<V, Signal<K, V>>;
 ```
 
-Wait for a named signal from the UI.
+**2. One signal, loop** — receive the same signal repeatedly until the handler calls `done`:
+
+```ts
+function receive<T, K extends string>(
+  signal: K,
+  handler: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator,
+): Workflow<T, Signal<K, V>>;
+```
+
+**3. N signals, loop** — dispatch to named handlers until one calls `done`:
+
+```ts
+function receive<T>(
+  handlers: Record<string, (payload, done) => Generator>,
+): Workflow<T, Signal<K, V>>;
+```
+
+**Example — a todo store using all three forms:**
+
+```ts
+const todoStore = workflow(function* () {
+  // 1. One signal, once — wait for the user's name
+  const name = yield* receive("login").as<string>();
+
+  // 2. One signal, loop — collect todos one at a time
+  const todos: string[] = yield* receive("add-todo", function* (text: string, done) {
+    todos.push(text);
+    if (todos.length >= 3) {
+      yield* done(todos);
+    }
+  });
+
+  // 3. N signals, loop — manage the list until checkout
+  let items = todos;
+  const final = yield* receive<string[]>({
+    add: function* (text: string) {
+      items = [...items, text];
+      yield* publish(items);
+    },
+    remove: function* (index: number) {
+      items = items.filter((_, i) => i !== index);
+      yield* publish(items);
+    },
+    checkout: function* (_payload, done) {
+      yield* done(items);
+    },
+  });
+
+  return { user: name, items: final };
+});
+```
 
 ### sleep
 
@@ -306,24 +358,21 @@ function race(...branches): Generator<RaceDescriptor, { winner: number; value: u
 
 Race branches — first to complete wins. Returns `{ winner, value }` where `winner` is the zero-based index.
 
-### handle
+### loop
 
 ```ts
-function handle<T>(
-  handlers: Record<string, SignalHandler>,
-): Generator<Descriptor, T, unknown>;
+function loop<F extends () => Generator>(body: F): Workflow<T>;
 ```
 
-Signal dispatch loop. Blocks the workflow and routes incoming signals to matching handlers. Stays in the loop until a handler calls `done(value)`.
+Repeat a body generator factory until `loopBreak` is yielded inside it. The body factory is called fresh each iteration (generators are single-use). Returns the value passed to `loopBreak`.
 
-**SignalHandler:**
+### loopBreak
 
 ```ts
-type SignalHandler = (
-  payload: unknown,
-  done: <T>(value: T) => Workflow<never>,
-) => Workflow<void>;
+function loopBreak<V>(value: V): Workflow<never>;
 ```
+
+Exit the enclosing `loop` with a value. Must be used inside a `loop` body.
 
 ## Types
 
@@ -517,4 +566,6 @@ These are the internal command types yielded by workflow generators. Exported fo
 | `PublishedCommand` | Wait for workflow published value |
 | `RaceCommand` | Race branches |
 | `PublishCommand` | Publish a value to waiters |
+| `LoopCommand` | Repeat a body until break |
+| `LoopBreakCommand` | Exit a loop with a value |
 | `Command` | Union of all command types |
