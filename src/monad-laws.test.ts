@@ -404,6 +404,55 @@ describe("Monad laws", () => {
 			void w;
 		});
 
+		it("handler propagates Published requirement from handler body", () => {
+			const w = workflow(function* () {
+				return yield* handler()
+					.on("go", function* (_payload: undefined, done) {
+						const config = yield* published("config").as<{ url: string }>();
+						yield* done(config.url);
+					})
+					.as<string>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
+			const _hasPublished: AssertEqual<Published<"config", { url: string }> extends R ? true : false, true> = true;
+			void _hasSignal; void _hasPublished; void w;
+		});
+
+		it("handler propagates Result requirement from join in handler body", () => {
+			const w = workflow(function* () {
+				return yield* handler()
+					.on("go", function* (_payload: undefined, done) {
+						const user = yield* join("login").as<string>();
+						yield* done(user);
+					})
+					.as<string>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
+			const _hasResult: AssertEqual<Result<"login", string> extends R ? true : false, true> = true;
+			void _hasSignal; void _hasResult; void w;
+		});
+
+		it("nested handler propagates inner signals up through outer handler", () => {
+			const w = workflow(function* () {
+				return yield* handler()
+					.on("start", function* (_payload: undefined, done) {
+						const inner = yield* handler()
+							.on("confirm", function* (val: string, innerDone) {
+								yield* innerDone(val);
+							})
+							.as<string>();
+						yield* done(inner);
+					})
+					.as<string>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _hasOuter: AssertEqual<Signal<"start", undefined> extends R ? true : false, true> = true;
+			const _hasInner: AssertEqual<Signal<"confirm", string> extends R ? true : false, true> = true;
+			void _hasOuter; void _hasInner; void w;
+		});
+
 		it("subscribe propagates Published requirement for the subscribed workflow", () => {
 			type Account = { id: string; name: string };
 			const w = workflow(function* () {
