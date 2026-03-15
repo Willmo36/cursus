@@ -495,7 +495,30 @@ export class Interpreter {
 			return (resolved as QueryResolvedEvent).value;
 		}
 
-		// Live: pause until signal() is called with this label
+		// Auto-match: if registry has a workflow with this label, use waitFor
+		if (this.registry?.has(command.label)) {
+			try {
+				const result = await this.registry.waitFor(command.label, {
+					start: true,
+					caller: this._workflowId,
+				});
+
+				this.log.append({
+					type: "query_resolved",
+					label: command.label,
+					value: result,
+					seq: command.seq,
+					timestamp: Date.now(),
+				});
+
+				return result;
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				throw new Error(message);
+			}
+		}
+
+		// No registry match: pause until signal() is called with this label
 		this._status = "waiting";
 		this._receiving = command.label;
 		this._receivingType = "query";

@@ -787,6 +787,7 @@ export type WorkflowState<T = unknown> =
 // --- Registry interface (avoids circular imports) ---
 
 export type WorkflowRegistryInterface = {
+	has(workflowId: string): boolean;
 	waitFor<T>(
 		workflowId: string,
 		options?: { start?: boolean; caller?: string },

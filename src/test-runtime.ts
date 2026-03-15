@@ -98,6 +98,9 @@ export async function createTestRuntime<
 	let mockRegistry: WorkflowRegistryInterface | undefined;
 	if (workflowResults) {
 		mockRegistry = {
+			has(workflowId: string): boolean {
+				return workflowId in workflowResults;
+			},
 			async waitFor<R>(
 				workflowId: string,
 				_options?: { start?: boolean; caller?: string },

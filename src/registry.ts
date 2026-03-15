@@ -77,6 +77,10 @@ export class WorkflowRegistry<K extends string = string>
 		return this._storage;
 	}
 
+	has(id: string): boolean {
+		return this.entries.has(id);
+	}
+
 	private getEntry(id: string): WorkflowEntry {
 		const entry = this.entries.get(id);
 		if (!entry) {

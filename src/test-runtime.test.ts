@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, output, race, receive, workflow } from "./types";
+import { activity, all, child, handler, output, query, race, receive, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -171,6 +171,34 @@ describe("createTestRuntime", () => {
 		});
 
 		expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
+	});
+
+	it("query auto-matches workflowResults", async () => {
+		const wf = workflow(function* () {
+			const user = yield* query("login");
+			return `got: ${user}`;
+		});
+
+		const result = await createTestRuntime(wf, {
+			workflowResults: {
+				login: "test-user",
+			},
+		});
+
+		expect(result).toBe("got: test-user");
+	});
+
+	it("query falls through to signal when not in workflowResults", async () => {
+		const wf = workflow(function* () {
+			const data = yield* query("submit");
+			return `got: ${data}`;
+		});
+
+		const result = await createTestRuntime(wf, {
+			signals: [{ name: "submit", payload: "hello" }],
+		});
+
+		expect(result).toBe("got: hello");
 	});
 
 	it("runs a workflow with race and pre-queued signals", async () => {
