@@ -10,6 +10,7 @@ import {
 	type Command,
 	type Descriptor,
 	type RaceCompletedEvent,
+	type QueryResolvedEvent,
 	type SignalReceivedEvent,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
@@ -29,6 +30,7 @@ export class Interpreter {
 	private _result: unknown;
 	private _error: string | undefined;
 	private _receiving: string | undefined;
+	private _receivingType: "receive" | "query" | undefined;
 	private pendingReceive:
 		| {
 				resolve: (payload: unknown) => void;
@@ -162,17 +164,29 @@ export class Interpreter {
 
 		if (this._status !== "waiting") return;
 
-		// Single receive path
+		// Single receive/query path
 		if (this._receiving === name) {
-			this.log.append({
-				type: "signal_received",
-				signal: name,
-				payload,
-				seq: this.findWaitingSeq(),
-				timestamp: Date.now(),
-			});
+			const seq = this.findWaitingSeq();
+			if (this._receivingType === "query") {
+				this.log.append({
+					type: "query_resolved",
+					label: name,
+					value: payload,
+					seq,
+					timestamp: Date.now(),
+				});
+			} else {
+				this.log.append({
+					type: "signal_received",
+					signal: name,
+					payload,
+					seq,
+					timestamp: Date.now(),
+				});
+			}
 			this._status = "running";
 			this._receiving = undefined;
+			this._receivingType = undefined;
 			this.notifyChange();
 			this.pendingReceive?.resolve(payload);
 			this.pendingReceive = undefined;
@@ -383,7 +397,7 @@ export class Interpreter {
 			case "loop_break":
 				return this.executeLoopBreak(command);
 			case "query":
-				throw new Error("query command not yet implemented");
+				return this.executeQuery(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -462,11 +476,33 @@ export class Interpreter {
 		// Live: pause until signal() is called
 		this._status = "waiting";
 		this._receiving = command.signal;
+		this._receivingType = "receive";
 
 		return new Promise((resolve, reject) => {
 			this.pendingReceive = { resolve };
 			this._pendingReject = reject;
 			// Notify after pendingReceive is set so signal() can resolve the promise
+			this.notifyChange();
+		});
+	}
+
+	private async executeQuery(
+		command: Extract<Command, { type: "query" }>,
+	): Promise<unknown> {
+		// Check for replay
+		const resolved = this.log.findCompleted(command.seq, "query_resolved");
+		if (resolved) {
+			return (resolved as QueryResolvedEvent).value;
+		}
+
+		// Live: pause until signal() is called with this label
+		this._status = "waiting";
+		this._receiving = command.label;
+		this._receivingType = "query";
+
+		return new Promise((resolve, reject) => {
+			this.pendingReceive = { resolve };
+			this._pendingReject = reject;
 			this.notifyChange();
 		});
 	}
@@ -851,7 +887,34 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside an all branch");
 				}
 				case "query": {
-					throw new Error("query command not yet implemented in all");
+					// Query in all behaves like receive — wait for signal
+					const queryResolved = this.log.findCompleted(
+						item.seq,
+						"query_resolved",
+					);
+					if (queryResolved) {
+						return Promise.resolve(
+							(queryResolved as QueryResolvedEvent).value,
+						);
+					}
+					allWaiters.push({
+						signal: item.label,
+						resolve: null as unknown as (payload: unknown) => void,
+					});
+					return new Promise<unknown>((resolve) => {
+						allWaiters[allWaiters.length - 1].resolve = (
+							payload: unknown,
+						) => {
+							this.log.append({
+								type: "query_resolved",
+								label: item.label,
+								value: payload,
+								seq: item.seq,
+								timestamp: Date.now(),
+							});
+							resolve(payload);
+						};
+					});
 				}
 				default: {
 					const _exhaustive: never = item;
@@ -1055,7 +1118,37 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside a race branch");
 				}
 				case "query": {
-					throw new Error("query command not yet implemented in race");
+					// Query in race behaves like receive — wait for signal
+					const queryResolved = this.log.findCompleted(
+						item.seq,
+						"query_resolved",
+					);
+					if (queryResolved) {
+						return Promise.resolve({
+							index,
+							value: (queryResolved as QueryResolvedEvent).value,
+						});
+					}
+					raceWaiters.push({
+						signal: item.label,
+						resolve: null as unknown as (payload: unknown) => void,
+					});
+					return new Promise<{ index: number; value: unknown }>(
+						(resolve) => {
+							raceWaiters[raceWaiters.length - 1].resolve = (
+								payload: unknown,
+							) => {
+								this.log.append({
+									type: "query_resolved",
+									label: item.label,
+									value: payload,
+									seq: item.seq,
+									timestamp: Date.now(),
+								});
+								resolve({ index, value: payload });
+							};
+						},
+					);
 				}
 				default: {
 					const _exhaustive: never = item;

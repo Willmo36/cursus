@@ -318,6 +318,14 @@ export type WorkflowOutputResolvedEvent = {
 	timestamp: number;
 };
 
+export type QueryResolvedEvent = {
+	type: "query_resolved";
+	label: string;
+	value: unknown;
+	seq: number;
+	timestamp: number;
+};
+
 export type WorkflowPublishedEvent = {
 	type: "workflow_published";
 	value: unknown;
@@ -399,6 +407,7 @@ export type WorkflowEvent =
 	| WorkflowDependencyStartedEvent
 	| WorkflowDependencyFailedEvent
 	| WorkflowOutputResolvedEvent
+	| QueryResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
 	| AllCompletedEvent
@@ -423,14 +432,127 @@ export type WorkflowTrace = {
 
 export type Workflow<A, R extends Requirement = never> = Generator<Descriptor & Requires<R>, A, unknown>;
 
-// Wraps a generator function into a workflow with inferred requirements.
-// At runtime, this is the identity function — the magic is at the type level,
-// where TypeScript infers R from all yield* calls in the body.
+// Extracts the return type from a generator function
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
+type GenReturn<F> = F extends (...args: any[]) => Generator<any, infer A, any> ? A : never;
+
+// Extracts parameter types from a function
+// biome-ignore lint/suspicious/noExplicitAny: need any for function matching
+type GenParams<F> = F extends (...args: infer P) => any ? P : never;
+
+// Extracts requirements from a workflow function's return type
+// biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
+type FnReqs<F> = F extends (...args: any[]) => infer G ? Requirements<G> : never;
+
+// Removes Query<K, _> from a requirement union and adds provider requirements
+type ReplaceQueryReq<R extends Requirement, K extends string, ProviderReqs extends Requirement> =
+	| Exclude<R, Query<K, any>>
+	| ProviderReqs;
+
+// Builds a workflow function type from params, requirements, and return type
+type WorkflowFnType<Params extends unknown[], Reqs extends Requirement, Ret> =
+	(...args: Params) => Generator<Descriptor & Requires<Reqs>, Ret, unknown>;
+
+// A workflow function with profunctor operations
+export type WorkflowFn<F> = F & {
+	map<B>(fn: (a: GenReturn<F>) => B): WorkflowFn<WorkflowFnType<GenParams<F>, FnReqs<F>, B>>;
+	// biome-ignore lint/suspicious/noExplicitAny: need any for provider generator matching
+	provide<K extends string, G extends () => Generator<any, any, any>>(
+		label: K,
+		provider: G,
+	): WorkflowFn<WorkflowFnType<GenParams<F>, ReplaceQueryReq<FnReqs<F>, K, FnReqs<() => ReturnType<G>>>, GenReturn<F>>>;
+};
+
+// Wraps a generator function into a workflow with profunctor operations.
+// The function remains callable. .provide() and .map() produce new workflows.
 // biome-ignore lint/suspicious/noExplicitAny: preserves the full function type including parameter types
 export function workflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
 	fn: F,
-): F {
-	return fn;
+): WorkflowFn<F> {
+	const w = ((...args: unknown[]) => fn(...args)) as unknown as WorkflowFn<F>;
+
+	w.map = ((mapFn: (a: unknown) => unknown) => {
+		const mapped = (...args: unknown[]) => {
+			const gen = fn(...args);
+			return wrapMap(gen, mapFn);
+		};
+		return workflow(mapped as any);
+	}) as WorkflowFn<F>["map"];
+
+	w.provide = ((label: string, provider: () => Generator<any, any, any>) => {
+		const provided = (...args: unknown[]) => {
+			const gen = fn(...args);
+			return wrapProvide(gen, label, provider);
+		};
+		return workflow(provided as any);
+	}) as WorkflowFn<F>["provide"];
+
+	return w;
+}
+
+function* wrapMap(
+	gen: Generator<any, any, unknown>,
+	mapFn: (a: unknown) => unknown,
+): Generator<any, any, unknown> {
+	let input: unknown = undefined;
+	let threw = false;
+	let thrownValue: unknown = undefined;
+
+	for (;;) {
+		const next = threw ? gen.throw(thrownValue) : gen.next(input);
+		threw = false;
+
+		if (next.done) {
+			return mapFn(next.value);
+		}
+
+		try {
+			input = yield next.value;
+		} catch (err) {
+			threw = true;
+			thrownValue = err;
+		}
+	}
+}
+
+function* wrapProvide(
+	gen: Generator<any, any, unknown>,
+	label: string,
+	provider: () => Generator<any, any, any>,
+): Generator<any, any, unknown> {
+	let input: unknown = undefined;
+	let threw = false;
+	let thrownValue: unknown = undefined;
+
+	for (;;) {
+		const next = threw ? gen.throw(thrownValue) : gen.next(input);
+		threw = false;
+
+		if (next.done) {
+			return next.value;
+		}
+
+		const descriptor = next.value as Descriptor;
+
+		// Intercept query descriptors matching the label
+		if (descriptor.type === "query" && (descriptor as QueryDescriptor).label === label) {
+			// Run the provider workflow inline via yield* delegation
+			try {
+				input = yield* provider();
+			} catch (err) {
+				threw = true;
+				thrownValue = err;
+			}
+			continue;
+		}
+
+		try {
+			input = yield next.value;
+		} catch (err) {
+			threw = true;
+			thrownValue = err;
+		}
+	}
 }
 
 // --- Free functions (context-free workflow primitives) ---
