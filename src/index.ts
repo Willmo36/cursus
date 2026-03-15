@@ -55,7 +55,7 @@ export type {
 	SignalReceiver,
 	SleepCommand,
 	SleepDescriptor,
-	Step,
+	Requires,
 	Workflow,
 	WorkflowCancelledEvent,
 	WorkflowDependencyFailedEvent,

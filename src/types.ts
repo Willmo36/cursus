@@ -41,19 +41,19 @@ export type Publishes<V = unknown> = {
 // Union of all requirement tags
 export type Requirement = Signal | Output | Publishes;
 
-// --- Step (internal yield carrier) ---
+// --- Requires (internal yield carrier) ---
 
 // Branded type that carries a requirement through the generator's Yield parameter.
 // Users never reference this directly — they just yield* it.
-// At runtime, the yielded value is a Command object; Step's fields are phantom.
-export type Step<R extends Requirement = never> = {
+// At runtime, the yielded value is a Command object; Requires' fields are phantom.
+export type Requires<R extends Requirement = never> = {
 	readonly __requirement?: R;
 	readonly __step?: true;
 };
 
 // --- Requirements (extractor) ---
 
-// Extracts the accumulated requirements from a Workflow or Step.
+// Extracts the accumulated requirements from a Workflow or Requires.
 // Reads the phantom __requirement field from the yield type, filtering
 // through Requirement to strip undefined (from optional fields with never).
 export type Requirements<W> =
@@ -61,7 +61,7 @@ export type Requirements<W> =
 		? Y extends { __requirement?: infer R }
 			? R extends Requirement ? R : never
 			: never
-		: W extends Step<infer R> ? R
+		: W extends Requires<infer R> ? R
 		: never;
 
 // Extracts a signal map { name: payload } from a workflow function's requirements.
@@ -407,7 +407,7 @@ export type WorkflowTrace = {
 
 // --- Workflow types ---
 
-export type Workflow<A, R extends Requirement = never> = Generator<Descriptor & Step<R>, A, unknown>;
+export type Workflow<A, R extends Requirement = never> = Generator<Descriptor & Requires<R>, A, unknown>;
 
 // Wraps a generator function into a workflow with inferred requirements.
 // At runtime, this is the identity function — the magic is at the type level,
@@ -424,9 +424,9 @@ export function workflow<F extends (...args: any[]) => Generator<any, any, unkno
 export function activity<T>(
 	name: string,
 	fn: (signal: AbortSignal) => Promise<T>,
-): Generator<ActivityDescriptor & Step<never>, T, unknown> {
+): Generator<ActivityDescriptor & Requires<never>, T, unknown> {
 	return (function* () {
-		const result = yield { type: "activity" as const, name, fn } as ActivityDescriptor & Step<never>;
+		const result = yield { type: "activity" as const, name, fn } as ActivityDescriptor & Requires<never>;
 		return result as T;
 	})();
 }
@@ -435,11 +435,11 @@ export function activity<T>(
 
 export function receive<V, K extends string = string>(
 	signal: K,
-): Generator<ReceiveDescriptor & Step<Signal<K, V>>, V, unknown> & {
-	as: <W>() => Generator<ReceiveDescriptor & Step<Signal<K, W>>, W, unknown>;
+): Generator<ReceiveDescriptor & Requires<Signal<K, V>>, V, unknown> & {
+	as: <W>() => Generator<ReceiveDescriptor & Requires<Signal<K, W>>, W, unknown>;
 } {
-	const gen = (function* (): Generator<ReceiveDescriptor & Step<Signal<string, unknown>>, unknown, unknown> {
-		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Step<Signal<string, unknown>>;
+	const gen = (function* (): Generator<ReceiveDescriptor & Requires<Signal<string, unknown>>, unknown, unknown> {
+		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Requires<Signal<string, unknown>>;
 		return result;
 	})();
 	(gen as any).as = <W>() => receive<W>(signal);
@@ -482,45 +482,45 @@ export function handler(): SignalReceiver {
 	return builder;
 }
 
-export function sleep(durationMs: number): Generator<SleepDescriptor & Step<never>, void, unknown> {
+export function sleep(durationMs: number): Generator<SleepDescriptor & Requires<never>, void, unknown> {
 	return (function* () {
-		yield { type: "sleep" as const, durationMs } as SleepDescriptor & Step<never>;
+		yield { type: "sleep" as const, durationMs } as SleepDescriptor & Requires<never>;
 	})();
 }
 
 export function child<T>(
 	name: string,
 	workflowFn: AnyWorkflowFunction,
-): Generator<ChildDescriptor & Step<never>, T, unknown> {
+): Generator<ChildDescriptor & Requires<never>, T, unknown> {
 	return (function* () {
 		const result = yield {
 			type: "child" as const,
 			name,
 			workflow: workflowFn,
-		} as ChildDescriptor & Step<never>;
+		} as ChildDescriptor & Requires<never>;
 		return result as T;
 	})();
 }
 
-export function publish<V>(value: V): Generator<PublishDescriptor & Step<Publishes<V>>, void, unknown> {
+export function publish<V>(value: V): Generator<PublishDescriptor & Requires<Publishes<V>>, void, unknown> {
 	return (function* () {
-		yield { type: "publish" as const, value } as PublishDescriptor & Step<Publishes<V>>;
+		yield { type: "publish" as const, value } as PublishDescriptor & Requires<Publishes<V>>;
 	})();
 }
 
 export function output<V, K extends string = string>(
 	workflowId: K,
 	options?: { start?: boolean },
-): Generator<OutputDescriptor & Step<Output<K, V>>, V, unknown> & {
-	as: <W>() => Generator<OutputDescriptor & Step<Output<K, W>>, W, unknown>;
+): Generator<OutputDescriptor & Requires<Output<K, V>>, V, unknown> & {
+	as: <W>() => Generator<OutputDescriptor & Requires<Output<K, W>>, W, unknown>;
 } {
 	const start = options?.start ?? true;
-	const gen = (function* (): Generator<OutputDescriptor & Step<Output<K, V>>, V, unknown> {
+	const gen = (function* (): Generator<OutputDescriptor & Requires<Output<K, V>>, V, unknown> {
 		const result = yield {
 			type: "output" as const,
 			workflowId,
 			start,
-		} as OutputDescriptor & Step<Output<K, V>>;
+		} as OutputDescriptor & Requires<Output<K, V>>;
 		return result as V;
 	})();
 	(gen as any).as = <W>() => output<W, K>(workflowId, options);
@@ -533,41 +533,41 @@ type Req<G> = G extends Generator<infer Y, any, any>
 	: never;
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<RaceDescriptor & Step<Req<A> | Req<B>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never]>, unknown>;
+export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<RaceDescriptor & Requires<Req<A> | Req<B>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<RaceDescriptor & Step<Req<A> | Req<B> | Req<C>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never]>, unknown>;
+export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<RaceDescriptor & Requires<Req<A> | Req<B> | Req<C>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never]>, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Step<Requirement>, { winner: number; value: unknown }, unknown>;
+export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Requires<Requirement>, { winner: number; value: unknown }, unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Step<Requirement>, { winner: number; value: unknown }, unknown> {
+export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Requires<Requirement>, { winner: number; value: unknown }, unknown> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("Race branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "race" as const, items } as RaceDescriptor & Step<Requirement>;
+		const result = yield { type: "race" as const, items } as RaceDescriptor & Requires<Requirement>;
 		return result as { winner: number; value: unknown };
 	})();
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<AllDescriptor & Step<Req<A> | Req<B>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<AllDescriptor & Requires<Req<A> | Req<B>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<AllDescriptor & Step<Req<A> | Req<B> | Req<C>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<AllDescriptor & Requires<Req<A> | Req<B> | Req<C>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>, D extends Generator<any, any, any>>(a: A, b: B, c: C, d: D): Generator<AllDescriptor & Step<Req<A> | Req<B> | Req<C> | Req<D>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never, D extends Generator<any, infer RD, any> ? RD : never], unknown>;
+export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>, D extends Generator<any, any, any>>(a: A, b: B, c: C, d: D): Generator<AllDescriptor & Requires<Req<A> | Req<B> | Req<C> | Req<D>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never, D extends Generator<any, infer RD, any> ? RD : never], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Step<Requirement>, unknown[], unknown>;
+export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Step<Requirement>, unknown[], unknown> {
+export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("All branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "all" as const, items } as AllDescriptor & Step<Requirement>;
+		const result = yield { type: "all" as const, items } as AllDescriptor & Requires<Requirement>;
 		return result as unknown[];
 	})();
 }
@@ -579,7 +579,7 @@ type LoopBreakValue<Y> = Y extends LoopBreakDescriptor<infer V> ? V : never;
 export function loop<F extends () => Generator<any, void, any>>(
 	body: F,
 ): Generator<
-	LoopDescriptor & Step<Exclude<Req<ReturnType<F>>, never>>,
+	LoopDescriptor & Requires<Exclude<Req<ReturnType<F>>, never>>,
 	LoopBreakValue<YieldOf<ReturnType<F>>>,
 	unknown
 > {
@@ -587,14 +587,14 @@ export function loop<F extends () => Generator<any, void, any>>(
 		const result = yield {
 			type: "loop" as const,
 			body,
-		} as LoopDescriptor & Step<Exclude<Req<ReturnType<F>>, never>>;
+		} as LoopDescriptor & Requires<Exclude<Req<ReturnType<F>>, never>>;
 		return result as LoopBreakValue<YieldOf<ReturnType<F>>>;
 	})();
 }
 
-export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Step<never>, never, unknown> {
-	return (function* (): Generator<LoopBreakDescriptor<V> & Step<never>, never, unknown> {
-		yield { type: "loop_break" as const, value } as LoopBreakDescriptor<V> & Step<never>;
+export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Requires<never>, never, unknown> {
+	return (function* (): Generator<LoopBreakDescriptor<V> & Requires<never>, never, unknown> {
+		yield { type: "loop_break" as const, value } as LoopBreakDescriptor<V> & Requires<never>;
 		// The interpreter will intercept this — control never returns here
 		throw new Error("loopBreak must be used inside a loop");
 	})();
