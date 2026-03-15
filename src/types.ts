@@ -32,6 +32,12 @@ export type Output<K extends string = string, V = unknown> = {
 	readonly output: { readonly [P in K]: V };
 };
 
+// Declares that a workflow needs a named, typed value from outside
+export type Query<K extends string = string, V = unknown> = {
+	readonly _tag: "query";
+	readonly query: { readonly [P in K]: V };
+};
+
 // Declares that a workflow publishes values of type V
 export type Publishes<V = unknown> = {
 	readonly _tag: "publishes";
@@ -39,7 +45,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Signal | Output | Publishes;
+export type Requirement = Signal | Output | Query | Publishes;
 
 // --- Requires (internal yield carrier) ---
 
@@ -142,6 +148,11 @@ export type OutputDescriptor = {
 	start: boolean;
 };
 
+export type QueryDescriptor = {
+	type: "query";
+	label: string;
+};
+
 export type PublishDescriptor = {
 	type: "publish";
 	value: unknown;
@@ -174,6 +185,7 @@ export type Descriptor =
 	| SleepDescriptor
 	| ChildDescriptor
 	| OutputDescriptor
+	| QueryDescriptor
 	| RaceDescriptor
 	| AllDescriptor
 	| PublishDescriptor
@@ -187,6 +199,7 @@ export type ReceiveCommand = ReceiveDescriptor & { seq: number };
 export type SleepCommand = SleepDescriptor & { seq: number };
 export type ChildCommand = ChildDescriptor & { seq: number };
 export type OutputCommand = OutputDescriptor & { seq: number };
+export type QueryCommand = QueryDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
@@ -199,6 +212,7 @@ export type Command =
 	| SleepCommand
 	| ChildCommand
 	| OutputCommand
+	| QueryCommand
 	| RaceCommand
 	| AllCommand
 	| PublishCommand
@@ -524,6 +538,22 @@ export function output<V, K extends string = string>(
 		return result as V;
 	})();
 	(gen as any).as = <W>() => output<W, K>(workflowId, options);
+	return gen as any;
+}
+
+export function query<V, K extends string = string>(
+	label: K,
+): Generator<QueryDescriptor & Requires<Query<K, V>>, V, unknown> & {
+	as: <W>() => Generator<QueryDescriptor & Requires<Query<K, W>>, W, unknown>;
+} {
+	const gen = (function* (): Generator<QueryDescriptor & Requires<Query<K, V>>, V, unknown> {
+		const result = yield {
+			type: "query" as const,
+			label,
+		} as QueryDescriptor & Requires<Query<K, V>>;
+		return result as V;
+	})();
+	(gen as any).as = <W>() => query<W, K>(label);
 	return gen as any;
 }
 

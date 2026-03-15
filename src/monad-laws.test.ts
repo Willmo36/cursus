@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, loop, loopBreak, output, publish, race, receive, sleep, workflow } from "./types";
-import type { Output, Publishes, Requirements, Signal, Workflow } from "./types";
+import { activity, all, child, handler, loop, loopBreak, output, publish, query, race, receive, sleep, workflow } from "./types";
+import type { Output, Publishes, Query, Requirements, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -440,6 +440,64 @@ describe("Monad laws", () => {
 				| Signal<"login", { name: string }>
 				| Publishes<number>
 			> = true;
+			void _check;
+			void w;
+		});
+
+		it("query().as<V>() infers query label and types value", () => {
+			const w = workflow(function* () {
+				const config = yield* query("config").as<{ url: string }>();
+				return config.url;
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Query<"config", { url: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("query() without .as() infers unknown value", () => {
+			const w = workflow(function* () {
+				const data = yield* query("payment");
+				return data;
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Query<"payment", unknown>> = true;
+			void _check;
+			void w;
+		});
+
+		it("query requirements do not widen to Query<string, any>", () => {
+			const w = workflow(function* () {
+				return yield* query("config").as<{ url: string }>();
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _notWide: AssertNotEqual<R, Query<string, any>> = true;
+			const _exact: AssertEqual<R, Query<"config", { url: string }>> = true;
+			void _notWide; void _exact; void w;
+		});
+
+		it("query in all propagates Query requirements", () => {
+			const w = workflow(function* () {
+				return yield* all(
+					query("payment").as<{ amount: number }>(),
+					query("profile").as<{ name: string }>(),
+				);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Query<"payment", { amount: number }> | Query<"profile", { name: string }>> = true;
+			void _check;
+			void w;
+		});
+
+		it("query in race propagates Query requirements", () => {
+			const w = workflow(function* () {
+				return yield* race(
+					query("fast").as<string>(),
+					query("slow").as<number>(),
+				);
+			});
+			type R = Requirements<ReturnType<typeof w>>;
+			const _check: AssertEqual<R, Query<"fast", string> | Query<"slow", number>> = true;
 			void _check;
 			void w;
 		});

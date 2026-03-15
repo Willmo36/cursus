@@ -382,6 +382,8 @@ export class Interpreter {
 				return this.executeLoop(command);
 			case "loop_break":
 				return this.executeLoopBreak(command);
+			case "query":
+				throw new Error("query command not yet implemented");
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -848,6 +850,9 @@ export class Interpreter {
 				case "loop_break": {
 					throw new Error("loop_break cannot be used inside an all branch");
 				}
+				case "query": {
+					throw new Error("query command not yet implemented in all");
+				}
 				default: {
 					const _exhaustive: never = item;
 					throw new Error(
@@ -1048,6 +1053,9 @@ export class Interpreter {
 				}
 				case "loop_break": {
 					throw new Error("loop_break cannot be used inside a race branch");
+				}
+				case "query": {
+					throw new Error("query command not yet implemented in race");
 				}
 				default: {
 					const _exhaustive: never = item;

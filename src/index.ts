@@ -41,6 +41,9 @@ export type {
 	Output,
 	OutputCommand,
 	OutputDescriptor,
+	Query,
+	QueryCommand,
+	QueryDescriptor,
 	Publishes,
 	PublishCommand,
 	PublishDescriptor,
@@ -68,5 +71,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, output, publish, race, receive, RUNNING, sleep, WAITING, workflow } from "./types";
+export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, output, publish, query, race, receive, RUNNING, sleep, WAITING, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
