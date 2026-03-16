@@ -1,5 +1,5 @@
 // ABOUTME: SSO OAuth flow workflow: initiate, wait for callback, exchange token.
-// ABOUTME: Demonstrates the activity-receive-activity pattern.
+// ABOUTME: Demonstrates the activity-query-activity pattern.
 import { activity, query, workflow } from "cursus";
 
 type SsoSession = {

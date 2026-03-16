@@ -1,5 +1,5 @@
 // ABOUTME: Chat room workflow that accumulates messages in a loop until closed.
-// ABOUTME: Demonstrates receive in a loop with discriminated union events.
+// ABOUTME: Demonstrates query in a loop with discriminated union events.
 import { query, workflow } from "cursus";
 
 export type ChatMessage = {

@@ -1,5 +1,5 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
-// ABOUTME: Demonstrates sequential receive calls with a final submission activity.
+// ABOUTME: Demonstrates sequential query calls with a final submission activity.
 import { activity, query, workflow } from "cursus";
 
 type PersonalInfo = {

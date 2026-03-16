@@ -20,18 +20,6 @@ export class CancelledError extends Error {
 
 // --- Requirement tags ---
 
-// Declares that a workflow receives signal K with payload V
-export type Signal<K extends string = string, V = unknown> = {
-	readonly _tag: "signal";
-	readonly signal: { readonly [P in K]: V };
-};
-
-// Declares that a workflow depends on the output of workflow K
-export type Output<K extends string = string, V = unknown> = {
-	readonly _tag: "output";
-	readonly output: { readonly [P in K]: V };
-};
-
 // Declares that a workflow needs a named, typed value from outside
 export type Query<K extends string = string, V = unknown> = {
 	readonly _tag: "query";
@@ -45,7 +33,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Signal | Output | Query | Publishes;
+export type Requirement = Query | Publishes;
 
 // --- Requires (internal yield carrier) ---
 
@@ -74,11 +62,9 @@ export type Requirements<W> =
 // Filters to Signal requirements and builds a record from their key-value pairs.
 export type SignalMap<W> =
 	Requirements<W> extends infer R
-		? R extends Signal<infer K, infer V>
+		? R extends Query<infer K, infer V>
 			? { readonly [P in K]: V }
-			: R extends Query<infer K, infer V>
-				? { readonly [P in K]: V }
-				: never
+			: never
 		: never;
 
 // Merges a union of single-key records into one record.
@@ -104,11 +90,10 @@ export type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
 	? Requirements<ReturnType<F>>
 	: never;
 
-// Extracts Output dependency keys from a requirement union
-export type OutputDeps<R> = R extends Output<infer K, any> ? K : never;
-
-// All dependency keys from a requirement union
-export type DepKeys<R> = OutputDeps<R>;
+// All dependency keys from a requirement union.
+// With unified query, all requirements are flexible (auto-match registry
+// or fall through to signal), so there are no mandatory dependencies.
+export type DepKeys<R> = never;
 
 // Dependency keys from R that are NOT satisfied by Provides
 export type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
@@ -128,11 +113,6 @@ export type ActivityDescriptor = {
 	fn: (signal: AbortSignal) => Promise<unknown>;
 };
 
-export type ReceiveDescriptor = {
-	type: "receive";
-	signal: string;
-};
-
 export type SleepDescriptor = {
 	type: "sleep";
 	durationMs: number;
@@ -142,12 +122,6 @@ export type ChildDescriptor = {
 	type: "child";
 	name: string;
 	workflow: AnyWorkflowFunction;
-};
-
-export type OutputDescriptor = {
-	type: "output";
-	workflowId: string;
-	start: boolean;
 };
 
 export type QueryDescriptor = {
@@ -183,10 +157,8 @@ export type LoopBreakDescriptor<V = unknown> = {
 
 export type Descriptor =
 	| ActivityDescriptor
-	| ReceiveDescriptor
 	| SleepDescriptor
 	| ChildDescriptor
-	| OutputDescriptor
 	| QueryDescriptor
 	| RaceDescriptor
 	| AllDescriptor
@@ -197,10 +169,8 @@ export type Descriptor =
 // --- Commands (descriptors with seq, internal to interpreter) ---
 
 export type ActivityCommand = ActivityDescriptor & { seq: number };
-export type ReceiveCommand = ReceiveDescriptor & { seq: number };
 export type SleepCommand = SleepDescriptor & { seq: number };
 export type ChildCommand = ChildDescriptor & { seq: number };
-export type OutputCommand = OutputDescriptor & { seq: number };
 export type QueryCommand = QueryDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
@@ -210,10 +180,8 @@ export type LoopBreakCommand = LoopBreakDescriptor & { seq: number };
 
 export type Command =
 	| ActivityCommand
-	| ReceiveCommand
 	| SleepCommand
 	| ChildCommand
-	| OutputCommand
 	| QueryCommand
 	| RaceCommand
 	| AllCommand
@@ -247,14 +215,6 @@ export type ActivityFailedEvent = {
 	seq: number;
 	error: string;
 	stack?: string;
-	timestamp: number;
-};
-
-export type SignalReceivedEvent = {
-	type: "signal_received";
-	signal: string;
-	payload: unknown;
-	seq: number;
 	timestamp: number;
 };
 
@@ -293,30 +253,6 @@ export type ChildFailedEvent = {
 	seq: number;
 	error: string;
 	stack?: string;
-	timestamp: number;
-};
-
-export type WorkflowDependencyStartedEvent = {
-	type: "workflow_dependency_started";
-	workflowId: string;
-	seq: number;
-	timestamp: number;
-};
-
-export type WorkflowDependencyFailedEvent = {
-	type: "workflow_dependency_failed";
-	workflowId: string;
-	seq: number;
-	error: string;
-	stack?: string;
-	timestamp: number;
-};
-
-export type WorkflowOutputResolvedEvent = {
-	type: "workflow_output_resolved";
-	workflowId: string;
-	seq: number;
-	result: unknown;
 	timestamp: number;
 };
 
@@ -400,15 +336,11 @@ export type WorkflowEvent =
 	| ActivityScheduledEvent
 	| ActivityCompletedEvent
 	| ActivityFailedEvent
-	| SignalReceivedEvent
 	| TimerStartedEvent
 	| TimerFiredEvent
 	| ChildStartedEvent
 	| ChildCompletedEvent
 	| ChildFailedEvent
-	| WorkflowDependencyStartedEvent
-	| WorkflowDependencyFailedEvent
-	| WorkflowOutputResolvedEvent
 	| QueryResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
@@ -564,24 +496,9 @@ export function activity<T>(
 	})();
 }
 
-// --- receive: primitive signal-waiting command ---
-
-export function receive<V, K extends string = string>(
-	signal: K,
-): Generator<ReceiveDescriptor & Requires<Signal<K, V>>, V, unknown> & {
-	as: <W>() => Generator<ReceiveDescriptor & Requires<Signal<K, W>>, W, unknown>;
-} {
-	const gen = (function* (): Generator<ReceiveDescriptor & Requires<Signal<string, unknown>>, unknown, unknown> {
-		const result = yield { type: "receive" as const, signal } as ReceiveDescriptor & Requires<Signal<string, unknown>>;
-		return result;
-	})();
-	(gen as any).as = <W>() => receive<W>(signal);
-	return gen as any;
-}
-
 // --- handler: multi-signal loop builder ---
 
-// Builder type that accumulates Signal requirements via .on() calls
+// Builder type that accumulates Query requirements via .on() calls
 export type SignalReceiver<Reqs extends Requirement = never> = {
 	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
 	on: <K extends string, V, G extends Generator<any, void, any>>(
@@ -639,25 +556,6 @@ export function publish<V>(value: V): Generator<PublishDescriptor & Requires<Pub
 	return (function* () {
 		yield { type: "publish" as const, value } as PublishDescriptor & Requires<Publishes<V>>;
 	})();
-}
-
-export function output<V, K extends string = string>(
-	workflowId: K,
-	options?: { start?: boolean },
-): Generator<OutputDescriptor & Requires<Output<K, V>>, V, unknown> & {
-	as: <W>() => Generator<OutputDescriptor & Requires<Output<K, W>>, W, unknown>;
-} {
-	const start = options?.start ?? true;
-	const gen = (function* (): Generator<OutputDescriptor & Requires<Output<K, V>>, V, unknown> {
-		const result = yield {
-			type: "output" as const,
-			workflowId,
-			start,
-		} as OutputDescriptor & Requires<Output<K, V>>;
-		return result as V;
-	})();
-	(gen as any).as = <W>() => output<W, K>(workflowId, options);
-	return gen as any;
 }
 
 export function query<V, K extends string = string>(

@@ -57,9 +57,9 @@ describe("buildTimelineData", () => {
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
 				{
-					type: "signal_received",
-					signal: "submit",
-					payload: { x: 1 },
+					type: "query_resolved",
+					label: "submit",
+					value: { x: 1 },
 					seq: 0,
 					timestamp: base + 300,
 				},
@@ -70,13 +70,13 @@ describe("buildTimelineData", () => {
 		const result = buildTimelineData(logs);
 		const row = result.rows[0];
 
-		// Point events: workflow_started, signal_received, workflow_completed
+		// Point events: workflow_started, query_resolved, workflow_completed
 		expect(row.markers).toHaveLength(3);
 
-		const signal = row.markers.find((m) => m.type === "signal_received");
-		expect(signal).toBeDefined();
-		expect(signal?.pos).toBeCloseTo(300 / 600);
-		expect(signal?.label).toBe("submit");
+		const query = row.markers.find((m) => m.type === "query_resolved");
+		expect(query).toBeDefined();
+		expect(query?.pos).toBeCloseTo(300 / 600);
+		expect(query?.label).toBe("submit");
 	});
 
 	it("handles multiple workflows with global time normalization", () => {

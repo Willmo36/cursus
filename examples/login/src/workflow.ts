@@ -1,5 +1,5 @@
 // ABOUTME: Login workflow with retry loop for failed authentication attempts.
-// ABOUTME: Demonstrates receive + activity in a loop with conditional branching.
+// ABOUTME: Demonstrates query + activity in a loop with conditional branching.
 import { activity, query, workflow } from "cursus";
 
 type Credentials = {

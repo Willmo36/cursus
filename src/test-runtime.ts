@@ -129,7 +129,7 @@ export async function createTestRuntime<
 	interpreter.onStateChange(() => {
 		if (interpreter.status !== "waiting" || signalQueue.length === 0) return;
 
-		// Single receive: match by name
+		// Single query: match by name
 		if (interpreter.receiving) {
 			const idx = signalQueue.findIndex(
 				(s) => s.name === interpreter.receiving,

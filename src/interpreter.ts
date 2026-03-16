@@ -11,7 +11,6 @@ import {
 	type Descriptor,
 	type RaceCompletedEvent,
 	type QueryResolvedEvent,
-	type SignalReceivedEvent,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
 	type WorkflowEvent,
@@ -30,7 +29,7 @@ export class Interpreter {
 	private _result: unknown;
 	private _error: string | undefined;
 	private _receiving: string | undefined;
-	private _receivingType: "receive" | "query" | undefined;
+	private _receivingType: "query" | undefined;
 	private pendingReceive:
 		| {
 				resolve: (payload: unknown) => void;
@@ -135,7 +134,7 @@ export class Interpreter {
 
 	signal(name: string, payload?: unknown): void {
 		// Race signal branches take priority — a race may have both a bare
-		// receive branch and a child branch, and the bare receive needs
+		// query branch and a child branch, and the bare query needs
 		// to be reachable without being swallowed by _activeChild.
 		if (this._raceWaiters) {
 			const waiter = this._raceWaiters.find((w) => w.signal === name);
@@ -164,26 +163,16 @@ export class Interpreter {
 
 		if (this._status !== "waiting") return;
 
-		// Single receive/query path
+		// Single query path
 		if (this._receiving === name) {
 			const seq = this.findWaitingSeq();
-			if (this._receivingType === "query") {
-				this.log.append({
-					type: "query_resolved",
-					label: name,
-					value: payload,
-					seq,
-					timestamp: Date.now(),
-				});
-			} else {
-				this.log.append({
-					type: "signal_received",
-					signal: name,
-					payload,
-					seq,
-					timestamp: Date.now(),
-				});
-			}
+			this.log.append({
+				type: "query_resolved",
+				label: name,
+				value: payload,
+				seq,
+				timestamp: Date.now(),
+			});
 			this._status = "running";
 			this._receiving = undefined;
 			this._receivingType = undefined;
@@ -214,7 +203,7 @@ export class Interpreter {
 		this._abortController?.abort();
 		this._abortController = null;
 
-		// Reject pending receive/sleep
+		// Reject pending query/sleep
 		this._pendingReject?.(new CancelledError());
 		this._pendingReject = null;
 
@@ -269,7 +258,7 @@ export class Interpreter {
 	}
 
 	private findWaitingSeq(): number {
-		// The seq of the current receive command is the current seq counter
+		// The seq of the current query command is the current seq counter
 		return this.seq;
 	}
 
@@ -378,14 +367,10 @@ export class Interpreter {
 		switch (command.type) {
 			case "activity":
 				return this.executeActivity(command);
-			case "receive":
-				return this.executeReceive(command);
 			case "sleep":
 				return this.executeSleep(command);
 			case "child":
 				return this.executeChild(command);
-			case "output":
-				return this.executeOutput(command);
 			case "race":
 				return this.executeRace(command);
 			case "all":
@@ -462,28 +447,6 @@ export class Interpreter {
 			});
 			throw err;
 		}
-	}
-
-	private async executeReceive(
-		command: Extract<Command, { type: "receive" }>,
-	): Promise<unknown> {
-		// Check for replay
-		const received = this.log.findCompleted(command.seq, "signal_received");
-		if (received) {
-			return (received as SignalReceivedEvent).payload;
-		}
-
-		// Live: pause until signal() is called
-		this._status = "waiting";
-		this._receiving = command.signal;
-		this._receivingType = "receive";
-
-		return new Promise((resolve, reject) => {
-			this.pendingReceive = { resolve };
-			this._pendingReject = reject;
-			// Notify after pendingReceive is set so signal() can resolve the promise
-			this.notifyChange();
-		});
 	}
 
 	private async executeQuery(
@@ -656,71 +619,6 @@ export class Interpreter {
 		}
 	}
 
-	private async executeOutput(
-		command: Extract<Command, { type: "output" }>,
-	): Promise<unknown> {
-		// Check for replay
-		const completed = this.log.findCompleted(
-			command.seq,
-			"workflow_output_resolved",
-		);
-		if (completed) {
-			return (completed as { result: unknown }).result;
-		}
-
-		// Check for replay: failed
-		const failed = this.log.findCompleted(
-			command.seq,
-			"workflow_dependency_failed",
-		);
-		if (failed) {
-			throw new Error((failed as { error: string }).error);
-		}
-
-		// Live: require registry
-		if (!this.registry) {
-			throw new Error(
-				"output requires a WorkflowRegistry. Wrap your app in a WorkflowLayerProvider.",
-			);
-		}
-
-		this.log.append({
-			type: "workflow_dependency_started",
-			workflowId: command.workflowId,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
-
-		try {
-			const result = await this.registry.waitFor(command.workflowId, {
-				start: command.start,
-				caller: this._workflowId,
-			});
-
-			this.log.append({
-				type: "workflow_output_resolved",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				result,
-				timestamp: Date.now(),
-			});
-
-			return result;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			const stack = err instanceof Error ? err.stack : undefined;
-			this.log.append({
-				type: "workflow_dependency_failed",
-				workflowId: command.workflowId,
-				seq: command.seq,
-				error: message,
-				stack,
-				timestamp: Date.now(),
-			});
-			throw err;
-		}
-	}
-
 	private async executePublish(
 		command: Extract<Command, { type: "publish" }>,
 	): Promise<void> {
@@ -843,22 +741,6 @@ export class Interpreter {
 							resolve({ index, value: undefined });
 						}, item.durationMs);
 					});
-				}
-				case "receive": {
-					return new Promise<{ index: number; value: unknown }>((resolve) => {
-						allWaiters.push({
-							signal: item.signal,
-							resolve: (payload: unknown) => {
-								resolve({ index, value: payload });
-							},
-						});
-					});
-				}
-				case "output": {
-					return this.executeOutput(item).then((value) => ({
-						index,
-						value,
-					}));
 				}
 				case "child": {
 					const childName = item.name;
@@ -1086,21 +968,6 @@ export class Interpreter {
 						}, item.durationMs);
 					});
 				}
-				case "receive": {
-					return new Promise<{ index: number; value: unknown }>((resolve) => {
-						raceWaiters.push({
-							signal: item.signal,
-							resolve: (payload: unknown) => {
-								// Immediately clear race waiters to prevent stale
-								// resolution when receive() loops and a signal arrives
-								// before the next race is set up.
-								this._raceWaiters = null;
-								this._status = "running";
-								resolve({ index, value: payload });
-							},
-						});
-					});
-				}
 				case "child": {
 					const raceChildName = item.name;
 					const raceChildOnAppend =
@@ -1140,12 +1007,6 @@ export class Interpreter {
 						}
 						return { index, value: result };
 					});
-				}
-				case "output": {
-					return this.executeOutput(item).then((value) => ({
-						index,
-						value,
-					}));
 				}
 				case "race": {
 					return this.executeRace(item).then((value) => ({

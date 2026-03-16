@@ -1,5 +1,5 @@
 // ABOUTME: Cookie consent workflow that waits for a single user choice.
-// ABOUTME: Demonstrates receive with a discriminated union payload.
+// ABOUTME: Demonstrates query with a discriminated union payload.
 import { query, workflow } from "cursus";
 
 export type CookieChoice =

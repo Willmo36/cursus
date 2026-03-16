@@ -65,7 +65,7 @@ describe("event schema", () => {
 			"activity_scheduled",
 			"activity_completed",
 			"activity_failed",
-			"signal_received",
+			"query_resolved",
 			"timer_started",
 			"timer_fired",
 			"child_started",
@@ -73,12 +73,11 @@ describe("event schema", () => {
 			"child_failed",
 			"all_started",
 			"all_completed",
-			"workflow_dependency_started",
-			"workflow_output_resolved",
-			"workflow_dependency_failed",
 			"workflow_published",
 			"race_started",
 			"race_completed",
+			"loop_started",
+			"loop_completed",
 		];
 
 		const defs = (eventSchema as Record<string, unknown>).$defs as Record<

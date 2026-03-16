@@ -38,9 +38,6 @@ export type {
 	LoopBreakDescriptor,
 	LoopCommand,
 	LoopDescriptor,
-	Output,
-	OutputCommand,
-	OutputDescriptor,
 	Query,
 	QueryCommand,
 	QueryDescriptor,
@@ -49,11 +46,8 @@ export type {
 	PublishDescriptor,
 	RaceCommand,
 	RaceDescriptor,
-	ReceiveCommand,
-	ReceiveDescriptor,
 	Requirement,
 	Requirements,
-	Signal,
 	SignalMapOf,
 	SignalReceiver,
 	SleepCommand,
@@ -61,7 +55,6 @@ export type {
 	Requires,
 	Workflow,
 	WorkflowCancelledEvent,
-	WorkflowDependencyFailedEvent,
 	WorkflowEvent,
 	WorkflowEventLog,
 	WorkflowEventObserver,
@@ -71,5 +64,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, output, publish, query, race, receive, RUNNING, sleep, WAITING, workflow } from "./types";
+export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, publish, query, race, RUNNING, sleep, WAITING, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
