@@ -446,11 +446,6 @@ type GenParams<F> = F extends (...args: infer P) => any ? P : never;
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
 type FnReqs<F> = F extends (...args: any[]) => infer G ? Requirements<G> : never;
 
-// Removes Query<K, _> from a requirement union and adds provider requirements
-type ReplaceQueryReq<R extends Requirement, K extends string, ProviderReqs extends Requirement> =
-	| Exclude<R, Query<K, any>>
-	| ProviderReqs;
-
 // Builds a workflow function type from params, requirements, and return type
 type WorkflowFnType<Params extends unknown[], Reqs extends Requirement, Ret> =
 	(...args: Params) => Generator<Descriptor & Requires<Reqs>, Ret, unknown>;
@@ -462,7 +457,7 @@ export type WorkflowFn<F> = F & {
 	provide<K extends string, G extends () => Generator<any, any, any>>(
 		label: K,
 		provider: G,
-	): WorkflowFn<WorkflowFnType<GenParams<F>, ReplaceQueryReq<FnReqs<F>, K, FnReqs<() => ReturnType<G>>>, GenReturn<F>>>;
+	): WorkflowFn<WorkflowFnType<GenParams<F>, Exclude<FnReqs<F>, Query<K, any>> | FnReqs<() => ReturnType<G>>, GenReturn<F>>>;
 };
 
 // Wraps a generator function into a workflow with profunctor operations.
@@ -592,7 +587,7 @@ export type SignalReceiver<Reqs extends Requirement = never> = {
 	on: <K extends string, V, G extends Generator<any, void, any>>(
 		signal: K,
 		fn: (payload: V, done: <D>(value: D) => Workflow<never>) => G,
-	) => SignalReceiver<Reqs | Signal<K, V> | Req<G>>;
+	) => SignalReceiver<Reqs | Query<K, V> | Req<G>>;
 	as: <T>() => Workflow<T, Reqs>;
 };
 
@@ -608,7 +603,7 @@ export function handler(): SignalReceiver {
 			const doneFn = <D>(value: D): Workflow<never> => loopBreak(value) as Workflow<never>;
 			return loop(function* () {
 				const result = yield* (race(
-					...handlers.map((h) => receive(h.signal)),
+					...handlers.map((h) => query(h.signal)),
 				) as Generator<any, { winner: number; value: unknown }, unknown>);
 				const h = handlers[result.winner];
 				if (h) {

@@ -1150,24 +1150,23 @@ export class Interpreter {
 							value: (queryResolved as QueryResolvedEvent).value,
 						});
 					}
-					raceWaiters.push({
-						signal: item.label,
-						resolve: null as unknown as (payload: unknown) => void,
-					});
 					return new Promise<{ index: number; value: unknown }>(
 						(resolve) => {
-							raceWaiters[raceWaiters.length - 1].resolve = (
-								payload: unknown,
-							) => {
-								this.log.append({
-									type: "query_resolved",
-									label: item.label,
-									value: payload,
-									seq: item.seq,
-									timestamp: Date.now(),
-								});
-								resolve({ index, value: payload });
-							};
+							raceWaiters.push({
+								signal: item.label,
+								resolve: (payload: unknown) => {
+									this._raceWaiters = null;
+									this._status = "running";
+									this.log.append({
+										type: "query_resolved",
+										label: item.label,
+										value: payload,
+										seq: item.seq,
+										timestamp: Date.now(),
+									});
+									resolve({ index, value: payload });
+								},
+							});
 						},
 					);
 				}
