@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
-import { activity, publish, receive, workflow } from "./types";
+import { activity, publish, query, workflow } from "./types";
 
 describe("runWorkflow", () => {
 	it("returns snapshot with completed state and result", async () => {
@@ -59,7 +59,7 @@ describe("runWorkflow", () => {
 
 	it("returns waiting state when workflow blocks on signal", async () => {
 		const wf = workflow(function* () {
-			const data = yield* receive("submit");
+			const data = yield* query("submit");
 			return `got: ${data}`;
 		});
 
@@ -72,7 +72,7 @@ describe("runWorkflow", () => {
 	it("includes receiving in snapshot for SSR hydration", async () => {
 		const wf = workflow(function* () {
 			yield* activity("prep", async () => "prepared");
-			const confirmed = yield* receive("confirm");
+			const confirmed = yield* query("confirm");
 			return confirmed ? "confirmed" : "denied";
 		});
 

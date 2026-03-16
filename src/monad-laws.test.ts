@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, loop, loopBreak, output, publish, query, race, receive, sleep, workflow } from "./types";
-import type { Output, Publishes, Query, Requirements, Signal, Workflow } from "./types";
+import { activity, all, child, handler, loop, loopBreak, publish, query, race, sleep, workflow } from "./types";
+import type { Publishes, Query, Requirements, Signal, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -91,7 +91,7 @@ describe("Monad laws", () => {
 
 		it("child workflow behaves same as inline (right identity via delegation)", async () => {
 			const childWorkflow = workflow(function* () {
-				const val = yield* receive<string>("data");
+				const val = yield* query<string>("data");
 				return `got: ${val}`;
 			});
 
@@ -102,7 +102,7 @@ describe("Monad laws", () => {
 
 			// Inline (same logic, no child)
 			const inline = workflow(function* () {
-				const val = yield* receive<string>("data");
+				const val = yield* query<string>("data");
 				return `got: ${val}`;
 			});
 
@@ -185,13 +185,13 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("receive propagates Signal requirement", () => {
+		it("query propagates Query requirement", () => {
 			const w = workflow(function* () {
-				const user = yield* receive("login").as<{ name: string }>();
+				const user = yield* query("login").as<{ name: string }>();
 				return user.name;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", { name: string }>> = true;
+			const _check: AssertEqual<R, Query<"login", { name: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -233,12 +233,12 @@ describe("Monad laws", () => {
 		it("race propagates union of branch requirements", () => {
 			const w = workflow(function* () {
 				return yield* race(
-					receive("login").as<{ user: string }>(),
-					output("payment").as<number>(),
+					query("login").as<{ user: string }>(),
+					query("payment").as<number>(),
 				);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", { user: string }> | Output<"payment", number>> = true;
+			const _check: AssertEqual<R, Query<"login", { user: string }> | Query<"payment", number>> = true;
 			void _check;
 			void w;
 		});
@@ -246,12 +246,12 @@ describe("Monad laws", () => {
 		it("all propagates union of branch requirements", () => {
 			const w = workflow(function* () {
 				return yield* all(
-					receive("login").as<{ user: string }>(),
-					output("config").as<{ url: string }>(),
+					query("login").as<{ user: string }>(),
+					query("config").as<{ url: string }>(),
 				);
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", { user: string }> | Output<"config", { url: string }>> = true;
+			const _check: AssertEqual<R, Query<"login", { user: string }> | Query<"config", { url: string }>> = true;
 			void _check;
 			void w;
 		});
@@ -303,14 +303,14 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("receive requirements do not widen to Signal<string, any>", () => {
-			// receive: signal name stays literal
+		it("query requirements do not widen to Query<string, any>", () => {
+			// query: query name stays literal
 			const w1 = workflow(function* () {
-				return yield* receive("submit").as<{ data: number }>();
+				return yield* query("submit").as<{ data: number }>();
 			});
 			type R1 = Requirements<ReturnType<typeof w1>>;
-			const _notWide1: AssertNotEqual<R1, Signal<string, any>> = true;
-			const _exact1: AssertEqual<R1, Signal<"submit", { data: number }>> = true;
+			const _notWide1: AssertNotEqual<R1, Query<string, any>> = true;
+			const _exact1: AssertEqual<R1, Query<"submit", { data: number }>> = true;
 			void _notWide1; void _exact1; void w1;
 
 			// handler: stays as union of specific signals
@@ -345,18 +345,18 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("handler propagates Output requirement from handler body", () => {
+		it("handler propagates Query requirement from handler body", () => {
 			const w = workflow(function* () {
 				return yield* handler()
 					.on("go", function* (_payload: undefined, done) {
-						const config = yield* output("config").as<{ url: string }>();
+						const config = yield* query("config").as<{ url: string }>();
 						yield* done(config.url);
 					})
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
-			const _hasOutput: AssertEqual<Output<"config", { url: string }> extends R ? true : false, true> = true;
+			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
 		});
 
@@ -379,65 +379,65 @@ describe("Monad laws", () => {
 			void _hasOuter; void _hasInner; void w;
 		});
 
-		it("output().as<V>() infers workflow id and types value", () => {
+		it("query().as<V>() infers workflow id and types value", () => {
 			const w = workflow(function* () {
-				const config = yield* output("config").as<{ url: string }>();
+				const config = yield* query("config").as<{ url: string }>();
 				return config.url;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Output<"config", { url: string }>> = true;
+			const _check: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _check;
 			void w;
 		});
 
-		it("output() without .as() infers unknown value", () => {
+		it("query() without .as() infers unknown value", () => {
 			const w = workflow(function* () {
-				const data = yield* output("payment");
+				const data = yield* query("payment");
 				return data;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Output<"payment", unknown>> = true;
+			const _check: AssertEqual<R, Query<"payment", unknown>> = true;
 			void _check;
 			void w;
 		});
 
-		it("output requirements do not widen to Output<string, any>", () => {
+		it("query requirements do not widen to Query<string, any>", () => {
 			const w = workflow(function* () {
-				return yield* output("config").as<{ url: string }>();
+				return yield* query("config").as<{ url: string }>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _notWide: AssertNotEqual<R, Output<string, any>> = true;
-			const _exact: AssertEqual<R, Output<"config", { url: string }>> = true;
+			const _notWide: AssertNotEqual<R, Query<string, any>> = true;
+			const _exact: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _notWide; void _exact; void w;
 		});
 
-		it("output in handler body propagates Output requirement up", () => {
+		it("query in handler body propagates Query requirement up", () => {
 			const w = workflow(function* () {
 				return yield* handler()
 					.on("go", function* (_payload: undefined, done) {
-						const config = yield* output("config").as<{ url: string }>();
+						const config = yield* query("config").as<{ url: string }>();
 						yield* done(config.url);
 					})
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
-			const _hasOutput: AssertEqual<Output<"config", { url: string }> extends R ? true : false, true> = true;
+			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
 		});
 
 		it("multiple operations accumulate requirements as union", () => {
 			const w = workflow(function* () {
-				const config = yield* output("config").as<{ url: string }>();
-				const user = yield* receive("login").as<{ name: string }>();
+				const config = yield* query("config").as<{ url: string }>();
+				const user = yield* query("login").as<{ name: string }>();
 				yield* publish(42);
 				return `${config.url}-${user.name}`;
 			});
 			type R = Requirements<ReturnType<typeof w>>;
 			const _check: AssertEqual<
 				R,
-				| Output<"config", { url: string }>
-				| Signal<"login", { name: string }>
+				| Query<"config", { url: string }>
+				| Query<"login", { name: string }>
 				| Publishes<number>
 			> = true;
 			void _check;
@@ -505,7 +505,7 @@ describe("Monad laws", () => {
 		it("loop propagates requirements from body", () => {
 			const w = workflow(function* () {
 				return yield* loop(function* () {
-					const msg = yield* receive("input").as<string>();
+					const msg = yield* query("input").as<string>();
 					yield* publish(msg);
 					if (msg === "quit") {
 						yield* loopBreak("done");
@@ -513,7 +513,7 @@ describe("Monad laws", () => {
 				});
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"input", string> | Publishes<string>> = true;
+			const _check: AssertEqual<R, Query<"input", string> | Publishes<string>> = true;
 			void _check;
 			void w;
 		});
@@ -533,14 +533,14 @@ describe("Monad laws", () => {
 
 		it("workflow() constructor enables inference and works at runtime", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive("greet").as<string>();
+				const name = yield* query("greet").as<string>();
 				const msg = yield* activity("format", async () => `Hello ${name}`);
 				return msg;
 			});
 
 			// Type-level: Requirements are inferred
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"greet", string>> = true;
+			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 
 			// Runtime: workflow() output is usable with createTestRuntime
@@ -565,14 +565,14 @@ describe("Monad laws", () => {
 			expect(result).toBe("hello");
 		});
 
-		it("receive free function carries Signal requirement", async () => {
+		it("query free function carries Query requirement", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive("login").as<string>();
+				const name = yield* query("login").as<string>();
 				return `Hello ${name}`;
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"login", string>> = true;
+			const _check: AssertEqual<R, Query<"login", string>> = true;
 			void _check;
 
 			const result = await createTestRuntime(w, {
@@ -581,14 +581,14 @@ describe("Monad laws", () => {
 			expect(result).toBe("Hello Max");
 		});
 
-		it("receive().as<V>() infers signal name and types payload", async () => {
+		it("query().as<V>() infers query name and types payload", async () => {
 			const w = workflow(function* () {
-				const data = yield* receive("pay").as<{ amount: number }>();
+				const data = yield* query("pay").as<{ amount: number }>();
 				return data.amount;
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"pay", { amount: number }>> = true;
+			const _check: AssertEqual<R, Query<"pay", { amount: number }>> = true;
 			void _check;
 
 			const result = await createTestRuntime(w, {
@@ -597,14 +597,14 @@ describe("Monad laws", () => {
 			expect(result).toBe(42);
 		});
 
-		it("receive() without .as() infers unknown payload", async () => {
+		it("query() without .as() infers unknown payload", async () => {
 			const w = workflow(function* () {
-				const data = yield* receive("submit");
+				const data = yield* query("submit");
 				return data;
 			});
 
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"submit", unknown>> = true;
+			const _check: AssertEqual<R, Query<"submit", unknown>> = true;
 			void _check;
 
 			const result = await createTestRuntime(w, {
@@ -625,15 +625,15 @@ describe("Monad laws", () => {
 
 		it("free functions compose with precise yield types", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive("greet").as<string>();
+				const name = yield* query("greet").as<string>();
 				const msg = yield* activity("format", async () => `Hello ${name}`);
 				yield* sleep(10);
 				return msg;
 			});
 
-			// Only Signal<"greet", string> — no Result, Published, or Publishes
+			// Only Query<"greet", string> — no Result, Published, or Publishes
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"greet", string>> = true;
+			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 
 			const result = await createTestRuntime(w, {

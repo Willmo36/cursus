@@ -12,7 +12,7 @@ import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
-import { activity, all, output, publish, race, receive, workflow } from "./types";
+import { activity, all, output, publish, query, race, receive, workflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -50,7 +50,7 @@ describe("useWorkflow", () => {
 
 		it("provides signal function that pushes data into workflow", async () => {
 			const w = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -74,8 +74,8 @@ describe("useWorkflow", () => {
 		it("exposes waitingForAny when workflow uses race with signals", async () => {
 			const w = workflow(function* () {
 				const { winner } = yield* race(
-					receive("a"),
-					receive("b"),
+					query("a"),
+					query("b"),
 				);
 				return winner === 0 ? "a" : "b";
 			});
@@ -156,8 +156,8 @@ describe("useWorkflow", () => {
 
 		it("exposes what signal the workflow is waiting for", async () => {
 			const w = workflow(function* () {
-				const email = yield* receive<string>("email");
-				const password = yield* receive<string>("password");
+				const email = yield* query<string>("email");
+				const password = yield* query<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -172,7 +172,7 @@ describe("useWorkflow", () => {
 
 		it("collects multiple signals with all", async () => {
 			const w = workflow(function* () {
-				return yield* all(receive("email"), receive("password"));
+				return yield* all(query("email"), query("password"));
 			});
 
 			const { result } = renderHook(() =>
@@ -338,8 +338,8 @@ describe("useWorkflow", () => {
 
 		it("persists events incrementally so intermediate state survives remount", async () => {
 			const w = workflow(function* () {
-				const email = yield* receive<string>("email");
-				const password = yield* receive<string>("password");
+				const email = yield* query<string>("email");
+				const password = yield* query<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -419,7 +419,7 @@ describe("useWorkflow", () => {
 
 		it("sends signals to the layer workflow", async () => {
 			const w = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -448,8 +448,8 @@ describe("useWorkflow", () => {
 
 		it("state reactively updates as layer workflow progresses", async () => {
 			const w = workflow(function* () {
-				const a = yield* receive<string>("step1");
-				const b = yield* receive<string>("step2");
+				const a = yield* query<string>("step1");
+				const b = yield* query<string>("step2");
 				return `${a}:${b}`;
 			});
 
@@ -524,9 +524,9 @@ describe("useWorkflow", () => {
 	describe("published", () => {
 		it("published is undefined before publish, then set after", async () => {
 			const w = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const { result } = renderHook(() =>
@@ -553,7 +553,7 @@ describe("useWorkflow", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;
 			const w = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				yield* activity("after", async () => {
 					activityResolved = true;
 					return "done";
@@ -580,7 +580,7 @@ describe("useWorkflow", () => {
 
 		it("cancel() function is exposed and works", async () => {
 			const w = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -605,7 +605,7 @@ describe("useWorkflow", () => {
 			let runCount = 0;
 			const w = workflow(function* () {
 				runCount++;
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `run${runCount}: ${data}`;
 			});
 
@@ -639,13 +639,13 @@ describe("useWorkflow", () => {
 	});
 
 	describe("cross-workflow dependencies", () => {
-		it("inline workflow can use output with layer workflows", async () => {
+		it("inline workflow can use query with layer workflows", async () => {
 			const loginWorkflow = workflow(function* () {
 				return yield* activity("login", async () => "user-123");
 			});
 
 			const localWorkflow = workflow(function* () {
-				const user = yield* output("login");
+				const user = yield* query("login");
 				return `local got: ${user}`;
 			});
 
@@ -665,7 +665,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("signal then output then activity completes", async () => {
+		it("signal then query then activity completes", async () => {
 			const profileWorkflow = workflow(function* () {
 				const profile = yield* receive("profile");
 				return profile;
@@ -953,7 +953,7 @@ describe("useWorkflow", () => {
 
 		it("seeds events and continues execution for partial snapshot", async () => {
 			const w = workflow(function* () {
-				const name = yield* receive("name");
+				const name = yield* query("name");
 				return `hello ${name}`;
 			});
 
@@ -1116,7 +1116,7 @@ describe("useWorkflow", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* output("profile").as<{ name: string }>();
+				const profile = yield* query("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 

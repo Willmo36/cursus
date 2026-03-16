@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
-import { activity, output, publish, receive, workflow } from "./types";
-import type { Output, Publishes, Requirements, Signal } from "./types";
+import { activity, publish, query, workflow } from "./types";
+import type { Publishes, Query, Requirements } from "./types";
 
 type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
 
@@ -32,7 +32,7 @@ describe("Registry builder", () => {
 		});
 
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* output("profile").as<{ name: string }>();
+			const profile = yield* query("profile").as<{ name: string }>();
 			return yield* activity("checkout", async () => `order for ${profile.name}`);
 		});
 
@@ -51,7 +51,7 @@ describe("Registry builder", () => {
 		});
 
 		const dashboardWorkflow = workflow(function* () {
-			const session = yield* output("session").as<{ token: string }>();
+			const session = yield* query("session").as<{ token: string }>();
 			return `dashboard: ${session.token}`;
 		});
 
@@ -64,7 +64,7 @@ describe("Registry builder", () => {
 
 	it("allows workflows with only Signal requirements (no registry deps)", () => {
 		const loginWorkflow = workflow(function* () {
-			const creds = yield* receive("credentials").as<{ user: string }>();
+			const creds = yield* query("credentials").as<{ user: string }>();
 			return creds.user;
 		});
 
@@ -86,14 +86,17 @@ describe("Registry builder", () => {
 		expect(registry).toBeDefined();
 	});
 
-	it("rejects workflow with unsatisfied Output dependency (type-level)", () => {
+	it("allows workflow with query dependency (can be signal or registry match)", () => {
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* output("profile").as<{ name: string }>();
+			const profile = yield* query("profile").as<{ name: string }>();
 			return profile.name;
 		});
 
-		// @ts-expect-error — "profile" is not provided, should fail
-		createRegistry(new MemoryStorage()).add("checkout", checkoutWorkflow);
+		// Query deps are flexible — can be satisfied by registry OR signals
+		const registry = createRegistry(new MemoryStorage())
+			.add("checkout", checkoutWorkflow);
+
+		expect(registry).toBeDefined();
 	});
 
 	describe("build()", () => {
@@ -120,7 +123,7 @@ describe("Registry builder", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* output("profile").as<{ name: string }>();
+				const profile = yield* query("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 

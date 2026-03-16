@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, output, query, race, receive, workflow } from "./types";
+import { activity, all, child, handler, output, query, race, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -23,7 +23,7 @@ describe("createTestRuntime", () => {
 
 	it("runs a workflow with pre-queued signals", async () => {
 		const wf = workflow(function* () {
-			const data = yield* receive<string>("submit");
+			const data = yield* query<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -37,7 +37,7 @@ describe("createTestRuntime", () => {
 	it("handles multiple activities and signals together", async () => {
 		const wf = workflow(function* () {
 			const user = yield* activity("fetchUser", async () => "real-user");
-			const input = yield* receive<string>("confirm");
+			const input = yield* query<string>("confirm");
 			const saved = yield* activity("save", async () => "real-save");
 			return `${user}:${input}:${saved}`;
 		});
@@ -76,7 +76,7 @@ describe("createTestRuntime", () => {
 
 	it("runs a workflow with all and pre-queued signals", async () => {
 		const wf = workflow(function* () {
-			return yield* all(receive("email"), receive("password"));
+			return yield* all(query("email"), query("password"));
 		});
 
 		const result = await createTestRuntime(wf, {
@@ -91,8 +91,8 @@ describe("createTestRuntime", () => {
 
 	it("supports multiple sequential signals", async () => {
 		const wf = workflow(function* () {
-			const email = yield* receive<string>("email");
-			const password = yield* receive<string>("password");
+			const email = yield* query<string>("email");
+			const password = yield* query<string>("password");
 			return `${email}:${password}`;
 		});
 
@@ -106,9 +106,9 @@ describe("createTestRuntime", () => {
 		expect(result).toBe("test@example.com:secret123");
 	});
 
-	it("mocks output with workflowResults", async () => {
+	it("mocks query with workflowResults", async () => {
 		const wf = workflow(function* () {
-			const user = yield* output("login");
+			const user = yield* query("login");
 			return `got: ${user}`;
 		});
 
@@ -123,9 +123,9 @@ describe("createTestRuntime", () => {
 
 	it("workflowResults works alongside activities and signals", async () => {
 		const wf = workflow(function* () {
-			const user = yield* output("login");
+			const user = yield* query("login");
 			const greeting = yield* activity("greet", async () => "real");
-			const confirm = yield* receive("confirm");
+			const confirm = yield* query("confirm");
 			return `${user}:${greeting}:${confirm}`;
 		});
 
@@ -162,7 +162,7 @@ describe("createTestRuntime", () => {
 
 	it("runs mixed all with signals and workflowResults", async () => {
 		const wf = workflow(function* () {
-			return yield* all(receive("payment"), output("profile"));
+			return yield* all(query("payment"), output("profile"));
 		});
 
 		const result = await createTestRuntime(wf, {
@@ -204,8 +204,8 @@ describe("createTestRuntime", () => {
 	it("runs a workflow with race and pre-queued signals", async () => {
 		const wf = workflow(function* () {
 			const { winner, value } = yield* race(
-				receive("a"),
-				receive("b"),
+				query("a"),
+				query("b"),
 			);
 			return winner === 0 ? `a:${value}` : `b:${value}`;
 		});
@@ -298,7 +298,7 @@ describe("createTestRuntime", () => {
 
 		it("pre-queued signals work with child workflows", async () => {
 			const childWorkflow = workflow(function* () {
-				const val = yield* receive("data");
+				const val = yield* query("data");
 				const greeting = yield* activity("greet", async () => "real");
 				return `${greeting}: ${val}`;
 			});

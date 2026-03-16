@@ -6,7 +6,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import { activity, all, handler, output, publish, race, receive, sleep, workflow } from "./types";
+import { activity, all, handler, output, publish, query, race, sleep, workflow } from "./types";
 import type {
 	WorkflowEvent,
 	WorkflowEventObserver,
@@ -215,7 +215,7 @@ describe("WorkflowRegistry", () => {
 
 	it("signal() delegates to the interpreter", async () => {
 		const wf = workflow(function* () {
-			const data = yield* receive<string>("submit");
+			const data = yield* query<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -336,7 +336,7 @@ describe("WorkflowRegistry", () => {
 
 		it("re-observe() replaces interpreter for previously observed entries", async () => {
 			const wf = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -372,7 +372,7 @@ describe("WorkflowRegistry", () => {
 
 		it("observe() wires interpreter state changes to entry listeners", async () => {
 			const wf = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -527,7 +527,7 @@ describe("WorkflowRegistry", () => {
 
 		it("reset() cancels a waiting workflow", async () => {
 			const wf = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -548,7 +548,7 @@ describe("WorkflowRegistry", () => {
 
 		it("reset() notifies state change listeners", async () => {
 			const wf = workflow(function* () {
-				const data = yield* receive<string>("submit");
+				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -592,11 +592,11 @@ describe("WorkflowRegistry", () => {
 	describe("circular dependency detection", () => {
 		it("detects a direct cycle (A → B → A)", async () => {
 			const wfA = workflow(function* () {
-				return yield* output("B");
+				return yield* query("B");
 			});
 
 			const wfB = workflow(function* () {
-				return yield* output("A");
+				return yield* query("A");
 			});
 
 			const storage = new MemoryStorage();
@@ -616,15 +616,15 @@ describe("WorkflowRegistry", () => {
 
 		it("detects a transitive cycle (A → B → C → A)", async () => {
 			const wfA = workflow(function* () {
-				return yield* output("B");
+				return yield* query("B");
 			});
 
 			const wfB = workflow(function* () {
-				return yield* output("C");
+				return yield* query("C");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* output("A");
+				return yield* query("A");
 			});
 
 			const storage = new MemoryStorage();
@@ -649,11 +649,11 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const wfA = workflow(function* () {
-				return yield* output("target");
+				return yield* query("target");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* output("target");
+				return yield* query("target");
 			});
 
 			const storage = new MemoryStorage();
@@ -700,11 +700,11 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const wfB = workflow(function* () {
-				return yield* output("A");
+				return yield* query("A");
 			});
 
 			const wfC = workflow(function* () {
-				return yield* output("B");
+				return yield* query("B");
 			});
 
 			const storage = new MemoryStorage();
@@ -886,7 +886,7 @@ describe("WorkflowRegistry", () => {
 
 	it("onStateChange returns unsubscribe function", async () => {
 		const wf = workflow(function* () {
-			const data = yield* receive<string>("submit");
+			const data = yield* query<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -917,10 +917,10 @@ describe("WorkflowRegistry", () => {
 	describe("publish", () => {
 		it("publish() resolves existing waiters", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
 				// Keep running — don't return yet
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const storage = new MemoryStorage();
@@ -951,9 +951,9 @@ describe("WorkflowRegistry", () => {
 
 		it("waitFor returns published value immediately after publish", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const storage = new MemoryStorage();
@@ -984,15 +984,15 @@ describe("WorkflowRegistry", () => {
 			expect(result).toBe("hello");
 		});
 
-		it("integration: output() gets published value from another workflow", async () => {
+		it("integration: query() gets published value from another workflow", async () => {
 			const sessionWf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const checkoutWf = workflow(function* () {
-				const account = yield* output<{ user: string }>("session");
+				const account = yield* query<{ user: string }>("session");
 				return `checkout for ${account.user}`;
 			});
 
@@ -1020,9 +1020,9 @@ describe("WorkflowRegistry", () => {
 
 		it("reset clears published state", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const storage = new MemoryStorage();
@@ -1051,7 +1051,7 @@ describe("WorkflowRegistry", () => {
 
 		it("compaction preserves workflow_published event alongside terminal event", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
 				return `done for ${user}`;
 			});
@@ -1079,7 +1079,7 @@ describe("WorkflowRegistry", () => {
 
 		it("reload from compacted storage restores published state for waitFor", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
 				return `done for ${user}`;
 			});
@@ -1104,9 +1104,9 @@ describe("WorkflowRegistry", () => {
 	describe("waitFor", () => {
 		it("waitFor() returns published value", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const storage = new MemoryStorage();
@@ -1160,9 +1160,9 @@ describe("WorkflowRegistry", () => {
 
 		it("waitFor returns immediately when already published", async () => {
 			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
+				const { user } = yield* query<{ user: string }>("login");
 				yield* publish({ user });
-				yield* receive("login");
+				yield* query("login");
 			});
 
 			const storage = new MemoryStorage();

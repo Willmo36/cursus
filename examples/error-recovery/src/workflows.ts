@@ -1,6 +1,6 @@
 // ABOUTME: Payment and order workflows demonstrating dependency error recovery.
 // ABOUTME: The payment workflow always fails; the order workflow catches the failure gracefully.
-import { activity, output, receive, withRetry, workflow } from "cursus";
+import { activity, query, withRetry, workflow } from "cursus";
 
 // --- Payment workflow (registered in layer, always fails) ---
 
@@ -22,7 +22,7 @@ const charge = withRetry<Receipt>(
 );
 
 export const paymentWorkflow = workflow(function* () {
-	const card = yield* receive("card").as<CardInfo>();
+	const card = yield* query("card").as<CardInfo>();
 	const receipt = yield* activity("charge", charge);
 	return receipt;
 });
@@ -45,9 +45,9 @@ export type OrderResult =
 	| { status: "payment-failed"; name: string; address: string; error: string };
 
 export const orderWorkflow = workflow(function* () {
-	const shipping = yield* receive("shipping").as<ShippingInfo>();
+	const shipping = yield* query("shipping").as<ShippingInfo>();
 	try {
-		const receipt = yield* output("payment").as<Receipt>();
+		const receipt = yield* query("payment").as<Receipt>();
 		return {
 			status: "confirmed" as const,
 			...shipping,

@@ -1,7 +1,7 @@
 // ABOUTME: Product detail workflow that fetches data and optionally waits for user review.
 // ABOUTME: Demonstrates a workflow suitable for SSR — the fetch completes on the server.
 
-import { activity, publish, receive, workflow } from "cursus";
+import { activity, publish, query, workflow } from "cursus";
 
 export type Product = {
 	name: string;
@@ -32,7 +32,7 @@ export const productWorkflow = workflow(function* () {
 
 	yield* publish(product);
 
-	const review = yield* receive("review").as<string>();
+	const review = yield* query("review").as<string>();
 
 	return { product, review };
 });

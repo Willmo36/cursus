@@ -1,6 +1,6 @@
 // ABOUTME: Session and checkout workflows demonstrating the publish pattern.
 // ABOUTME: Session publishes the account on login and keeps running for revocation.
-import { activity, handler, output, publish, receive, workflow } from "cursus";
+import { activity, handler, publish, query, workflow } from "cursus";
 
 type Account = { user: string; tier: string };
 
@@ -15,7 +15,7 @@ type WorkflowMap = {
 };
 
 export const sessionWorkflow = workflow(function* () {
-	const { user } = yield* receive("login").as<{ user: string; password: string }>();
+	const { user } = yield* query("login").as<{ user: string; password: string }>();
 
 	const account: Account = yield* activity("authenticate", async () => ({
 		user,
@@ -43,9 +43,9 @@ export const sessionWorkflow = workflow(function* () {
 });
 
 export const checkoutWorkflow = workflow(function* () {
-	const account = yield* output("session").as<Account>();
+	const account = yield* query("session").as<Account>();
 
-	const payment = yield* receive("pay").as<{ amount: number }>();
+	const payment = yield* query("pay").as<{ amount: number }>();
 
 	const confirmation = yield* activity(
 		"process-payment",

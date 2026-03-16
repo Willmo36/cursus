@@ -76,7 +76,9 @@ export type SignalMap<W> =
 	Requirements<W> extends infer R
 		? R extends Signal<infer K, infer V>
 			? { readonly [P in K]: V }
-			: never
+			: R extends Query<infer K, infer V>
+				? { readonly [P in K]: V }
+				: never
 		: never;
 
 // Merges a union of single-key records into one record.

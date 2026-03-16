@@ -1,6 +1,6 @@
 // ABOUTME: Cookie consent workflow that waits for a single user choice.
 // ABOUTME: Demonstrates receive with a discriminated union payload.
-import { receive, workflow } from "cursus";
+import { query, workflow } from "cursus";
 
 export type CookieChoice =
 	| { type: "accept-all" }
@@ -14,7 +14,7 @@ export type CookiePreferences = {
 };
 
 export const cookieWorkflow = workflow(function* () {
-	const choice = yield* receive("cookie-choice").as<CookieChoice>();
+	const choice = yield* query("cookie-choice").as<CookieChoice>();
 
 	switch (choice.type) {
 		case "accept-all":

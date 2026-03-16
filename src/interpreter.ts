@@ -916,27 +916,25 @@ export class Interpreter {
 						"query_resolved",
 					);
 					if (queryResolved) {
-						return Promise.resolve(
-							(queryResolved as QueryResolvedEvent).value,
-						);
+						return Promise.resolve({
+							index,
+							value: (queryResolved as QueryResolvedEvent).value,
+						});
 					}
-					allWaiters.push({
-						signal: item.label,
-						resolve: null as unknown as (payload: unknown) => void,
-					});
-					return new Promise<unknown>((resolve) => {
-						allWaiters[allWaiters.length - 1].resolve = (
-							payload: unknown,
-						) => {
-							this.log.append({
-								type: "query_resolved",
-								label: item.label,
-								value: payload,
-								seq: item.seq,
-								timestamp: Date.now(),
-							});
-							resolve(payload);
-						};
+					return new Promise<{ index: number; value: unknown }>((resolve) => {
+						allWaiters.push({
+							signal: item.label,
+							resolve: (payload: unknown) => {
+								this.log.append({
+									type: "query_resolved",
+									label: item.label,
+									value: payload,
+									seq: item.seq,
+									timestamp: Date.now(),
+								});
+								resolve({ index, value: payload });
+							},
+						});
 					});
 				}
 				default: {
