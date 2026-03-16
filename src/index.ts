@@ -30,7 +30,6 @@ export type {
 	AllDescriptor,
 	AllStartedEvent,
 	AnyWorkflow,
-	AnyWorkflowFunction,
 	ChildCommand,
 	ChildDescriptor,
 	Command,

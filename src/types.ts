@@ -650,9 +650,6 @@ type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
 export type AnyWorkflow = Workflow<any, any>;
 
-// Accepts any workflow function regardless of parameter or return types.
-// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
-export type AnyWorkflowFunction = (...args: any[]) => Generator<any, any, any>;
 
 // --- Workflow state (tagged union) ---
 

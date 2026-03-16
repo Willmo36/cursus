@@ -97,7 +97,7 @@ Fixed-position debug panel with event inspector and timeline views.
 
 ```ts
 function createLayer<Provides extends Record<string, unknown>>(
-  workflows: { [K in keyof Provides]: AnyWorkflowFunction },
+  workflows: { [K in keyof Provides]: AnyWorkflow },
   storage: WorkflowStorage,
   options?: CreateLayerOptions<Provides>,
 ): WorkflowLayer<Provides>;
@@ -114,7 +114,7 @@ function createLayer<Provides extends Record<string, unknown>>(
 
 ```ts
 type WorkflowLayer<Provides> = {
-  workflows: { [K in keyof Provides]: AnyWorkflowFunction };
+  workflows: { [K in keyof Provides]: AnyWorkflow };
   storage: WorkflowStorage;
   onEvent?: WorkflowEventObserver[];
   versions?: Partial<{ [K in keyof Provides]: number }>;
@@ -207,10 +207,10 @@ import {
 ### workflow
 
 ```ts
-function workflow<F>(fn: F): F;
+function workflow<A, R = never>(fn: () => WorkflowGenerator<A, R>): Workflow<A, R>;
 ```
 
-Wraps a generator function as a workflow.
+Wraps a generator function as a workflow, returning a `Workflow` instance with `.map()` and `.provide()` combinators.
 
 ### activity
 
@@ -354,10 +354,29 @@ Exit the enclosing `loop` with a value. Must be used inside a `loop` body.
 ### Workflow
 
 ```ts
-type Workflow<A, R = never> = Generator<Descriptor & Step<R>, A, unknown>;
+class Workflow<A, R = never> {
+  map<B>(fn: (a: A) => B): Workflow<B, R>;
+  provide<P extends R>(provided: P): Workflow<A, Exclude<R, P>>;
+}
 ```
 
-The core workflow type. `A` is the return type, `R` is the requirements type (queries, dependencies).
+The core workflow class. `A` is the return type, `R` is the requirements type (queries, dependencies). Returned by `workflow()`.
+
+### WorkflowGenerator
+
+```ts
+type WorkflowGenerator<A, R = never> = Generator<Descriptor & Step<R>, A, unknown>;
+```
+
+The raw generator type for the internals of a workflow. Used for primitive/advanced use cases.
+
+### AnyWorkflow
+
+```ts
+type AnyWorkflow = Workflow<unknown, never>;
+```
+
+Utility type for a `Workflow` with unknown return type and no requirements.
 
 ### SignalMapOf
 
