@@ -11,11 +11,11 @@ import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
 import { activity, workflow } from "./types";
-import type { AnyWorkflowFunction } from "./types";
+import type { AnyWorkflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 
 function createWrapper(
-	workflows: Record<string, AnyWorkflowFunction>,
+	workflows: Record<string, AnyWorkflow>,
 	storage: MemoryStorage,
 ) {
 	const layer = createLayer(workflows, storage);

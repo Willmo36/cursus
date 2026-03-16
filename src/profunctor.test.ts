@@ -55,8 +55,8 @@ describe("Profunctor laws", () => {
 
 			const mapped = w.map((x) => `value: ${x}`);
 
-			// Should be callable and produce a generator
-			const gen = mapped();
+			// Should produce a generator
+			const gen = mapped.createGenerator();
 			expect(gen).toBeDefined();
 			void gen;
 		});
@@ -94,8 +94,8 @@ describe("Profunctor laws", () => {
 			});
 
 			// Original needs "x", remapped needs "y"
-			type OrigReqs = Requirements<ReturnType<typeof w>>;
-			type RemappedReqs = Requirements<ReturnType<typeof remapped>>;
+			type OrigReqs = Requirements<typeof w>;
+			type RemappedReqs = Requirements<typeof remapped>;
 			const _origCheck: AssertEqual<OrigReqs, Query<"x", number>> = true;
 			const _remappedCheck: AssertEqual<RemappedReqs, Query<"y", number>> = true;
 			void _origCheck; void _remappedCheck;
@@ -121,7 +121,7 @@ describe("Profunctor laws", () => {
 				return yield* query("c").as<number>();
 			});
 
-			type FinalReqs = Requirements<ReturnType<typeof step2>>;
+			type FinalReqs = Requirements<typeof step2>;
 			const _check: AssertEqual<FinalReqs, Query<"c", number>> = true;
 			void _check;
 
@@ -143,7 +143,7 @@ describe("Profunctor laws", () => {
 				return a + b;
 			});
 
-			type FanOutReqs = Requirements<ReturnType<typeof fanOut>>;
+			type FanOutReqs = Requirements<typeof fanOut>;
 			const _check: AssertEqual<FanOutReqs, Query<"a", number> | Query<"b", number>> = true;
 			void _check;
 

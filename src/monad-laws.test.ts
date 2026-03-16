@@ -4,14 +4,14 @@
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
 import { activity, all, child, handler, loop, loopBreak, publish, query, race, sleep, workflow } from "./types";
-import type { Publishes, Query, Requirements, Workflow } from "./types";
+import type { Publishes, Query, Requirements, WorkflowGenerator } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
  * This is the unit/return of the monad.
  */
 // biome-ignore lint/correctness/useYield: pure intentionally yields nothing — it's the monad unit
-function* pure<T>(value: T): Workflow<T> {
+function* pure<T>(value: T): WorkflowGenerator<T> {
 	return value;
 }
 
@@ -39,7 +39,7 @@ describe("Monad laws", () => {
 
 	describe("Left identity: pure(a) >>= f  ≡  f(a)", () => {
 		it("yield* pure(a) then f equals f(a) directly", async () => {
-			function* f(x: number): Workflow<string> {
+			function* f(x: number): WorkflowGenerator<string> {
 				const result = yield* activity("double", async () => x * 2);
 				return `result: ${result}`;
 			}
@@ -120,15 +120,15 @@ describe("Monad laws", () => {
 	describe("Associativity: (m >>= f) >>= g  ≡  m >>= (x => f(x) >>= g)", () => {
 		it("extracting a sub-generator and yield*-ing produces same result as inlining", async () => {
 			// Three sequential operations: fetch user, greet user, format greeting
-			function* fetchUser(): Workflow<string> {
+			function* fetchUser(): WorkflowGenerator<string> {
 				return yield* activity("fetchUser", async () => "Max");
 			}
 
-			function* greetUser(name: string): Workflow<string> {
+			function* greetUser(name: string): WorkflowGenerator<string> {
 				return yield* activity("greet", async () => `Hello, ${name}!`);
 			}
 
-			function* formatGreeting(greeting: string): Workflow<string> {
+			function* formatGreeting(greeting: string): WorkflowGenerator<string> {
 				return yield* activity("format", async () => `[${greeting}]`);
 			}
 
@@ -141,7 +141,7 @@ describe("Monad laws", () => {
 
 			// Right-associated: m >>= (x => f(x) >>= g)
 			// Equivalent to extracting a composed sub-generator
-			function* greetAndFormat(name: string): Workflow<string> {
+			function* greetAndFormat(name: string): WorkflowGenerator<string> {
 				const greeting = yield* greetUser(name);
 				return yield* formatGreeting(greeting);
 			}
@@ -179,7 +179,7 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* activity("fetch", async () => 42);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, never> = true;
 			void _check;
 			void w;
@@ -190,7 +190,7 @@ describe("Monad laws", () => {
 				const user = yield* query("login").as<{ name: string }>();
 				return user.name;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"login", { name: string }>> = true;
 			void _check;
 			void w;
@@ -200,7 +200,7 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				yield* publish(42);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Publishes<number>> = true;
 			void _check;
 			void w;
@@ -211,7 +211,7 @@ describe("Monad laws", () => {
 				yield* sleep(100);
 				return "done";
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, never> = true;
 			void _check;
 			void w;
@@ -224,7 +224,7 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* child<number>("sub", childWf);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, never> = true;
 			void _check;
 			void w;
@@ -237,7 +237,7 @@ describe("Monad laws", () => {
 					query("payment").as<number>(),
 				);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"login", { user: string }> | Query<"payment", number>> = true;
 			void _check;
 			void w;
@@ -250,7 +250,7 @@ describe("Monad laws", () => {
 					query("config").as<{ url: string }>(),
 				);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"login", { user: string }> | Query<"config", { url: string }>> = true;
 			void _check;
 			void w;
@@ -266,7 +266,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"input", string>> = true;
 			void _check;
 			void w;
@@ -280,7 +280,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 			void w;
@@ -297,7 +297,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"greet", string> | Query<"farewell", number>> = true;
 			void _check;
 			void w;
@@ -308,7 +308,7 @@ describe("Monad laws", () => {
 			const w1 = workflow(function* () {
 				return yield* query("submit").as<{ data: number }>();
 			});
-			type R1 = Requirements<ReturnType<typeof w1>>;
+			type R1 = Requirements<typeof w1>;
 			const _notWide1: AssertNotEqual<R1, Query<string, any>> = true;
 			const _exact1: AssertEqual<R1, Query<"submit", { data: number }>> = true;
 			void _notWide1; void _exact1; void w1;
@@ -324,7 +324,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R2 = Requirements<ReturnType<typeof w2>>;
+			type R2 = Requirements<typeof w2>;
 			const _notWide2: AssertNotEqual<R2, Query<string, any>> = true;
 			const _exact2: AssertEqual<R2, Query<"greet", string> | Query<"farewell", number>> = true;
 			void _notWide2; void _exact2; void w2;
@@ -339,7 +339,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"go", undefined> | Publishes<number>> = true;
 			void _check;
 			void w;
@@ -354,7 +354,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _hasSignal: AssertEqual<Query<"go", undefined> extends R ? true : false, true> = true;
 			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
@@ -373,7 +373,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _hasOuter: AssertEqual<Query<"start", undefined> extends R ? true : false, true> = true;
 			const _hasInner: AssertEqual<Query<"confirm", string> extends R ? true : false, true> = true;
 			void _hasOuter; void _hasInner; void w;
@@ -384,7 +384,7 @@ describe("Monad laws", () => {
 				const config = yield* query("config").as<{ url: string }>();
 				return config.url;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _check;
 			void w;
@@ -395,7 +395,7 @@ describe("Monad laws", () => {
 				const data = yield* query("payment");
 				return data;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"payment", unknown>> = true;
 			void _check;
 			void w;
@@ -405,7 +405,7 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* query("config").as<{ url: string }>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _notWide: AssertNotEqual<R, Query<string, any>> = true;
 			const _exact: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _notWide; void _exact; void w;
@@ -420,7 +420,7 @@ describe("Monad laws", () => {
 					})
 					.as<string>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _hasSignal: AssertEqual<Query<"go", undefined> extends R ? true : false, true> = true;
 			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
@@ -433,7 +433,7 @@ describe("Monad laws", () => {
 				yield* publish(42);
 				return `${config.url}-${user.name}`;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<
 				R,
 				| Query<"config", { url: string }>
@@ -449,7 +449,7 @@ describe("Monad laws", () => {
 				const config = yield* query("config").as<{ url: string }>();
 				return config.url;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _check;
 			void w;
@@ -460,7 +460,7 @@ describe("Monad laws", () => {
 				const data = yield* query("payment");
 				return data;
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"payment", unknown>> = true;
 			void _check;
 			void w;
@@ -470,7 +470,7 @@ describe("Monad laws", () => {
 			const w = workflow(function* () {
 				return yield* query("config").as<{ url: string }>();
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _notWide: AssertNotEqual<R, Query<string, any>> = true;
 			const _exact: AssertEqual<R, Query<"config", { url: string }>> = true;
 			void _notWide; void _exact; void w;
@@ -483,7 +483,7 @@ describe("Monad laws", () => {
 					query("profile").as<{ name: string }>(),
 				);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"payment", { amount: number }> | Query<"profile", { name: string }>> = true;
 			void _check;
 			void w;
@@ -496,7 +496,7 @@ describe("Monad laws", () => {
 					query("slow").as<number>(),
 				);
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"fast", string> | Query<"slow", number>> = true;
 			void _check;
 			void w;
@@ -512,7 +512,7 @@ describe("Monad laws", () => {
 					}
 				});
 			});
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"input", string> | Publishes<string>> = true;
 			void _check;
 			void w;
@@ -539,7 +539,7 @@ describe("Monad laws", () => {
 			});
 
 			// Type-level: Requirements are inferred
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 
@@ -571,7 +571,7 @@ describe("Monad laws", () => {
 				return `Hello ${name}`;
 			});
 
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"login", string>> = true;
 			void _check;
 
@@ -587,7 +587,7 @@ describe("Monad laws", () => {
 				return data.amount;
 			});
 
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"pay", { amount: number }>> = true;
 			void _check;
 
@@ -603,7 +603,7 @@ describe("Monad laws", () => {
 				return data;
 			});
 
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"submit", unknown>> = true;
 			void _check;
 
@@ -632,7 +632,7 @@ describe("Monad laws", () => {
 			});
 
 			// Only Query<"greet", string> — no Result, Published, or Publishes
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 
@@ -664,7 +664,7 @@ describe("Monad laws", () => {
 				yield* publish(42);
 			});
 
-			type R = Requirements<ReturnType<typeof w>>;
+			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, Publishes<number>> = true;
 			void _check;
 		});

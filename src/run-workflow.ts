@@ -5,7 +5,7 @@ import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { MemoryStorage } from "./storage";
 import type {
-	AnyWorkflowFunction,
+	AnyWorkflow,
 	WorkflowEvent,
 	WorkflowState,
 	WorkflowStorage,
@@ -20,7 +20,7 @@ export type WorkflowSnapshot = {
 
 export async function runWorkflow(
 	workflowId: string,
-	workflowFn: AnyWorkflowFunction,
+	workflowFn: AnyWorkflow,
 	options?: { storage?: WorkflowStorage },
 ): Promise<WorkflowSnapshot> {
 	const storage = options?.storage ?? new MemoryStorage();

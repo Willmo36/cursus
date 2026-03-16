@@ -5,7 +5,7 @@ import { EventLog } from "./event-log";
 import {
 	type ActivityScheduledEvent,
 	type AllCompletedEvent,
-	type AnyWorkflowFunction,
+	type AnyWorkflow,
 	CancelledError,
 	type Command,
 	type Descriptor,
@@ -19,10 +19,11 @@ import {
 	type WorkflowRegistryInterface,
 	type InterpreterStatus,
 	type WorkflowState,
+	Workflow,
 } from "./types";
 
 export class Interpreter {
-	private workflowFn: AnyWorkflowFunction;
+	private _workflow: AnyWorkflow;
 	private log: EventLog;
 	private seq = 0;
 	private _status: InterpreterStatus = "running";
@@ -57,13 +58,13 @@ export class Interpreter {
 	private observers: WorkflowEventObserver[];
 
 	constructor(
-		workflowFn: AnyWorkflowFunction,
+		wf: AnyWorkflow,
 		log: EventLog,
 		registry?: WorkflowRegistryInterface,
 		workflowId?: string,
 		observers?: WorkflowEventObserver[],
 	) {
-		this.workflowFn = workflowFn;
+		this._workflow = wf;
 		this.log = log;
 		this.registry = registry;
 		this._workflowId = workflowId;
@@ -301,7 +302,7 @@ export class Interpreter {
 			this.log.append({ type: "workflow_started", timestamp: Date.now() });
 		}
 
-		const gen = this.workflowFn();
+		const gen = this._workflow.createGenerator();
 
 		try {
 			let next = gen.next();

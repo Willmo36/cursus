@@ -47,16 +47,17 @@ export type Requires<R extends Requirement = never> = {
 
 // --- Requirements (extractor) ---
 
-// Extracts the accumulated requirements from a Workflow or Requires.
-// Reads the phantom __requirement field from the yield type, filtering
-// through Requirement to strip undefined (from optional fields with never).
+// Extracts the accumulated requirements from a Workflow, Generator, or Requires.
+// Reads the phantom __requirement field, filtering through Requirement
+// to strip undefined (from optional fields with never).
 export type Requirements<W> =
 	W extends Generator<infer Y, unknown, unknown>
 		? Y extends { __requirement?: infer R }
 			? R extends Requirement ? R : never
 			: never
-		: W extends Requires<infer R> ? R
-		: never;
+		: W extends { readonly __requirement?: infer R }
+			? R extends Requirement ? R : never
+			: never;
 
 // Extracts a signal map { name: payload } from a workflow function's requirements.
 // Filters to Signal requirements and builds a record from their key-value pairs.
@@ -71,24 +72,26 @@ export type SignalMap<W> =
 // e.g. { profile: UserProfile } | { payment: PaymentInfo } → { profile: UserProfile; payment: PaymentInfo }
 // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection accumulation
 type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void ? I : never;
-export type SignalMapOf<F> = F extends (...args: any[]) => infer G
+export type SignalMapOf<W> = W extends (...args: any[]) => infer G
 	? [SignalMap<G>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<G>>
-	: Record<string, never>;
+	: [SignalMap<W>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<W>>;
 
 // --- Dependency checking utilities ---
 
-// Extracts the return type from a workflow function
+// Extracts the return type from a Workflow or workflow function
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-export type WorkflowReturn<F> = F extends (...args: any[]) => Generator<any, infer T, any> ? T : never;
+export type WorkflowReturn<W> = W extends Workflow<infer T, any> ? T
+	: W extends (...args: any[]) => Generator<any, infer T, any> ? T : never;
 
 // Extracts the Publishes<V> value type from a requirement union
 export type ExtractPublishes<R> = R extends Publishes<infer V> ? V : never;
 
-// Extracts requirements from a workflow function
+// Extracts requirements from a Workflow or workflow function
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-export type ReqsOf<F> = F extends (...args: any[]) => Generator<any, any, any>
-	? Requirements<ReturnType<F>>
-	: never;
+export type ReqsOf<W> = W extends Workflow<any, infer R> ? R
+	: W extends (...args: any[]) => Generator<any, any, any>
+		? Requirements<ReturnType<W>>
+		: never;
 
 // All dependency keys from a requirement union.
 // With unified query, all requirements are flexible (auto-match registry
@@ -121,7 +124,7 @@ export type SleepDescriptor = {
 export type ChildDescriptor = {
 	type: "child";
 	name: string;
-	workflow: AnyWorkflowFunction;
+	workflow: AnyWorkflow;
 };
 
 export type QueryDescriptor = {
@@ -364,59 +367,51 @@ export type WorkflowTrace = {
 
 // --- Workflow types ---
 
-export type Workflow<A, R extends Requirement = never> = Generator<Descriptor & Requires<R>, A, unknown>;
+// Raw generator type for inner primitives (activity, query, sleep, etc.)
+export type WorkflowGenerator<A, R extends Requirement = never> = Generator<Descriptor & Requires<R>, A, unknown>;
 
-// Extracts the return type from a generator function
-// biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
-type GenReturn<F> = F extends (...args: any[]) => Generator<any, infer A, any> ? A : never;
+// A workflow wraps a generator factory with combinators and yield* support.
+// biome-ignore lint/suspicious/noExplicitAny: Generator protocol requires any for type-erased delegation
+export class Workflow<A, R extends Requirement = never> {
+	readonly __requirement?: R;
+	private _factory: () => Generator<any, any, any>;
 
-// Extracts parameter types from a function
-// biome-ignore lint/suspicious/noExplicitAny: need any for function matching
-type GenParams<F> = F extends (...args: infer P) => any ? P : never;
+	constructor(factory: () => Generator<Descriptor & Requires<R>, A, unknown>) {
+		this._factory = factory;
+	}
 
-// Extracts requirements from a workflow function's return type
-// biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
-type FnReqs<F> = F extends (...args: any[]) => infer G ? Requirements<G> : never;
+	// Creates a fresh generator — used by the interpreter and registry
+	createGenerator(): Generator<any, any, any> {
+		return this._factory();
+	}
 
-// Builds a workflow function type from params, requirements, and return type
-type WorkflowFnType<Params extends unknown[], Reqs extends Requirement, Ret> =
-	(...args: Params) => Generator<Descriptor & Requires<Reqs>, Ret, unknown>;
+	// Makes yield* work — delegates to a fresh generator
+	*[Symbol.iterator](): Generator<Descriptor & Requires<R>, A, unknown> {
+		return yield* this._factory();
+	}
 
-// A workflow function with profunctor operations
-export type WorkflowFn<F> = F & {
-	map<B>(fn: (a: GenReturn<F>) => B): WorkflowFn<WorkflowFnType<GenParams<F>, FnReqs<F>, B>>;
+	map<B>(fn: (a: A) => B): Workflow<B, R> {
+		return new Workflow(() => wrapMap(this._factory(), fn as any) as any);
+	}
+
 	// biome-ignore lint/suspicious/noExplicitAny: need any for provider generator matching
 	provide<K extends string, G extends () => Generator<any, any, any>>(
 		label: K,
 		provider: G,
-	): WorkflowFn<WorkflowFnType<GenParams<F>, Exclude<FnReqs<F>, Query<K, any>> | FnReqs<() => ReturnType<G>>, GenReturn<F>>>;
-};
+	): Workflow<A, Exclude<R, Query<K, any>> | Requirements<ReturnType<G>>> {
+		return new Workflow(() => wrapProvide(this._factory(), label, provider) as any);
+	}
+}
 
-// Wraps a generator function into a workflow with profunctor operations.
-// The function remains callable. .provide() and .map() produce new workflows.
-// biome-ignore lint/suspicious/noExplicitAny: preserves the full function type including parameter types
-export function workflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
+// Creates a Workflow from a generator function.
+// biome-ignore lint/suspicious/noExplicitAny: accepts any generator, extracts A and R via conditional types
+export function workflow<F extends () => Generator<any, any, unknown>>(
 	fn: F,
-): WorkflowFn<F> {
-	const w = ((...args: unknown[]) => fn(...args)) as unknown as WorkflowFn<F>;
-
-	w.map = ((mapFn: (a: unknown) => unknown) => {
-		const mapped = (...args: unknown[]) => {
-			const gen = fn(...args);
-			return wrapMap(gen, mapFn);
-		};
-		return workflow(mapped as any);
-	}) as WorkflowFn<F>["map"];
-
-	w.provide = ((label: string, provider: () => Generator<any, any, any>) => {
-		const provided = (...args: unknown[]) => {
-			const gen = fn(...args);
-			return wrapProvide(gen, label, provider);
-		};
-		return workflow(provided as any);
-	}) as WorkflowFn<F>["provide"];
-
-	return w;
+): Workflow<
+	F extends () => Generator<any, infer A, any> ? A : never,
+	Requirements<ReturnType<F>>
+> {
+	return new Workflow(fn as any);
 }
 
 function* wrapMap(
@@ -503,9 +498,9 @@ export type SignalReceiver<Reqs extends Requirement = never> = {
 	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
 	on: <K extends string, V, G extends Generator<any, void, any>>(
 		signal: K,
-		fn: (payload: V, done: <D>(value: D) => Workflow<never>) => G,
+		fn: (payload: V, done: <D>(value: D) => WorkflowGenerator<never>) => G,
 	) => SignalReceiver<Reqs | Query<K, V> | Req<G>>;
-	as: <T>() => Workflow<T, Reqs>;
+	as: <T>() => WorkflowGenerator<T, Reqs>;
 };
 
 export function handler(): SignalReceiver {
@@ -517,7 +512,7 @@ export function handler(): SignalReceiver {
 			return builder as any;
 		},
 		as() {
-			const doneFn = <D>(value: D): Workflow<never> => loopBreak(value) as Workflow<never>;
+			const doneFn = <D>(value: D): WorkflowGenerator<never> => loopBreak(value) as WorkflowGenerator<never>;
 			return loop(function* () {
 				const result = yield* (race(
 					...handlers.map((h) => query(h.signal)),
@@ -540,13 +535,13 @@ export function sleep(durationMs: number): Generator<SleepDescriptor & Requires<
 
 export function child<T>(
 	name: string,
-	workflowFn: AnyWorkflowFunction,
+	wf: AnyWorkflow,
 ): Generator<ChildDescriptor & Requires<never>, T, unknown> {
 	return (function* () {
 		const result = yield {
 			type: "child" as const,
 			name,
-			workflow: workflowFn,
+			workflow: wf,
 		} as ChildDescriptor & Requires<never>;
 		return result as T;
 	})();
@@ -650,6 +645,10 @@ export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Requi
 // Helper to extract yield type from a generator
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator matching
 type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
+
+// Type-erased Workflow for registry storage and other untyped boundaries.
+// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
+export type AnyWorkflow = Workflow<any, any>;
 
 // Accepts any workflow function regardless of parameter or return types.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage

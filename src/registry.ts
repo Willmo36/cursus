@@ -4,14 +4,15 @@
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { checkVersion } from "./storage";
-import type {
-	AnyWorkflowFunction,
-	WorkflowEvent,
-	WorkflowEventObserver,
-	WorkflowRegistryInterface,
-	WorkflowState,
-	WorkflowStorage,
-	WorkflowTrace,
+import {
+	type AnyWorkflow,
+	type WorkflowEvent,
+	type WorkflowEventObserver,
+	type WorkflowRegistryInterface,
+	type WorkflowState,
+	type WorkflowStorage,
+	type WorkflowTrace,
+	Workflow,
 } from "./types";
 import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
@@ -22,7 +23,7 @@ type Waiter = {
 };
 
 type WorkflowEntry = {
-	fn: AnyWorkflowFunction;
+	workflow: AnyWorkflow;
 	interpreter?: Interpreter;
 	result?: unknown;
 	completed: boolean;
@@ -47,7 +48,7 @@ export class WorkflowRegistry<K extends string = string>
 	private versions?: Partial<Record<K, number>>;
 
 	constructor(
-		workflows: Record<K, AnyWorkflowFunction>,
+		workflows: Record<K, AnyWorkflow>,
 		storage: WorkflowStorage,
 		observers?: WorkflowEventObserver[],
 		versions?: Partial<Record<K, number>>,
@@ -56,12 +57,12 @@ export class WorkflowRegistry<K extends string = string>
 		this.observers = observers ?? [];
 		this.versions = versions;
 		this.entries = new Map();
-		for (const [id, fn] of Object.entries(workflows) as [
+		for (const [id, wf] of Object.entries(workflows) as [
 			string,
-			AnyWorkflowFunction,
+			AnyWorkflow,
 		][]) {
 			this.entries.set(id, {
-				fn,
+				workflow: wf,
 				completed: false,
 				failed: false,
 				published: false,
@@ -146,7 +147,7 @@ export class WorkflowRegistry<K extends string = string>
 		let persistedCount = events.length;
 
 		const interpreter = new Interpreter(
-			entry.fn,
+			entry.workflow,
 			log,
 			this,
 			id,
@@ -360,7 +361,7 @@ export class WorkflowRegistry<K extends string = string>
 			return;
 		}
 		const entry: WorkflowEntry = {
-			fn: (() => {}) as unknown as AnyWorkflowFunction,
+			workflow: new Workflow(() => (function* () {})()),
 			interpreter,
 			completed: false,
 			failed: false,

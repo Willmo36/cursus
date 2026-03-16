@@ -3,7 +3,7 @@
 
 import { WorkflowRegistry } from "./registry";
 import type {
-	AnyWorkflowFunction,
+	AnyWorkflow,
 	CheckDeps,
 	ExtractPublishes,
 	ReqsOf,
@@ -35,7 +35,7 @@ export type Registry<Provides extends Record<string, RegistryEntry> = {}> = {
 
 export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}> = {
 	// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-	add<K extends string, F extends (...args: any[]) => Generator<any, any, any>>(
+	add<K extends string, F extends AnyWorkflow | ((...args: any[]) => Generator<any, any, any>)>(
 		id: K,
 		workflowFn: F & CheckDeps<F, Provides>,
 	): RegistryBuilder<Provides & Record<K, {
@@ -50,10 +50,10 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 export function createRegistry(
 	storage: WorkflowStorage,
 ): RegistryBuilder {
-	const workflows: Record<string, AnyWorkflowFunction> = {};
+	const workflows: Record<string, AnyWorkflow> = {};
 
 	const builder: RegistryBuilder = {
-		add(id: string, workflowFn: AnyWorkflowFunction) {
+		add(id: string, workflowFn: AnyWorkflow) {
 			workflows[id] = workflowFn;
 			return builder;
 		},

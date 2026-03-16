@@ -2,7 +2,7 @@
 // ABOUTME: Provides type inference for the layer's workflow result types.
 
 import type {
-	AnyWorkflowFunction,
+	AnyWorkflow,
 	WorkflowEventObserver,
 	WorkflowStorage,
 } from "./types";
@@ -10,7 +10,7 @@ import type {
 export type WorkflowLayer<
 	Provides extends Record<string, unknown> = Record<string, unknown>,
 > = {
-	workflows: { [K in keyof Provides]: AnyWorkflowFunction };
+	workflows: { [K in keyof Provides]: AnyWorkflow };
 	storage: WorkflowStorage;
 	onEvent?: WorkflowEventObserver[];
 	versions?: Partial<{ [K in keyof Provides]: number }>;
@@ -22,7 +22,7 @@ type CreateLayerOptions<Provides extends Record<string, unknown>> = {
 };
 
 export function createLayer<Provides extends Record<string, unknown>>(
-	workflows: { [K in keyof Provides]: AnyWorkflowFunction },
+	workflows: { [K in keyof Provides]: AnyWorkflow },
 	storage: WorkflowStorage,
 	options?: CreateLayerOptions<Provides>,
 ): WorkflowLayer<Provides> {

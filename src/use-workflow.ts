@@ -16,8 +16,9 @@ import { RegistryContext } from "./registry-provider";
 import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
 import type {
-	AnyWorkflowFunction,
+	AnyWorkflow,
 	SignalMapOf,
+	Workflow,
 	WorkflowEvent,
 	WorkflowEventObserver,
 	WorkflowState,
@@ -60,17 +61,17 @@ export function useWorkflow<
 ): UseWorkflowResult<P[K]["result"], P[K]["signals"]>;
 
 // Overload 3: run an inline workflow with optional layer deps
-// biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T and signal map from the workflow function
-export function useWorkflow<F extends (...args: any[]) => Generator<any, any, unknown>>(
+// biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T and signal map from the Workflow instance
+export function useWorkflow<W extends AnyWorkflow>(
 	workflowId: string,
-	workflowFn: F,
+	workflowFn: W,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<ReturnType<F> extends Generator<any, infer T, any> ? T : unknown, SignalMapOf<F>>;
+): UseWorkflowResult<W extends Workflow<infer T, any> ? T : unknown, SignalMapOf<W>>;
 
 // Implementation
 export function useWorkflow(
 	workflowId: string,
-	workflowFnOrRegistry?: AnyWorkflowFunction | Registry<any>,
+	workflowFnOrRegistry?: AnyWorkflow | Registry<any>,
 	options?: UseWorkflowOptions,
 ): UseWorkflowResult<unknown, Record<string, unknown>> {
 	const contextRegistry = useContext(RegistryContext);
@@ -80,7 +81,7 @@ export function useWorkflow(
 	const registry = isRegistryMode
 		? (workflowFnOrRegistry as Registry<any>)._registry
 		: contextRegistry;
-	const workflowFn = isRegistryMode ? undefined : workflowFnOrRegistry as AnyWorkflowFunction | undefined;
+	const workflowFn = isRegistryMode ? undefined : workflowFnOrRegistry as AnyWorkflow | undefined;
 	const isLayerMode = workflowFn === undefined;
 
 	// For inline workflows: explicit storage > registry storage > ephemeral fallback
@@ -170,7 +171,7 @@ export function useWorkflow(
 			let persistedCount = events.length;
 
 			const interpreter = new Interpreter(
-				workflowFn as AnyWorkflowFunction,
+				workflowFn as AnyWorkflow,
 				log,
 				registry ?? undefined,
 				undefined,

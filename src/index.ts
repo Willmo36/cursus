@@ -29,6 +29,7 @@ export type {
 	AllCompletedEvent,
 	AllDescriptor,
 	AllStartedEvent,
+	AnyWorkflow,
 	AnyWorkflowFunction,
 	ChildCommand,
 	ChildDescriptor,
@@ -53,7 +54,7 @@ export type {
 	SleepCommand,
 	SleepDescriptor,
 	Requires,
-	Workflow,
+	WorkflowGenerator,
 	WorkflowCancelledEvent,
 	WorkflowEvent,
 	WorkflowEventLog,
@@ -64,5 +65,5 @@ export type {
 	WorkflowStorage,
 	WorkflowTrace,
 } from "./types";
-export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, publish, query, race, RUNNING, sleep, WAITING, workflow } from "./types";
+export { activity, all, CANCELLED, CancelledError, child, COMPLETED, FAILED, handler, loop, loopBreak, publish, query, race, RUNNING, sleep, WAITING, Workflow, workflow } from "./types";
 export { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";

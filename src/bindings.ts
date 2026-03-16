@@ -9,8 +9,10 @@ import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
 import { useWorkflow as useWorkflowBase } from "./use-workflow";
 import type {
+	AnyWorkflow,
 	CheckDeps,
 	SignalMapOf,
+	Workflow,
 	WorkflowReturn,
 	WorkflowState,
 } from "./types";
@@ -33,11 +35,11 @@ type UseWorkflowHook<Provides extends Record<string, RegistryEntry>> = {
 	): UseWorkflowResult<Provides[K]["result"], Provides[K]["signals"]>;
 
 	// Overload 2: inline workflow with dep checking
-	// biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-	<F extends (...args: any[]) => Generator<any, any, any>>(
+	// biome-ignore lint/suspicious/noExplicitAny: need any for Workflow instance inference
+	<W extends AnyWorkflow>(
 		workflowId: string,
-		workflowFn: F & CheckDeps<F, Provides>,
-	): UseWorkflowResult<WorkflowReturn<F>, SignalMapOf<F>>;
+		workflowFn: W & CheckDeps<W, Provides>,
+	): UseWorkflowResult<WorkflowReturn<W>, SignalMapOf<W>>;
 };
 
 export function createBindings<Provides extends Record<string, RegistryEntry>>(

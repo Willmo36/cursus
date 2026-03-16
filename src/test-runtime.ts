@@ -3,15 +3,12 @@
 
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import type {
-	AnyWorkflowFunction,
-	Descriptor,
-	WorkflowRegistryInterface,
+import {
+	type AnyWorkflow,
+	type Descriptor,
+	type WorkflowRegistryInterface,
+	Workflow,
 } from "./types";
-
-// Extracts the return value type from a workflow function's generator
-type ExtractResult<F> =
-	F extends (...args: any[]) => Generator<any, infer A, any> ? A : unknown;
 
 type TestRuntimeOptions = {
 	activities?: Record<string, (...args: unknown[]) => unknown>;
@@ -20,12 +17,11 @@ type TestRuntimeOptions = {
 };
 
 function wrapWithMocks(
-	workflowFn: AnyWorkflowFunction,
+	wf: AnyWorkflow,
 	activities: Record<string, (...args: unknown[]) => unknown>,
-): AnyWorkflowFunction {
-	return function* (ctx) {
-		// biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for test mock wrapping
-		const gen = (workflowFn as AnyWorkflowFunction)(ctx as any);
+): AnyWorkflow {
+	return new Workflow(function* () {
+		const gen = wf.createGenerator();
 		let input: unknown = undefined;
 		let threw = false;
 		let thrownValue: unknown = undefined;
@@ -81,16 +77,13 @@ function wrapWithMocks(
 				thrownValue = err;
 			}
 		}
-	};
+	});
 }
 
-export async function createTestRuntime<
-	// biome-ignore lint/suspicious/noExplicitAny: infers from any workflow function shape
-	F extends (...args: any[]) => Generator<any, any, unknown>,
->(
-	workflowFn: F,
+export async function createTestRuntime<W extends Workflow<any, any>>(
+	wf: W,
 	options: TestRuntimeOptions,
-): Promise<ExtractResult<F>> {
+): Promise<W extends Workflow<infer A, any> ? A : unknown> {
 	const { activities = {}, signals = [], workflowResults } = options;
 	const signalQueue = [...signals];
 
@@ -119,8 +112,8 @@ export async function createTestRuntime<
 	}
 
 	const wrappedWorkflow = Object.keys(activities).length > 0
-		? wrapWithMocks(workflowFn as AnyWorkflowFunction, activities)
-		: workflowFn as AnyWorkflowFunction;
+		? wrapWithMocks(wf, activities)
+		: wf;
 
 	const log = new EventLog();
 	const interpreter = new Interpreter(wrappedWorkflow, log, mockRegistry);
@@ -171,5 +164,5 @@ export async function createTestRuntime<
 		throw new Error(interpreter.error ?? "Workflow failed");
 	}
 
-	return interpreter.result as ExtractResult<F>;
+	return interpreter.result as W extends Workflow<infer A, any> ? A : unknown;
 }
