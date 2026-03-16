@@ -22,10 +22,10 @@ Optional peer dependencies: `react >= 18.0.0`, `react-dom >= 18.0.0` (required f
 A workflow is a generator function wrapped with `workflow()`:
 
 ```ts
-import { workflow, receive, activity } from "cursus";
+import { workflow, query, activity } from "cursus";
 
 const greetingWorkflow = workflow(function* () {
-  const name = yield* receive<string>("name");
+  const name = yield* query<string>("name");
   const greeting = yield* activity("greet", async () => {
     return `Hello, ${name}!`;
   });

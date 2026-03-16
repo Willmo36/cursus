@@ -7,7 +7,7 @@ sidebar_position: 2
 A workflow is a generator function that yields commands via free functions. Every `yield*` is a durable checkpoint — the engine records events so it can replay past steps on reload without re-executing them.
 
 ```ts
-import { workflow, activity, receive, sleep } from "cursus";
+import { workflow, activity, query, sleep } from "cursus";
 
 const myWorkflow = workflow(function* () {
   // ...
@@ -29,30 +29,30 @@ The activity function receives an `AbortSignal` that fires on workflow cancellat
 
 On replay, the engine returns the stored result without calling the function again.
 
-## Signals
+## Queries
 
-Signals are how the UI pushes data into the workflow. The workflow pauses until the signal arrives.
+Queries are how the workflow waits for external data — whether from the UI (via `signal()`) or from another workflow in the registry. The workflow pauses until the query resolves.
 
-### receive
+### query
 
-Wait for a single named signal:
+Wait for a single named value:
 
 ```ts
-const email = yield* receive<string>("email");
+const email = yield* query<string>("email");
 ```
 
 ### all
 
-Wait for multiple signals, workflow results, or activities to all complete. Returns a tuple in order:
+Wait for multiple queries, workflow results, or activities to all complete. Returns a tuple in order:
 
 ```ts
-const [email, password] = yield* all(receive("email"), receive("password"));
+const [email, password] = yield* all(query("email"), query("password"));
 ```
 
-You can mix signals with workflow dependencies (see [Layers](./layers.md)):
+You can mix queries with workflow dependencies (see [Layers](./layers.md)):
 
 ```ts
-const [payment, profile] = yield* all(receive("payment"), join("profile"));
+const [payment, profile] = yield* all(query("payment"), query("profile"));
 ```
 
 Run multiple activities concurrently:
@@ -84,11 +84,11 @@ Activity mocks propagate into children during testing.
 
 ## Race
 
-Race multiple branches — the first to complete wins, others are discarded. Works with signals, activities, sleeps, or any combination:
+Race multiple branches — the first to complete wins, others are discarded. Works with queries, activities, sleeps, or any combination:
 
 ```ts
-// Race signals — first signal wins
-const { winner, value } = yield* race(receive("accept"), receive("reject"));
+// Race queries — first to resolve wins
+const { winner, value } = yield* race(query("accept"), query("reject"));
 
 if (winner === 0) {
   // accepted
@@ -118,12 +118,12 @@ The losing branch's `AbortSignal` is triggered, so you can clean up in-flight re
 
 ### Escalation with Race
 
-A common pattern is racing a signal against a timeout — for example, waiting for a manager's approval and escalating if it doesn't arrive in time:
+A common pattern is racing a query against a timeout — for example, waiting for a manager's approval and escalating if it doesn't arrive in time:
 
 ```ts
 const approval = workflow(function* () {
   const { winner, value } = yield* race(
-    receive("approve"),
+    query("approve"),
     sleep(24 * 60 * 60 * 1000), // 24 hours
   );
 
@@ -139,7 +139,7 @@ const approval = workflow(function* () {
 });
 ```
 
-The signal and sleep are both durable — if the user refreshes, the remaining timeout resumes from where it left off and any signal already received replays instantly.
+The query and sleep are both durable — if the user refreshes, the remaining timeout resumes from where it left off and any query already resolved replays instantly.
 
 ## Signal Loops with handle
 
@@ -167,11 +167,11 @@ const finalCount = yield* handle<number>({
 
 ```ts
 const sessionWorkflow = workflow(function* () {
-  const { user } = yield* receive("login");
+  const { user } = yield* query("login");
   yield* publish({ user });
 
   // Workflow keeps running after publish
-  yield* receive("login"); // wait for re-auth, revocation, etc.
+  yield* query("login"); // wait for re-auth, revocation, etc.
 });
 ```
 
@@ -222,8 +222,8 @@ A cancelled workflow enters the `"cancelled"` state. You can catch `CancelledErr
 
 ## Type Safety
 
-Signal types are inferred from the workflow function via `SignalMapOf`. TypeScript enforces that:
+Query types are inferred from the workflow function via `SignalMapOf`. TypeScript enforces that:
 
-- `signal("name", payload)` matches the signals used by the workflow
-- `join("id")` and `published("id")` match the workflow's dependency declarations
+- `signal("name", payload)` matches the queries used by the workflow
+- Cross-workflow `query("id")` labels match the registry
 - The return type flows through to `state.result`

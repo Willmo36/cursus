@@ -11,7 +11,7 @@ Durable workflows in the browser. A workflow is a **generator function** that yi
 ```ts
 function* checkout(ctx: WorkflowContext): Workflow<OrderResult> {
   const cart = yield* ctx.activity("fetchCart", fetchCart);
-  const payment = yield* ctx.receive("payment-submitted");
+  const payment = yield* ctx.query("payment-submitted");
   const order = yield* ctx.activity("charge", () => chargeCard(payment));
   return { orderId: order.id };
 }
@@ -31,7 +31,7 @@ Commands are the yield values — declarative descriptions of side effects:
 | Command | Purpose |
 |---------|---------|
 | `activity(name, fn)` | Execute a side-effecting function (API call, storage, etc.) |
-| `receive(signal)` | Pause until an external signal arrives (user input, event) |
+| `query(label)` | Pause until an external query is resolved (user input, event) |
 | `sleep(ms)` | Durable timer — survives page reload |
 | `child(name, workflowFn)` | Start a nested/child workflow |
 | `query()` | Expose current workflow state for external reads |
@@ -46,7 +46,7 @@ type Event =
   | { type: "activity_scheduled"; name: string; seq: number }
   | { type: "activity_completed"; seq: number; result: unknown }
   | { type: "activity_failed"; seq: number; error: string }
-  | { type: "signal_received"; name: string; payload: unknown }
+  | { type: "query_resolved"; label: string; value: unknown }
   | { type: "timer_started"; seq: number; durationMs: number }
   | { type: "timer_fired"; seq: number }
   | { type: "child_started"; name: string; workflowId: string }
@@ -61,7 +61,7 @@ The interpreter drives the generator and manages the event log:
 
 1. **On first run:** Steps the generator, executes commands for real, appends events to the log
 2. **On replay (page reload):** Steps the generator, but instead of executing commands, returns the recorded results from the event log. When the log is exhausted, switches to live execution.
-3. **On signal:** Appends a signal event, resumes the generator if it was waiting for that signal
+3. **On signal:** Appends a query_resolved event, resumes the generator if it was waiting for that query
 
 The key architectural insight: **the workflow function is a deterministic projection of the event log**. State is never serialized directly — it's reconstructed by replaying events through the workflow code.
 
@@ -147,11 +147,11 @@ The test interpreter runs the generator synchronously, injecting results without
 
 | Example | Workflow Features Used |
 |---------|----------------------|
-| SSO login | `activity` (redirect/token exchange), `receive` (callback) |
-| Login before proceeding | `receive` (credentials), `activity` (auth call), conditional branching |
+| SSO login | `activity` (redirect/token exchange), `query` (callback) |
+| Login before proceeding | `query` (credentials), `activity` (auth call), conditional branching |
 | Multipage job application | `child` (nested workflows per page), `signal` (browser back = signal) |
-| Chat room | Long-running workflow with repeated `receive` (messages), `signal` (join/leave/message) |
-| Email then password wizard | Sequential `receive` (email), then `receive` (password), `activity` (validate) |
+| Chat room | Long-running workflow with repeated `query` (messages), `signal` (join/leave/message) |
+| Email then password wizard | Sequential `query` (email), then `query` (password), `activity` (validate) |
 | Cookie banner | No storage of final result — the `result` is computed from the event log history itself |
 
 ## Design Constraints
@@ -165,7 +165,7 @@ The test interpreter runs the generator synchronously, injecting results without
 
 ## Decisions
 
-1. **`receive` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
+1. **`query` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
 
 2. **Parallel activities supported.** `yield* ctx.parallel([...])` for concurrent activities (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
@@ -188,7 +188,7 @@ This is why workflows compose: `yield*` is associative, and the interpreter can 
 - **Covariant (result):** If workflow A returns `T`, a parent can `yield* ctx.child("a", A)` and receive `T`. Results flow out naturally.
 - **Contravariant (signals):** If workflow A accepts signal `"submit"`, the parent must be able to route `"submit"` into A. Signals must flow in.
 
-`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `receive`.
+`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `query`.
 
 ### Monad Laws
 
@@ -197,7 +197,7 @@ For pure computation (activities, sleep), the monad laws hold:
 - **Left identity:** `yield* ctx.activity("x", f)` behaves the same whether wrapped in a child or inlined.
 - **Associativity:** `yield* a; yield* b; yield* c` groups the same regardless of nesting.
 
-**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `receive`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
+**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `query`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
 
 ### Design Principle
 

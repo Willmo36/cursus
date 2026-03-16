@@ -71,49 +71,49 @@ Layer workflows are started automatically on first `useWorkflow` call and shared
 Workflows can wait on other workflows in the same layer using `join`:
 
 ```ts
-import { workflow, receive, activity, join } from "cursus";
+import { workflow, query, activity } from "cursus";
 
 const checkoutWorkflow = workflow(function* () {
-  const payment = yield* receive("payment");
-  const profile = yield* join("profile");
+  const payment = yield* query("payment");
+  const profile = yield* query("profile");
   return yield* activity("place-order", async () => {
     return `${profile.name}: ${payment}`;
   });
 });
 ```
 
-`join` auto-starts the target workflow if it hasn't been started yet. If it's already completed, the result is returned immediately.
+`query` auto-starts the target workflow if it hasn't been started yet. If it's already completed or published, the result is returned immediately.
 
-### Publish + published
+### Publish + query
 
-For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `published` get the published value immediately:
+For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `query` get the published value immediately:
 
 ```ts
-import { workflow, receive, publish, published, activity } from "cursus";
+import { workflow, query, publish, activity } from "cursus";
 
 const sessionWorkflow = workflow(function* () {
-  const { user } = yield* receive("login");
+  const { user } = yield* query("login");
   yield* publish({ user });
   // keeps running — handles revocation, tier changes, etc.
-  yield* receive("login");
+  yield* query("login");
 });
 
 const checkoutWorkflow = workflow(function* () {
-  const account = yield* published("session");
+  const account = yield* query("session");
   return yield* activity("place-order", async () => {
     return `order for ${account.user}`;
   });
 });
 ```
 
-Resolution order for `published`: published value → wait. Resolution order for `join`: completed → failed → wait.
+Resolution order for `query` against the registry: published value → completed → wait. If no workflow matches the label, the query falls through to signal.
 
-## Mixing Signals and Workflows in all
+## Mixing Queries in all
 
-You can mix signals and workflow dependencies in `all`:
+You can mix signal-backed and workflow-backed queries in `all`:
 
 ```ts
-const [payment, profile] = yield* all(receive("payment"), join("profile"));
+const [payment, profile] = yield* all(query("payment"), query("profile"));
 ```
 
 ## Inline Workflows Alongside Layers
@@ -138,7 +138,7 @@ The registry detects circular dependencies at runtime and fails with a clear err
 Circular dependency detected: A -> B -> A
 ```
 
-This applies to both `join` / `published` and `all` with workflow generators.
+This applies to both `query` and `all` with workflow generators.
 
 ## Layer Options
 

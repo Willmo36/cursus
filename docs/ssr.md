@@ -35,7 +35,7 @@ const snapshot = await runWorkflow("checkout", checkoutWorkflow, {
 });
 ```
 
-If the workflow blocks on a signal (e.g. `receive`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
+If the workflow blocks on a query (e.g. `query`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
 
 ## Client-Side Hydration
 

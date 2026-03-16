@@ -15,11 +15,11 @@ React bindings available via `cursus/react`. Devtools via `cursus/devtools`.
 Define a workflow as a generator function:
 
 ```ts
-import { workflow, receive, activity } from "cursus";
+import { workflow, query, activity } from "cursus";
 
 const loginWorkflow = workflow(function* () {
   // Pause until the user submits credentials
-  const creds = yield* receive<{ username: string; password: string }>("credentials");
+  const creds = yield* query<{ username: string; password: string }>("credentials");
 
   // Run a side effect — result is recorded in the event log
   const user = yield* activity("authenticate", async () => {
@@ -72,7 +72,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 ## Features
 
 - **Durable execution** — event-sourced replay survives page reloads
-- **Signals** — `receive` for UI-to-workflow communication
+- **Queries** — `query` for UI-to-workflow communication
 - **Activities** — async side effects with automatic replay skipping
 - **Timers** — durable `sleep` that survives reloads
 - **all & race** — concurrent branches with `all()` and first-to-complete `race()`
@@ -86,7 +86,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
 - **SSR** — `runWorkflow` for server-side execution, snapshot hydration via `useWorkflow`
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
-- **Type-safe** — signal types inferred from workflow definition
+- **Type-safe** — query types inferred from workflow definition
 
 ## API Overview
 
@@ -97,7 +97,7 @@ Free functions yielded inside a workflow generator:
 | Command | Description |
 |---------|-------------|
 | `activity(name, fn)` | Execute a side effect (API call, computation). Result is recorded. |
-| `receive(signal)` | Pause until a named signal arrives from the UI. |
+| `query(label)` | Pause until a named query is resolved from the UI. |
 | `sleep(ms)` | Durable timer — survives page reload. |
 | `all(...branches)` | Wait for multiple branches concurrently, return all results. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |

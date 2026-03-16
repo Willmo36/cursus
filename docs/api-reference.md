@@ -199,7 +199,7 @@ Free functions imported from `"cursus"` for building workflows:
 
 ```ts
 import {
-  workflow, activity, receive, sleep, publish, output,
+  workflow, activity, query, sleep, publish,
   race, all, child, loop, loopBreak,
 } from "cursus";
 ```
@@ -223,51 +223,51 @@ function activity<T>(
 
 Run an async activity. On replay, the stored result is returned without calling `fn`.
 
-### receive
+### query
 
-`receive` has three overloads covering all signal-waiting patterns:
+`query` has three overloads covering all waiting patterns — it auto-matches the registry (for cross-workflow dependencies) or falls through to signal:
 
-**1. One signal, once** — wait for a single signal and return its payload:
+**1. One query, once** — wait for a single value by label and return it:
 
 ```ts
-function receive<V, K extends string>(signal: K): Workflow<V, Signal<K, V>>;
+function query<V, K extends string>(label: K): Workflow<V, Query<K, V>>;
 ```
 
-**2. One signal, loop** — receive the same signal repeatedly until the handler calls `done`:
+**2. One query, loop** — receive the same label repeatedly until the handler calls `done`:
 
 ```ts
-function receive<T, K extends string>(
-  signal: K,
+function query<T, K extends string>(
+  label: K,
   handler: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator,
-): Workflow<T, Signal<K, V>>;
+): Workflow<T, Query<K, V>>;
 ```
 
-**3. N signals, loop** — dispatch to named handlers until one calls `done`:
+**3. N queries, loop** — dispatch to named handlers until one calls `done`:
 
 ```ts
-function receive<T>(
+function query<T>(
   handlers: Record<string, (payload, done) => Generator>,
-): Workflow<T, Signal<K, V>>;
+): Workflow<T, Query<K, V>>;
 ```
 
 **Example — a todo store using all three forms:**
 
 ```ts
 const todoStore = workflow(function* () {
-  // 1. One signal, once — wait for the user's name
-  const name = yield* receive("login").as<string>();
+  // 1. One query, once — wait for the user's name
+  const name = yield* query("login").as<string>();
 
-  // 2. One signal, loop — collect todos one at a time
-  const todos: string[] = yield* receive("add-todo", function* (text: string, done) {
+  // 2. One query, loop — collect todos one at a time
+  const todos: string[] = yield* query("add-todo", function* (text: string, done) {
     todos.push(text);
     if (todos.length >= 3) {
       yield* done(todos);
     }
   });
 
-  // 3. N signals, loop — manage the list until checkout
+  // 3. N queries, loop — manage the list until checkout
   let items = todos;
-  const final = yield* receive<string[]>({
+  const final = yield* query<string[]>({
     add: function* (text: string) {
       items = [...items, text];
       yield* publish(items);
@@ -303,20 +303,6 @@ function child<T>(
 ```
 
 Delegate to a child workflow with its own event log scope.
-
-### output
-
-```ts
-function output(workflowId: K): Generator & { as: <V>() => Generator };
-```
-
-Wait for another workflow's output (published value or completion result). Auto-starts by default. Use `.as<V>()` to type the value:
-
-```ts
-const profile = yield* output("profile").as<UserProfile>();
-```
-
-Whether the producer uses `publish()` or `return`, the consumer just uses `output()` — the producer's implementation detail is hidden.
 
 ### publish
 
@@ -371,15 +357,15 @@ Exit the enclosing `loop` with a value. Must be used inside a `loop` body.
 type Workflow<A, R = never> = Generator<Descriptor & Step<R>, A, unknown>;
 ```
 
-The core workflow type. `A` is the return type, `R` is the requirements type (signals, dependencies).
+The core workflow type. `A` is the return type, `R` is the requirements type (queries, dependencies).
 
 ### SignalMapOf
 
 ```ts
-type SignalMapOf<F> = // infers signal map from a workflow function
+type SignalMapOf<F> = // infers query map from a workflow function
 ```
 
-Extracts the signal name/payload map from a workflow function type. Used internally by `useWorkflow` for type-safe `signal()` calls.
+Extracts the query label/value map from a workflow function type. Used internally by `useWorkflow` for type-safe `signal()` calls.
 
 ### CancelledError
 
@@ -483,7 +469,7 @@ function createTestRuntime<T>(
 |-------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock activity implementations |
 | `signals` | `Array<{ name: K; payload: SignalMap[K] }>` | Pre-queued signals |
-| `workflowResults` | `Record<string, unknown>` | Mock `output` results |
+| `workflowResults` | `Record<string, unknown>` | Mock `query` results for cross-workflow dependencies |
 
 ## Observability
 
@@ -546,11 +532,10 @@ These are the internal command types yielded by workflow generators. Exported fo
 | Type | Description |
 |------|-------------|
 | `ActivityCommand` | Run an async activity |
-| `ReceiveCommand` | Wait for a signal |
+| `QueryCommand` | Wait for a value by label (signal or workflow output) |
 | `AllCommand` | Wait for multiple items to all complete |
 | `SleepCommand` | Durable timer |
 | `ChildCommand` | Child workflow delegation |
-| `OutputCommand` | Wait for workflow output (published or completed) |
 | `RaceCommand` | Race branches |
 | `PublishCommand` | Publish a value to waiters |
 | `LoopCommand` | Repeat a body until break |

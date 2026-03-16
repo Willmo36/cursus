@@ -59,7 +59,7 @@ Every workflow operation produces one or more events:
 | `activity_scheduled` | `name`, `seq`, `timestamp` | Activity starts |
 | `activity_completed` | `seq`, `result`, `timestamp` | Activity succeeds |
 | `activity_failed` | `seq`, `error`, `stack?`, `timestamp` | Activity throws |
-| `signal_received` | `signal`, `payload`, `seq`, `timestamp` | Signal delivered |
+| `query_resolved` | `label`, `value`, `seq`, `timestamp` | Query resolved (signal or registry) |
 | `timer_started` | `seq`, `durationMs`, `timestamp` | Sleep begins |
 | `timer_fired` | `seq`, `timestamp` | Sleep completes |
 | `child_started` | `name`, `workflowId`, `seq`, `timestamp` | Child workflow begins |
@@ -67,9 +67,6 @@ Every workflow operation produces one or more events:
 | `child_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Child workflow throws |
 | `all_started` | `items`, `seq`, `timestamp` | `all` begins |
 | `all_completed` | `seq`, `results`, `timestamp` | All items resolved |
-| `workflow_dependency_started` | `workflowId`, `seq`, `timestamp` | join / published begins |
-| `workflow_dependency_completed` | `workflowId`, `seq`, `result`, `timestamp` | Dependency resolved |
-| `workflow_dependency_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Dependency failed |
 | `race_started` | `seq`, `items`, `timestamp` | Race begins |
 | `race_completed` | `seq`, `winner`, `value`, `timestamp` | Race resolved |
 | `workflow_published` | `value`, `seq`, `timestamp` | Workflow published a value |

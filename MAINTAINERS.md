@@ -59,11 +59,11 @@ sequenceDiagram
     EXT-->>INT: result
     INT->>LOG: append(activity_completed)
     INT->>WF: gen.next(result)
-    WF-->>INT: yield ReceiveCommand
+    WF-->>INT: yield QueryCommand
     INT->>LOG: (waiting...)
     Note over INT: state = "waiting"
     EXT->>INT: signal("submit", data)
-    INT->>LOG: append(signal_received)
+    INT->>LOG: append(query_resolved)
     INT->>WF: gen.next(data)
     WF-->>INT: return finalResult
     INT->>LOG: append(workflow_completed)
@@ -74,7 +74,7 @@ sequenceDiagram
 | Command | What it does | Context method |
 |---------|-------------|----------------|
 | `ActivityCommand` | Run an async function | `ctx.activity(name, fn)` |
-| `ReceiveCommand` | Block until a named signal arrives | `ctx.receive(signal)` |
+| `QueryCommand` | Block until a named query is resolved | `ctx.query(label)` |
 | `WaitForAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitForAll(...)` |
 | `JoinCommand` | Block until another workflow completes | `ctx.join(id)` |
 | `PublishedCommand` | Block until another workflow publishes a value | `ctx.published(id)` |
@@ -108,7 +108,7 @@ Each command gets a monotonically increasing **sequence number** (`seq`). Before
 
 ```
 seq=1: activity "fetch-user" → log has activity_completed(seq=1) → return stored result
-seq=2: receive "confirm"    → log has signal_received(seq=2)    → return stored payload
+seq=2: query "confirm"      → log has query_resolved(seq=2)     → return stored value
 seq=3: activity "send-email" → no matching event                → execute live
 ```
 
@@ -130,7 +130,7 @@ Non-determinism detected: activity at seq 2 was "fetch-user" but is now "get-pro
 | `activity_scheduled` | Activity execution starts |
 | `activity_completed` | Activity returns a result |
 | `activity_failed` | Activity throws an error |
-| `signal_received` | A signal is delivered |
+| `query_resolved` | A query is resolved |
 | `timer_started` / `timer_fired` | Sleep begins / ends |
 | `child_started` / `child_completed` / `child_failed` | Child workflow lifecycle |
 | `wait_all_started` / `wait_all_completed` | Heterogeneous wait lifecycle |
@@ -154,7 +154,7 @@ graph LR
     WF --- SM
     WF --- WM
 
-    SM -->|constrains| receive["ctx.receive(signal)"]
+    SM -->|constrains| receive["ctx.query(label)"]
     SM -->|constrains| waitForAll["ctx.waitForAll(...)"]
     SM -->|constrains| signal["hook.signal(name, payload)"]
     WM -->|constrains| wfw["ctx.join(id) / ctx.published(id)"]
@@ -186,7 +186,7 @@ const checkoutWorkflow: WorkflowFunction<
 graph TB
     subgraph "User-facing (generic)"
         WC["WorkflowContext&lt;SignalMap, WorkflowMap&gt;"]
-        WC1["receive&lt;K&gt;(signal: K) → SignalMap[K]"]
+        WC1["query&lt;K&gt;(label: K) → SignalMap[K]"]
         WC2["join&lt;K&gt;(id: K) → WorkflowMap[K]"]
         WC2b["published&lt;K&gt;(id: K) → WorkflowMap[K]"]
         WC3["waitForAll(...) → mapped tuple"]
@@ -194,7 +194,7 @@ graph TB
 
     subgraph "Internal (type-erased)"
         IWC["InternalWorkflowContext"]
-        IWC1["receive(signal: string) → unknown"]
+        IWC1["query(label: string) → unknown"]
         IWC2["join(id: string) → unknown"]
         IWC2b["published(id: string) → unknown"]
         IWC3["waitForAll(...) → unknown"]
@@ -387,7 +387,7 @@ sequenceDiagram
 
     UI->>HOOK: signal("submit", formData)
     HOOK->>INT: interpreter.signal("submit", formData)
-    INT->>LOG: append(signal_received)
+    INT->>LOG: append(query_resolved)
     INT->>INT: resolve pending promise
     INT->>INT: notifyChange()
     INT-->>HOOK: syncState callback
