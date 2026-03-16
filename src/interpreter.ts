@@ -495,6 +495,13 @@ export class Interpreter {
 			return (resolved as QueryResolvedEvent).value;
 		}
 
+		// Self-reference detection: a workflow cannot query its own output
+		if (command.label === this._workflowId) {
+			throw new Error(
+				`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+			);
+		}
+
 		// Auto-match: if registry has a workflow with this label, use waitFor
 		if (this.registry?.has(command.label)) {
 			try {
@@ -910,7 +917,7 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside an all branch");
 				}
 				case "query": {
-					// Query in all behaves like receive — wait for signal
+					// Replay check
 					const queryResolved = this.log.findCompleted(
 						item.seq,
 						"query_resolved",
@@ -921,6 +928,32 @@ export class Interpreter {
 							value: (queryResolved as QueryResolvedEvent).value,
 						});
 					}
+
+					// Self-reference check
+					if (item.label === this._workflowId) {
+						return Promise.reject(new Error(
+							`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+						));
+					}
+
+					// Auto-match registry
+					if (this.registry?.has(item.label)) {
+						return this.registry.waitFor(item.label, {
+							start: true,
+							caller: this._workflowId,
+						}).then((result) => {
+							this.log.append({
+								type: "query_resolved",
+								label: item.label,
+								value: result,
+								seq: item.seq,
+								timestamp: Date.now(),
+							});
+							return { index, value: result };
+						});
+					}
+
+					// No registry match: wait for signal
 					return new Promise<{ index: number; value: unknown }>((resolve) => {
 						allWaiters.push({
 							signal: item.label,
@@ -1139,7 +1172,7 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside a race branch");
 				}
 				case "query": {
-					// Query in race behaves like receive — wait for signal
+					// Replay check
 					const queryResolved = this.log.findCompleted(
 						item.seq,
 						"query_resolved",
@@ -1150,6 +1183,32 @@ export class Interpreter {
 							value: (queryResolved as QueryResolvedEvent).value,
 						});
 					}
+
+					// Self-reference check
+					if (item.label === this._workflowId) {
+						return Promise.reject(new Error(
+							`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+						));
+					}
+
+					// Auto-match registry
+					if (this.registry?.has(item.label)) {
+						return this.registry.waitFor(item.label, {
+							start: true,
+							caller: this._workflowId,
+						}).then((result) => {
+							this.log.append({
+								type: "query_resolved",
+								label: item.label,
+								value: result,
+								seq: item.seq,
+								timestamp: Date.now(),
+							});
+							return { index, value: result };
+						});
+					}
+
+					// No registry match: wait for signal
 					return new Promise<{ index: number; value: unknown }>(
 						(resolve) => {
 							raceWaiters.push({

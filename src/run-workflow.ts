@@ -29,7 +29,7 @@ export async function runWorkflow(
 	const interpreter = new Interpreter(workflowFn, log);
 
 	// Race run() against the interpreter entering a waiting state.
-	// run() blocks forever on receive/sleep, so we detect waiting via onStateChange.
+	// run() blocks forever on query/sleep, so we detect waiting via onStateChange.
 	await new Promise<void>((resolve) => {
 		let resolved = false;
 

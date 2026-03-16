@@ -1,12 +1,12 @@
 // ABOUTME: Tests for the WorkflowRegistry that manages shared workflow instances.
-// ABOUTME: Covers start, receive, signal, persistence, and failure handling.
+// ABOUTME: Covers start, query, signal, persistence, and failure handling.
 
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
 import { WorkflowRegistry } from "./registry";
 import { MemoryStorage } from "./storage";
-import { activity, all, handler, output, publish, query, race, sleep, workflow } from "./types";
+import { activity, all, handler, publish, query, race, sleep, workflow } from "./types";
 import type {
 	WorkflowEvent,
 	WorkflowEventObserver,
@@ -673,12 +673,12 @@ describe("WorkflowRegistry", () => {
 
 		it("detects a cycle through all() with workflow refs", async () => {
 			const wfA = workflow(function* () {
-				const [result] = yield* all(output("B"));
+				const [result] = yield* all(query("B"));
 				return result;
 			});
 
 			const wfB = workflow(function* () {
-				return yield* output("A");
+				return yield* query("A");
 			});
 
 			const storage = new MemoryStorage();

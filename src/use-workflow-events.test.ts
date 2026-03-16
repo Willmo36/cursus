@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createLayer } from "./layer";
 import { WorkflowLayerProvider } from "./layer-provider";
 import { MemoryStorage } from "./storage";
-import { activity, receive, workflow } from "./types";
+import { activity, query, workflow } from "./types";
 import type { AnyWorkflowFunction } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
@@ -70,7 +70,7 @@ describe("useWorkflowEvents", () => {
 
 	it("updates events when a signal is sent to a waiting workflow", async () => {
 		const formWorkflow = workflow(function* () {
-			const data = yield* receive<string>("submit");
+			const data = yield* query<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -106,7 +106,7 @@ describe("useWorkflowEvents", () => {
 		await waitFor(() => {
 			const formLog = result.current.events.find((l) => l.id === "form");
 			expect(formLog?.events).toContainEqual(
-				expect.objectContaining({ type: "signal_received", signal: "submit" }),
+				expect.objectContaining({ type: "query_resolved", label: "submit" }),
 			);
 			expect(formLog?.events).toContainEqual(
 				expect.objectContaining({ type: "workflow_completed" }),
@@ -152,7 +152,7 @@ describe("useWorkflowEvents", () => {
 
 	it("shows all events for a local workflow that completes with signals", async () => {
 		const localWorkflow = workflow(function* () {
-			const data = yield* receive<string>("submit");
+			const data = yield* query<string>("submit");
 			return yield* activity("process", async () => `processed: ${data}`);
 		});
 
@@ -184,8 +184,8 @@ describe("useWorkflowEvents", () => {
 			expect(localLog).toBeDefined();
 			expect(localLog?.events).toContainEqual(
 				expect.objectContaining({
-					type: "signal_received",
-					signal: "submit",
+					type: "query_resolved",
+					label: "submit",
 				}),
 			);
 			expect(localLog?.events).toContainEqual(

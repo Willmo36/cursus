@@ -12,7 +12,7 @@ import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
-import { activity, all, output, publish, query, race, receive, workflow } from "./types";
+import { activity, all, publish, query, race, workflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -667,13 +667,13 @@ describe("useWorkflow", () => {
 
 		it("signal then query then activity completes", async () => {
 			const profileWorkflow = workflow(function* () {
-				const profile = yield* receive("profile");
+				const profile = yield* query("profile-data");
 				return profile;
 			});
 
 			const checkoutWorkflow = workflow(function* () {
-				const payment = yield* receive("payment");
-				const profile = yield* output("profile");
+				const payment = yield* query("payment");
+				const profile = yield* query("profile");
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
 				});
@@ -703,7 +703,7 @@ describe("useWorkflow", () => {
 			});
 
 			act(() => {
-				result.current.profile.signal("profile", { name: "Max" });
+				result.current.profile.signal("profile-data", { name: "Max" });
 			});
 
 			await waitFor(() => {
@@ -721,14 +721,14 @@ describe("useWorkflow", () => {
 
 		it("debug panel shows all events for all() with signal + workflow dep", async () => {
 			const profileWorkflow = workflow(function* () {
-				const profile = yield* receive("profile");
+				const profile = yield* query("profile-data");
 				return profile;
 			});
 
 			const checkoutWf = workflow(function* () {
 				const [payment, profile] = yield* all(
-					receive("payment"),
-					output("profile"),
+					query("payment"),
+					query("profile"),
 				);
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
@@ -765,9 +765,9 @@ describe("useWorkflow", () => {
 				expect(result.current.checkout.state).toEqual({ status: "waiting" });
 			});
 
-			// Send profile signal — profile completes, checkout still waiting for payment
+			// Send profile-data signal — profile completes, checkout still waiting for payment
 			act(() => {
-				result.current.profile.signal("profile", { name: "Max" });
+				result.current.profile.signal("profile-data", { name: "Max" });
 			});
 
 			await waitFor(() => {
@@ -1078,7 +1078,7 @@ describe("useWorkflow", () => {
 
 		it("useWorkflow sends typed signals", async () => {
 			const loginWorkflow = workflow(function* () {
-				const name = yield* receive("login").as<string>();
+				const name = yield* query("credentials").as<string>();
 				return `Welcome ${name}`;
 			});
 
@@ -1098,7 +1098,7 @@ describe("useWorkflow", () => {
 			});
 
 			act(() => {
-				result.current.signal("login", "Max");
+				result.current.signal("credentials", "Max");
 			});
 
 			await waitFor(() => {
@@ -1169,7 +1169,7 @@ describe("useWorkflow", () => {
 
 		it("sends signals to a registry workflow", async () => {
 			const loginWorkflow = workflow(function* () {
-				const name = yield* receive("login").as<string>();
+				const name = yield* query("credentials").as<string>();
 				return `Welcome ${name}`;
 			});
 
@@ -1186,7 +1186,7 @@ describe("useWorkflow", () => {
 			});
 
 			act(() => {
-				result.current.signal("login", "Max");
+				result.current.signal("credentials", "Max");
 			});
 
 			await waitFor(() => {

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
-import { activity, all, child, handler, output, query, race, workflow } from "./types";
+import { activity, all, child, handler, query, race, workflow } from "./types";
 
 describe("createTestRuntime", () => {
 	it("runs a workflow with mock activities", async () => {
@@ -162,7 +162,7 @@ describe("createTestRuntime", () => {
 
 	it("runs mixed all with signals and workflowResults", async () => {
 		const wf = workflow(function* () {
-			return yield* all(query("payment"), output("profile"));
+			return yield* all(query("payment"), query("profile"));
 		});
 
 		const result = await createTestRuntime(wf, {

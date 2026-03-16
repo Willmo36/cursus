@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
 import { activity, all, child, handler, loop, loopBreak, publish, query, race, sleep, workflow } from "./types";
-import type { Publishes, Query, Requirements, Signal, Workflow } from "./types";
+import type { Publishes, Query, Requirements, Workflow } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -267,7 +267,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"input", string>> = true;
+			const _check: AssertEqual<R, Query<"input", string>> = true;
 			void _check;
 			void w;
 		});
@@ -281,7 +281,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"greet", string>> = true;
+			const _check: AssertEqual<R, Query<"greet", string>> = true;
 			void _check;
 			void w;
 		});
@@ -298,7 +298,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"greet", string> | Signal<"farewell", number>> = true;
+			const _check: AssertEqual<R, Query<"greet", string> | Query<"farewell", number>> = true;
 			void _check;
 			void w;
 		});
@@ -325,8 +325,8 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R2 = Requirements<ReturnType<typeof w2>>;
-			const _notWide2: AssertNotEqual<R2, Signal<string, any>> = true;
-			const _exact2: AssertEqual<R2, Signal<"greet", string> | Signal<"farewell", number>> = true;
+			const _notWide2: AssertNotEqual<R2, Query<string, any>> = true;
+			const _exact2: AssertEqual<R2, Query<"greet", string> | Query<"farewell", number>> = true;
 			void _notWide2; void _exact2; void w2;
 		});
 
@@ -340,7 +340,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _check: AssertEqual<R, Signal<"go", undefined> | Publishes<number>> = true;
+			const _check: AssertEqual<R, Query<"go", undefined> | Publishes<number>> = true;
 			void _check;
 			void w;
 		});
@@ -355,7 +355,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
+			const _hasSignal: AssertEqual<Query<"go", undefined> extends R ? true : false, true> = true;
 			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
 		});
@@ -374,8 +374,8 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _hasOuter: AssertEqual<Signal<"start", undefined> extends R ? true : false, true> = true;
-			const _hasInner: AssertEqual<Signal<"confirm", string> extends R ? true : false, true> = true;
+			const _hasOuter: AssertEqual<Query<"start", undefined> extends R ? true : false, true> = true;
+			const _hasInner: AssertEqual<Query<"confirm", string> extends R ? true : false, true> = true;
 			void _hasOuter; void _hasInner; void w;
 		});
 
@@ -421,7 +421,7 @@ describe("Monad laws", () => {
 					.as<string>();
 			});
 			type R = Requirements<ReturnType<typeof w>>;
-			const _hasSignal: AssertEqual<Signal<"go", undefined> extends R ? true : false, true> = true;
+			const _hasSignal: AssertEqual<Query<"go", undefined> extends R ? true : false, true> = true;
 			const _hasOutput: AssertEqual<Query<"config", { url: string }> extends R ? true : false, true> = true;
 			void _hasSignal; void _hasOutput; void w;
 		});
