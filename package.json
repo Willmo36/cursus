@@ -58,6 +58,7 @@
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"typecheck": "tsc --noEmit",
+		"rebuild-examples": "npm run build && for dir in examples/*/; do (cd \"$dir\" && npm install); done",
 		"docs:dev": "cd website && npm start",
 		"docs:build": "cd website && npm run build",
 		"docs:version": "cd website && npm run docs:version --"
