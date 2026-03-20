@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestRuntime } from "./test-runtime";
 import { activity, all, child, handler, loop, loopBreak, publish, query, race, sleep, workflow } from "./types";
-import type { Publishes, Query, Requirements, WorkflowGenerator } from "./types";
+import type { Publishes, Query, Requirements, WorkflowGenerator, WorkflowReturn } from "./types";
 
 /**
  * A "pure" workflow that returns a value without yielding any commands.
@@ -97,7 +97,7 @@ describe("Monad laws", () => {
 
 			// Via child (yield* delegation to sub-interpreter)
 			const viaChild = workflow(function* () {
-				return yield* child<string>("sub", childWorkflow);
+				return yield* child("sub", childWorkflow);
 			});
 
 			// Inline (same logic, no child)
@@ -217,15 +217,43 @@ describe("Monad laws", () => {
 			void w;
 		});
 
-		it("child has no requirements", () => {
+		it("child propagates inner workflow requirements", () => {
+			const childWf = workflow(function* () {
+				const name = yield* query("name").as<string>();
+				return yield* activity("fetch", async () => name.length);
+			});
+			const w = workflow(function* () {
+				return yield* child("sub", childWf);
+			});
+			type R = Requirements<typeof w>;
+			const _check: AssertEqual<R, Query<"name", string>> = true;
+			void _check;
+			void w;
+		});
+
+		it("child with no requirements propagates never", () => {
 			const childWf = workflow(function* () {
 				return yield* activity("fetch", async () => 42);
 			});
 			const w = workflow(function* () {
-				return yield* child<number>("sub", childWf);
+				return yield* child("sub", childWf);
 			});
 			type R = Requirements<typeof w>;
 			const _check: AssertEqual<R, never> = true;
+			void _check;
+			void w;
+		});
+
+		it("child infers return type from workflow", () => {
+			const childWf = workflow(function* () {
+				return 42;
+			});
+			const w = workflow(function* () {
+				const n = yield* child("sub", childWf);
+				return n + 1;
+			});
+			type A = WorkflowReturn<typeof w>;
+			const _check: AssertEqual<A, number> = true;
 			void _check;
 			void w;
 		});
@@ -649,7 +677,7 @@ describe("Monad laws", () => {
 			});
 
 			const parentWf = workflow(function* () {
-				const result = yield* child<string>("sub", childWf);
+				const result = yield* child("sub", childWf);
 				return `parent: ${result}`;
 			});
 

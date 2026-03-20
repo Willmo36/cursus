@@ -533,17 +533,17 @@ export function sleep(durationMs: number): Generator<SleepDescriptor & Requires<
 	})();
 }
 
-export function child<T>(
+export function child<W extends Workflow<any, any>>(
 	name: string,
-	wf: AnyWorkflow,
-): Generator<ChildDescriptor & Requires<never>, T, unknown> {
+	wf: W,
+): Generator<ChildDescriptor & Requires<Requirements<W>>, WorkflowReturn<W>, unknown> {
 	return (function* () {
 		const result = yield {
 			type: "child" as const,
 			name,
 			workflow: wf,
-		} as ChildDescriptor & Requires<never>;
-		return result as T;
+		} as ChildDescriptor & Requires<Requirements<W>>;
+		return result as WorkflowReturn<W>;
 	})();
 }
 
