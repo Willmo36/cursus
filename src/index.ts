@@ -5,7 +5,7 @@ export { default as eventSchema } from "./event-schema.json";
 export type { WorkflowLayer } from "./layer";
 export { createLayer } from "./layer";
 export { WorkflowRegistry } from "./registry";
-export type { Registry } from "./registry-builder";
+export type { MergeResolver, Registry } from "./registry-builder";
 export { createRegistry } from "./registry-builder";
 export type {
 	ActivityWrapper,

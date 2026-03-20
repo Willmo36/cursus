@@ -180,4 +180,190 @@ describe("Registry builder", () => {
 			void _invalidStart;
 		});
 	});
+
+	describe("merge()", () => {
+		it("merges two disjoint registries", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("a", workflow(function* () {
+					return yield* activity("fetchA", async () => "A");
+				}));
+
+			const r2 = createRegistry(new MemoryStorage())
+				.add("b", workflow(function* () {
+					return yield* activity("fetchB", async () => "B");
+				}));
+
+			const merged = r1.merge(r2);
+			expect(merged).toBeDefined();
+
+			const registry = merged.build();
+			expect(registry.getWorkflowIds().sort()).toEqual(["a", "b"]);
+		});
+
+		it("merged registry resolves cross-registry query dependencies", async () => {
+			const profileWf = workflow(function* () {
+				return yield* activity("fetch", async () => ({ name: "Max" }));
+			});
+
+			const r1 = createRegistry(new MemoryStorage())
+				.add("profile", profileWf);
+
+			const orderWf = workflow(function* () {
+				const profile = yield* query("profile").as<{ name: string }>();
+				return `order for ${profile.name}`;
+			});
+
+			const r2 = createRegistry(new MemoryStorage())
+				.add("order", orderWf);
+
+			const registry = r1.merge(r2).build();
+
+			await registry.start("profile");
+			await registry.start("order");
+
+			const state = registry.getState("order");
+			expect(state?.status).toBe("completed");
+			if (state?.status === "completed") {
+				expect(state.result).toBe("order for Max");
+			}
+		});
+
+		it("overlapping key uses second registry's workflow by default", async () => {
+			const greetV1 = workflow(function* () {
+				return "v1";
+			});
+			const greetV2 = workflow(function* () {
+				return "v2";
+			});
+
+			const r1 = createRegistry(new MemoryStorage())
+				.add("greet", greetV1);
+			const r2 = createRegistry(new MemoryStorage())
+				.add("greet", greetV2);
+
+			const registry = r1.merge(r2).build();
+			await registry.start("greet");
+
+			const state = registry.getState("greet");
+			expect(state?.status).toBe("completed");
+			if (state?.status === "completed") {
+				expect(state.result).toBe("v2");
+			}
+		});
+
+		it("overlapping key uses custom merge function when provided", async () => {
+			const greetV1 = workflow(function* () {
+				return "v1";
+			});
+			const greetV2 = workflow(function* () {
+				return "v2";
+			});
+
+			const r1 = createRegistry(new MemoryStorage())
+				.add("greet", greetV1);
+			const r2 = createRegistry(new MemoryStorage())
+				.add("greet", greetV2);
+
+			// Keep first registry's workflow
+			const registry = r1.merge(r2, (a, _b) => a).build();
+			await registry.start("greet");
+
+			const state = registry.getState("greet");
+			expect(state?.status).toBe("completed");
+			if (state?.status === "completed") {
+				expect(state.result).toBe("v1");
+			}
+		});
+
+		it("merged builder supports further add() calls", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("a", workflow(function* () { return "A"; }));
+
+			const r2 = createRegistry(new MemoryStorage())
+				.add("b", workflow(function* () { return "B"; }));
+
+			const merged = r1.merge(r2)
+				.add("c", workflow(function* () { return "C"; }));
+
+			const registry = merged.build();
+			expect(registry.getWorkflowIds().sort()).toEqual(["a", "b", "c"]);
+		});
+
+		it("type-level: merged registry has union of keys", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("a", workflow(function* () { return 1; }));
+
+			const r2 = createRegistry(new MemoryStorage())
+				.add("b", workflow(function* () { return "hello"; }));
+
+			const registry = r1.merge(r2).build();
+
+			// Both keys are valid
+			const _validA: (id: "a") => Promise<void> = registry.start.bind(registry);
+			const _validB: (id: "b") => Promise<void> = registry.start.bind(registry);
+			void _validA; void _validB;
+
+			// @ts-expect-error — "unknown" is not a registered workflow ID
+			const _invalid: (id: "unknown") => Promise<void> = registry.start.bind(registry);
+			void _invalid;
+		});
+
+		it("type-level: merged registry preserves result types per key", async () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("num", workflow(function* () { return 42; }));
+
+			const r2 = createRegistry(new MemoryStorage())
+				.add("str", workflow(function* () { return "hello"; }));
+
+			const registry = r1.merge(r2).build();
+
+			await registry.start("num");
+			await registry.start("str");
+
+			const numState = registry.getState("num");
+			const strState = registry.getState("str");
+
+			if (numState?.status === "completed") {
+				const _check: AssertEqual<typeof numState.result, number> = true;
+				void _check;
+			}
+			if (strState?.status === "completed") {
+				const _check: AssertEqual<typeof strState.result, string> = true;
+				void _check;
+			}
+		});
+
+		it("type-level: rejects merge when overlapping keys have incompatible result types", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("greet", workflow(function* () { return 42; }));
+			const r2 = createRegistry(new MemoryStorage())
+				.add("greet", workflow(function* () { return "hello"; }));
+
+			// @ts-expect-error — "greet" has number in r1 but string in r2
+			r1.merge(r2);
+		});
+
+		it("type-level: allows merge when overlapping keys have same result type", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("greet", workflow(function* () { return "v1"; }));
+			const r2 = createRegistry(new MemoryStorage())
+				.add("greet", workflow(function* () { return "v2"; }));
+
+			// Should compile — both return string
+			const merged = r1.merge(r2);
+			expect(merged).toBeDefined();
+		});
+
+		it("merge is associative: (r1.merge(r2)).merge(r3) works", () => {
+			const r1 = createRegistry(new MemoryStorage())
+				.add("a", workflow(function* () { return "A"; }));
+			const r2 = createRegistry(new MemoryStorage())
+				.add("b", workflow(function* () { return "B"; }));
+			const r3 = createRegistry(new MemoryStorage())
+				.add("c", workflow(function* () { return "C"; }));
+
+			const registry = r1.merge(r2).merge(r3).build();
+			expect(registry.getWorkflowIds().sort()).toEqual(["a", "b", "c"]);
+		});
+	});
 });
