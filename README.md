@@ -77,12 +77,12 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Timers** — durable `sleep` that survives reloads
 - **all & race** — concurrent branches with `all()` and first-to-complete `race()`
 - **Child workflows** — compose via `yield*` delegation
-- **Cross-workflow dependencies** — `join` / `published` with circular dependency detection
-- **Signal loops** — `handle` for long-running interactive workflows
+- **Cross-workflow dependencies** — `query` with circular dependency detection
+- **Signal loops** — `handler()` for long-running interactive workflows
 - **Publish** — expose intermediate workflow state to consumers
 - **Layers** — share workflows across the component tree via React context
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
-- **Resilience** — `withRetry`, `withCircuitBreaker`, composable `wrapActivity`
+- **Resilience** — try/catch + loop for retry patterns
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
 - **SSR** — `runWorkflow` for server-side execution, snapshot hydration via `useWorkflow`
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
@@ -101,10 +101,9 @@ Free functions yielded inside a workflow generator:
 | `sleep(ms)` | Durable timer — survives page reload. |
 | `all(...branches)` | Wait for multiple branches concurrently, return all results. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |
-| `child(name, fn)` | Run a nested sub-workflow with its own event log. |
-| `join(id)` | Block until another registered workflow completes. |
-| `published(id)` | Block until another registered workflow publishes a value. |
-| `handle(handlers)` | Event-loop style signal handling with `done()` to exit. |
+| `child(name, wf)` | Run a nested sub-workflow with its own event log. |
+| `query(id)` | Cross-workflow: block until another registered workflow completes or publishes. |
+| `handler().on(...).as()` | Builder for multi-signal loop with `done()` to exit. |
 | `publish(value)` | Publish a value to consumers without completing. |
 
 ### useWorkflow Hook
@@ -154,7 +153,7 @@ function App() {
 
 // Inside checkoutWorkflow:
 const checkoutWorkflow = workflow(function* () {
-  const profile = yield* join("profile");
+  const profile = yield* query("profile").as<Profile>();
   // ...
 });
 ```
@@ -163,46 +162,24 @@ Circular dependencies are detected and throw immediately with a descriptive erro
 
 ### Resilience
 
-Wrap any activity function with automatic retry and backoff:
+Use `loop` + `try/catch` + `sleep` for retry patterns:
 
 ```ts
-import { withRetry } from "cursus";
+import { workflow, activity, loop, loopBreak, sleep } from "cursus";
 
-const result = yield* activity(
-  "fetchData",
-  withRetry(async (signal) => fetch("/api/data", { signal }), {
-    maxAttempts: 3,
-    backoff: "exponential",
-    initialDelayMs: 1000,
-  }),
-);
-```
-
-Fail fast when a service is repeatedly failing:
-
-```ts
-import { withCircuitBreaker } from "cursus";
-
-const result = yield* activity(
-  "fetchData",
-  withCircuitBreaker(async (signal) => fetch("/api/data", { signal }), {
-    failureThreshold: 5,
-    resetTimeoutMs: 30000,
-  }),
-);
-```
-
-Compose multiple wrappers with `wrapActivity`:
-
-```ts
-import { withRetry, withCircuitBreaker, wrapActivity } from "cursus";
-
-const resilient = wrapActivity(
-  withCircuitBreaker,  // outer
-  withRetry,           // inner
-);
-
-const result = yield* activity("fetchData", resilient(fetchData));
+const resilientWorkflow = workflow(function* () {
+  const result = yield* loop(function* () {
+    try {
+      const data = yield* activity("fetchData", async (signal) =>
+        fetch("/api/data", { signal }).then((r) => r.json()),
+      );
+      yield* loopBreak(data);
+    } catch {
+      yield* sleep(1000); // backoff before retry
+    }
+  });
+  return result;
+});
 ```
 
 ### Testing
@@ -239,7 +216,7 @@ expect(result).toEqual({ displayName: "Alice" });
 - [Layers](./docs/layers.md) — shared workflows and cross-workflow dependencies
 - [Storage](./docs/storage.md) — persistence and versioning
 - [Testing](./docs/testing.md) — `createTestRuntime`
-- [Resilience](./docs/resilience.md) — retry and circuit breaker
+- [Resilience](./docs/resilience.md) — retry patterns with loop and try/catch
 - [Observability](./docs/observability.md) — event observers and debug panel
 - [SSR & Hydration](./docs/ssr.md) — server-side execution and snapshot hydration
 - [API Reference](./docs/api-reference.md) — exhaustive type and export reference
@@ -259,12 +236,13 @@ The `examples/` directory contains runnable Vite apps:
 | `chat-room` | Long-running `handle` loop |
 | `cookie-banner` | Result derived from event history |
 | `env-config` | Workflow as environment provider |
-| `error-recovery` | `withRetry` and dependency failure handling |
+| `error-recovery` | Retry with loop/try/catch and dependency failure handling |
 | `race` | Fetch-with-timeout via `race` |
 | `ssr` | Server-side execution with snapshot hydration |
 | `opentelemetry` | Event observer integration |
 | `publish` | Intermediate state via `publish` |
-| `subscribe` | Cross-workflow `published` consumption |
+| `merge` | Type-safe registry merging |
+| `user-list` | Multi-signal handler loop with `handler()` |
 
 ```
 cd examples/login

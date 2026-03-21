@@ -136,4 +136,4 @@ const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
 
 - **Signals**: Workflows that block on signals return `state.status === "waiting"`. The client must provide the signal to continue.
 - **Timers**: `sleep()` blocks `runWorkflow` for the full duration. Avoid long sleeps in server-executed workflows.
-- **Cross-workflow deps**: `runWorkflow` doesn't support `join` or `published` — these require a registry, which is a client-side concept. Workflows that use these commands should be hydrated via layers, not `runWorkflow`.
+- **Cross-workflow deps**: `runWorkflow` doesn't support `query` for cross-workflow dependencies — these require a registry, which is a client-side concept. Workflows that use cross-workflow `query` should be hydrated via layers, not `runWorkflow`.

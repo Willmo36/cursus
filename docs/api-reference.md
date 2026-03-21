@@ -71,6 +71,27 @@ type WorkflowEventLog = {
 };
 ```
 
+### usePublished
+
+```ts
+function usePublished<T>(
+  workflowId: string,
+  selector: (published: unknown) => T,
+): T | undefined;
+```
+
+Selects a slice of a workflow's published state. Only re-renders when the selected value changes (by reference). Requires a registry context (`WorkflowLayerProvider` or `createBindings`).
+
+Returns `undefined` before the workflow publishes.
+
+In `createBindings`, the selector input is typed from the registry:
+
+```ts
+const { usePublished } = createBindings(registry);
+// selector receives the workflow's published type, not `unknown`
+const name = usePublished("profile", (pub) => pub.name);
+```
+
 ## Components
 
 ### WorkflowLayerProvider
@@ -139,6 +160,7 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | `reset(id)` | Cancel, clear storage, allow restart. |
 | `signal(id, name, payload?)` | Send a signal to a running workflow. |
 | `getState(id)` | Get current `WorkflowState`. |
+| `getPublished(id)` | Get the current published value. |
 | `getEvents(id)` | Get the in-memory event log. |
 | `getInterpreter(id)` | Get the `Interpreter` instance. |
 | `getWorkflowIds()` | List all registered workflow IDs. |
@@ -147,6 +169,55 @@ Manages shared workflow instances. Created automatically by `WorkflowLayerProvid
 | `onWorkflowsChange(callback)` | Subscribe to workflow additions/removals. Returns unsubscribe function. |
 | `observe(id, interpreter)` | Register an external interpreter (used by inline workflows). |
 | `unobserve(id)` | Remove an observed interpreter. |
+
+### createRegistry
+
+```ts
+function createRegistry(storage?: WorkflowStorage): RegistryBuilder;
+```
+
+Builder for type-safe registries. Chain `.add(id, workflow)` to register workflows, then `.build()` to produce a `Registry`. Defaults to `MemoryStorage` when no storage is provided.
+
+```ts
+const registry = createRegistry(new LocalStorage())
+  .add("profile", profileWorkflow)
+  .add("checkout", checkoutWorkflow)
+  .build();
+```
+
+The builder tracks provided types — later `add()` calls can depend on earlier ones, and the compiler verifies that all dependencies are satisfied.
+
+### merge
+
+```ts
+builder.merge(otherBuilder, resolver?): RegistryBuilder;
+```
+
+Merges two registry builders. Overlapping keys must have compatible result types (enforced at compile time). An optional `resolver` function handles runtime conflicts for overlapping keys.
+
+```ts
+const combined = authRegistry.merge(paymentRegistry).build();
+```
+
+### handler
+
+```ts
+function handler(): SignalReceiver;
+```
+
+Builder for multi-signal receive loops. Chain `.on(signal, fn)` to add handlers, then `.as<T>()` to produce a generator. The loop runs until a handler calls `done(value)`.
+
+```ts
+const result = yield* handler()
+  .on("add", function* (item: string) {
+    items.push(item);
+    yield* publish(items);
+  })
+  .on("checkout", function* (_payload, done) {
+    yield* done(items);
+  })
+  .as<string[]>();
+```
 
 ## Storage
 
@@ -296,13 +367,13 @@ Durable timer that survives page reloads.
 ### child
 
 ```ts
-function child<T>(
+function child<W extends Workflow<any, any>>(
   name: string,
-  workflowFn: (...args: any[]) => Generator<any, T, unknown>,
-): Generator<ChildDescriptor, T, unknown>;
+  wf: W,
+): Generator<ChildDescriptor, WorkflowReturn<W>, unknown>;
 ```
 
-Delegate to a child workflow with its own event log scope.
+Delegate to a child workflow with its own event log scope. Return type and requirements are inferred from the `Workflow` instance.
 
 ### publish
 
