@@ -141,25 +141,25 @@ const approval = workflow(function* () {
 
 The query and sleep are both durable — if the user refreshes, the remaining timeout resumes from where it left off and any query already resolved replays instantly.
 
-## Signal Loops with handle
+## Signal Loops with handler
 
-For workflows that handle multiple signals in a loop (like a shopping cart), use `handle`:
+For workflows that handle multiple signals in a loop (like a shopping cart), use `handler()`:
 
 ```ts
-const finalCount = yield* handle<number>({
-  increment: function* (payload, done) {
+const finalCount = yield* handler()
+  .on("increment", function* () {
     count++;
-  },
-  decrement: function* (payload, done) {
+  })
+  .on("decrement", function* () {
     count--;
-  },
-  checkout: function* (payload, done) {
+  })
+  .on("checkout", function* (_payload, done) {
     yield* done(count);
-  },
-});
+  })
+  .as<number>();
 ```
 
-`handle` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `done(value)`, which terminates the loop and returns the value.
+`handler()` blocks the workflow and dispatches incoming signals to the matching handler. The workflow stays in the loop until a handler calls `done(value)`, which terminates the loop and returns the value.
 
 ## Publish
 
@@ -177,18 +177,18 @@ const sessionWorkflow = workflow(function* () {
 
 When a workflow publishes:
 
-- All current `published` callers resolve immediately with the published value
-- Future `published` calls return the published value without waiting
+- All current `query` callers for this workflow resolve immediately with the published value
+- Future `query` calls return the published value without waiting
 - The workflow generator continues executing
 
 On replay, the publish event replays from the event log without calling the registry.
 
 ### When to use `return` vs `publish`
 
-- **Does your workflow have a definitive end state?** Use `return`. The workflow completes and consumers get the final value via `join` or `state.result`.
-- **Does your workflow need to provide a value but keep running?** Use `publish`. Consumers get the value immediately via `published`, and the workflow continues handling signals (upgrades, revocation, live updates, etc.).
-- **Can you publish multiple times?** Yes. Each `yield* publish(value)` updates the value for future `published` callers and resolves any currently waiting consumers.
-- **Can a workflow both publish and return?** Yes. `publish` provides an intermediate value while the workflow is alive. `return` ends the workflow. Once a workflow returns, `join` resolves with the completed value.
+- **Does your workflow have a definitive end state?** Use `return`. The workflow completes and consumers get the final value via `query` or `state.result`.
+- **Does your workflow need to provide a value but keep running?** Use `publish`. Consumers get the value immediately via `query`, and the workflow continues handling signals (upgrades, revocation, live updates, etc.).
+- **Can you publish multiple times?** Yes. Each `yield* publish(value)` updates the value for future `query` callers and resolves any currently waiting consumers.
+- **Can a workflow both publish and return?** Yes. `publish` provides an intermediate value while the workflow is alive. `return` ends the workflow. Once a workflow returns, `query` resolves with the completed value.
 
 ## Error Handling
 

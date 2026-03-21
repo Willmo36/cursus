@@ -1,4 +1,4 @@
-# react-workflow Architecture Proposal
+# cursus Architecture
 
 ## Core Idea
 
@@ -9,12 +9,12 @@ Durable workflows in the browser. A workflow is a **generator function** that yi
 ### Workflow = Generator Function
 
 ```ts
-function* checkout(ctx: WorkflowContext): Workflow<OrderResult> {
-  const cart = yield* ctx.activity("fetchCart", fetchCart);
-  const payment = yield* ctx.query("payment-submitted");
-  const order = yield* ctx.activity("charge", () => chargeCard(payment));
+const checkout = workflow(function* () {
+  const cart = yield* activity("fetchCart", fetchCart);
+  const payment = yield* query<PaymentInfo>("payment-submitted");
+  const order = yield* activity("charge", async () => chargeCard(payment));
   return { orderId: order.id };
-}
+});
 ```
 
 Why generators:
@@ -33,8 +33,11 @@ Commands are the yield values — declarative descriptions of side effects:
 | `activity(name, fn)` | Execute a side-effecting function (API call, storage, etc.) |
 | `query(label)` | Pause until an external query is resolved (user input, event) |
 | `sleep(ms)` | Durable timer — survives page reload |
-| `child(name, workflowFn)` | Start a nested/child workflow |
-| `query()` | Expose current workflow state for external reads |
+| `child(name, wf)` | Start a nested/child workflow |
+| `publish(value)` | Expose intermediate workflow state to consumers |
+| `all(...)` | Wait for multiple branches concurrently |
+| `race(...)` | Race branches, first to complete wins |
+| `loop(body)` / `loopBreak(value)` | Repeat until break |
 
 ### Event Log (what actually happened)
 
@@ -83,18 +86,14 @@ Possible: IndexedDB, server-side, in-memory (for testing).
 ### React Integration
 
 ```ts
-// The main hook
-function useWorkflow<TResult>(
-  workflowId: string,
-  workflowFn: WorkflowFunction<TResult>,
-  options?: { storage?: WorkflowStorage }
-): {
-  state: "running" | "completed" | "failed";
-  result: TResult | undefined;
-  error: Error | undefined;
-  signal: (name: string, payload?: unknown) => void;
-  reset: () => void;
-}
+// Inline mode
+const { state, published, signal, cancel, reset } = useWorkflow(
+  "checkout", checkoutWorkflow, { storage }
+);
+
+// Registry mode (via createBindings)
+const { useWorkflow, Provider } = createBindings(registry);
+const { state, signal } = useWorkflow("checkout");
 ```
 
 The hook:
@@ -109,12 +108,12 @@ The hook:
 Child workflows have their own event logs, linked to the parent via `child_started`/`child_completed` events:
 
 ```ts
-function* jobApplication(ctx: WorkflowContext): Workflow<Application> {
-  const personal = yield* ctx.child("personal-info", personalInfoWorkflow);
-  const education = yield* ctx.child("education", educationWorkflow);
-  const review = yield* ctx.child("review", reviewWorkflow);
+const jobApplication = workflow(function* () {
+  const personal = yield* child("personal-info", personalInfoWorkflow);
+  const education = yield* child("education", educationWorkflow);
+  const review = yield* child("review", reviewWorkflow);
   return { personal, education, review };
-}
+});
 ```
 
 This gives us natural "multi-step wizard" behavior. Each child workflow can be independently replayed, and the parent tracks the overall progress.
@@ -124,12 +123,8 @@ This gives us natural "multi-step wizard" behavior. Each child workflow can be i
 The workflow function is just a generator — it doesn't know how its commands get executed. This means we can swap interpreters:
 
 ```ts
-// Production: real interpreter with storage, real activity execution
-const runtime = createRuntime({ storage: localStorageAdapter() });
-
-// Test: synchronous interpreter, activities are mocked via dependency injection
-const testRuntime = createTestRuntime();
-const result = testRuntime.run(myWorkflow, {
+// Test: activities are mocked, signals are pre-queued
+const result = await createTestRuntime(checkoutWorkflow, {
   activities: {
     fetchCart: () => mockCart,
     charge: () => mockOrder,
@@ -167,7 +162,7 @@ The test interpreter runs the generator synchronously, injecting results without
 
 1. **`query` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
 
-2. **Parallel activities supported.** `yield* ctx.parallel([...])` for concurrent activities (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
+2. **Parallel activities supported.** `yield* all(...)` for concurrent branches (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
 3. **History compaction deferred.** Not needed for initial version.
 
@@ -183,55 +178,34 @@ This is why workflows compose: `yield*` is associative, and the interpreter can 
 
 ### Profunctor
 
-`Workflow<SignalMap, T>` is a profunctor — contravariant in its signal input (what signals it accepts) and covariant in its result output (what value it produces). In concrete terms:
+`Workflow<A, R>` is a profunctor — contravariant in its requirements input (what queries it needs) and covariant in its result output (what value it produces). In concrete terms:
 
-- **Covariant (result):** If workflow A returns `T`, a parent can `yield* ctx.child("a", A)` and receive `T`. Results flow out naturally.
-- **Contravariant (signals):** If workflow A accepts signal `"submit"`, the parent must be able to route `"submit"` into A. Signals must flow in.
+- **Covariant (result):** If workflow A returns `T`, a parent can `yield* child("a", A)` and receive `T`. The `.map()` combinator transforms the output.
+- **Contravariant (requirements):** If workflow A needs `Query<"submit", string>`, the parent inherits that requirement. The `.provide()` combinator satisfies requirements.
 
-`ctx.child()` originally composed only the covariant part — the child's result flowed back to the parent, but signals sent to the parent were not forwarded to the child. This broke the profunctor structure: `yield* ctx.child("x", wf)` was not equivalent to inlining `wf` when `wf` used `query`.
+`child()` composes both directions — the child's result flows to the parent, and signals sent to the parent are forwarded to active children. This preserves the profunctor structure: `yield* child("x", wf)` is equivalent to inlining `wf`.
 
 ### Monad Laws
 
 For pure computation (activities, sleep), the monad laws hold:
 
-- **Left identity:** `yield* ctx.activity("x", f)` behaves the same whether wrapped in a child or inlined.
+- **Left identity:** `yield* activity("x", f)` behaves the same whether wrapped in a child or inlined.
 - **Associativity:** `yield* a; yield* b; yield* c` groups the same regardless of nesting.
 
-**Right identity** was broken for signal-consuming workflows: `yield* ctx.child("x", wf)` ≠ running `wf` inline when `wf` uses `query`, because signals didn't reach the child. The fix (signal delegation through `_activeChild`) restores right identity for all command types.
+Signal delegation through `_activeChild` ensures right identity holds for all command types, including signal-consuming workflows.
 
 ### Design Principle
 
 Every combinator must preserve both directions of the profunctor. Concretely: if a workflow accepts signals, any wrapper (`child`, `race`, `on`) must route signals through to it. If a combinator drops the contravariant part, it breaks composition.
-
-### Endomorphism Monoid (Activity Wrappers)
-
-Activity functions have type `(AbortSignal) → Promise<T>`. Higher-order functions that transform this type to itself — `withRetry`, `withCircuitBreaker` — are endomorphisms on this carrier set. They form a monoid:
-
-- **Carrier:** `((AbortSignal) → Promise<T>) → ((AbortSignal) → Promise<T>)`
-- **Operation:** function composition via `wrapActivity(...wrappers)`, which applies wrappers left-to-right (outermost first)
-- **Identity:** the empty wrapper list — `wrapActivity()` returns the original function unchanged
-- **Associativity:** `wrapActivity(a, b, c)` = `wrapActivity(a, wrapActivity(b, c))`
-
-**What belongs at the activity level (endomorphism monoid):**
-- Retry logic (`withRetry`) — retries are invisible to the event log
-- Circuit breaking (`withCircuitBreaker`) — failure tracking is per-activity, transparent to the workflow
-- Rate limiting, fallback, caching — same principle: transparent to the workflow
-
-**What does NOT belong here (workflow-level concerns):**
-- Timeout — already handled by `ctx.race(activity, sleep)`, visible in the event log
-- Cancellation — workflow-level via `cancel()` with `AbortSignal` propagation
-- Orchestration — sequencing, branching, parallel execution are workflow concerns
-
-The key invariant: all activity wrappers are transparent to the event log. The workflow sees a single `activity_completed` or `activity_failed` event regardless of how many retries or circuit breaker state transitions happened internally.
 
 ### Other Algebraic Structures
 
 - **Natural transformation:** The interpreter is `Free<Command, T> → Promise<T>`. Swapping interpreters (production vs. test) preserves the natural transformation's commutativity with `yield*`.
 - **Coalgebra:** `WorkflowState → (WorkflowState, Event[])` — the interpreter's step function is a coalgebra for the `(−) × Event[]` functor. The event log is the terminal coalgebra's trace.
 - **F-algebra:** Event log replay is an F-algebra: `fold` over the event list to reconstruct workflow state. The fold is a catamorphism.
-- **Applicative:** `ctx.parallel([...])` and `ctx.waitForAll([...])` give the command language applicative structure — independent effects executed concurrently.
-- **Alternative:** `ctx.race(...)` and `ctx.waitForAny(...)` provide the alternative functor — choose the first effect to complete, discard the rest.
+- **Applicative:** `all(...)` gives the command language applicative structure — independent effects executed concurrently.
+- **Alternative:** `race(...)` provides the alternative functor — choose the first effect to complete, discard the rest.
 
 ## Future Work
 
-- **Saga/compensation pattern.** A first-class `ctx.compensate()` primitive for registering undo actions that execute in LIFO order on failure. Deferred because try/catch in generators handles basic cases, and none of the initial examples require it. Promote to a primitive if the pattern recurs.
+- **Saga/compensation pattern.** A first-class compensation primitive for registering undo actions that execute in LIFO order on failure. Deferred because try/catch in generators handles basic cases, and none of the initial examples require it. Promote to a primitive if the pattern recurs.

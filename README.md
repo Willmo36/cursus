@@ -239,7 +239,7 @@ The `examples/` directory contains runnable Vite apps:
 | `job-application` | Nested child workflows |
 | `checkout` | Cross-workflow dependencies with `all` |
 | `shop` | Multi-workflow registry with error simulation |
-| `chat-room` | Long-running `handle` loop |
+| `chat-room` | Long-running `handler` loop |
 | `cookie-banner` | Result derived from event history |
 | `env-config` | Workflow as environment provider |
 | `error-recovery` | Retry with loop/try/catch and dependency failure handling |

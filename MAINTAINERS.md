@@ -1,4 +1,4 @@
-# react-workflow Maintainer's Guide
+# cursus Maintainer's Guide
 
 A durable workflow engine for React. Workflows are generator functions that yield commands; an interpreter executes them, records every step in an append-only event log, and replays from that log on reload.
 
@@ -71,16 +71,17 @@ sequenceDiagram
 
 ### Command Types
 
-| Command | What it does | Context method |
-|---------|-------------|----------------|
-| `ActivityCommand` | Run an async function | `ctx.activity(name, fn)` |
-| `QueryCommand` | Block until a named query is resolved | `ctx.query(label)` |
-| `WaitForAllCommand` | Block until multiple signals and/or workflows resolve | `ctx.waitForAll(...)` |
-| `JoinCommand` | Block until another workflow completes | `ctx.join(id)` |
-| `PublishedCommand` | Block until another workflow publishes a value | `ctx.published(id)` |
-| `SleepCommand` | Block for a duration | `ctx.sleep(ms)` |
-| `ParallelCommand` | Run multiple activities concurrently | `ctx.parallel(activities)` |
-| `ChildCommand` | Run a child workflow with its own event log | `ctx.child(name, fn)` |
+| Command | What it does | Free function |
+|---------|-------------|---------------|
+| `ActivityCommand` | Run an async function | `activity(name, fn)` |
+| `QueryCommand` | Block until a named query is resolved (signal or workflow dep) | `query(label)` |
+| `AllCommand` | Wait for multiple branches concurrently | `all(...)` |
+| `RaceCommand` | Race branches, first to complete wins | `race(...)` |
+| `SleepCommand` | Block for a duration | `sleep(ms)` |
+| `ChildCommand` | Run a child workflow with its own event log | `child(name, wf)` |
+| `PublishCommand` | Publish a value to consumers | `publish(value)` |
+| `LoopCommand` | Repeat a body until break | `loop(body)` |
+| `LoopBreakCommand` | Exit a loop with a value | `loopBreak(value)` |
 
 ---
 
@@ -133,106 +134,62 @@ Non-determinism detected: activity at seq 2 was "fetch-user" but is now "get-pro
 | `query_resolved` | A query is resolved |
 | `timer_started` / `timer_fired` | Sleep begins / ends |
 | `child_started` / `child_completed` / `child_failed` | Child workflow lifecycle |
-| `wait_all_started` / `wait_all_completed` | Heterogeneous wait lifecycle |
-| `workflow_dependency_started` / `workflow_dependency_completed` | Cross-workflow dependency |
+| `all_started` / `all_completed` | `all()` lifecycle |
+| `race_started` / `race_completed` | `race()` lifecycle |
+| `workflow_published` | Workflow published a value |
 | `workflow_completed` / `workflow_failed` | Workflow terminal state |
 
 ---
 
 ## The Type System
 
-### Three Generics on WorkflowFunction
+### Workflow<A, R>
 
 ```mermaid
 graph LR
-    WF["WorkflowFunction&lt;T, SignalMap, WorkflowMap&gt;"]
-    T["T = return type"]
-    SM["SignalMap = signal names → payload types"]
-    WM["WorkflowMap = workflow IDs → result types"]
+    WF["Workflow&lt;A, R&gt;"]
+    A["A = return type"]
+    R["R = requirements (queries the workflow needs)"]
 
-    WF --- T
-    WF --- SM
-    WF --- WM
+    WF --- A
+    WF --- R
 
-    SM -->|constrains| receive["ctx.query(label)"]
-    SM -->|constrains| waitForAll["ctx.waitForAll(...)"]
-    SM -->|constrains| signal["hook.signal(name, payload)"]
-    WM -->|constrains| wfw["ctx.join(id) / ctx.published(id)"]
-    WM -->|constrains| wref["ctx.workflow(id)"]
+    R -->|tracks| Q["Query&lt;K, V&gt; tags"]
+    Q -->|constrains| signal["hook.signal(name, payload)"]
+    Q -->|resolved by| REG["registry (cross-workflow deps)"]
 ```
+
+`Workflow<A, R>` is a class wrapping a generator factory. `A` is the return type, `R` is a union of `Query<K, V>` requirement tags that propagate upward through composition (like Effect-TS).
 
 **Example:**
 
 ```typescript
-type CheckoutSignals = { payment: PaymentInfo };
-type CheckoutDeps = { profile: UserProfile };
-
-const checkoutWorkflow: WorkflowFunction<
-  OrderConfirmation,    // T: what the workflow returns
-  CheckoutSignals,      // SignalMap: what signals it accepts
-  CheckoutDeps          // WorkflowMap: what workflows it depends on
-> = function* (ctx) {
-  const [payment, profile] = yield* ctx.waitForAll(
-    "payment",              // TS knows this is PaymentInfo
-    ctx.workflow("profile") // TS knows this is UserProfile
+const checkoutWorkflow = workflow(function* () {
+  const [payment, profile] = yield* all(
+    query<PaymentInfo>("payment"),
+    query<UserProfile>("profile"),
   );
-  // payment: PaymentInfo, profile: UserProfile
-};
+  return yield* activity("place-order", async () => ({
+    orderId: "123",
+    user: profile.name,
+  }));
+});
+// Type: Workflow<Order, Query<"payment", PaymentInfo> | Query<"profile", UserProfile>>
 ```
 
-### WorkflowContext vs InternalWorkflowContext
+Requirements propagate through `yield*`, `child()`, `all()`, and `race()`. The registry verifies at build time that all requirements are satisfied.
+
+### Descriptors vs Commands
+
+Free functions yield **descriptors** (no `seq`). The interpreter assigns a monotonic `seq` to produce **commands**:
 
 ```mermaid
-graph TB
-    subgraph "User-facing (generic)"
-        WC["WorkflowContext&lt;SignalMap, WorkflowMap&gt;"]
-        WC1["query&lt;K&gt;(label: K) → SignalMap[K]"]
-        WC2["join&lt;K&gt;(id: K) → WorkflowMap[K]"]
-        WC2b["published&lt;K&gt;(id: K) → WorkflowMap[K]"]
-        WC3["waitForAll(...) → mapped tuple"]
-    end
-
-    subgraph "Internal (type-erased)"
-        IWC["InternalWorkflowContext"]
-        IWC1["query(label: string) → unknown"]
-        IWC2["join(id: string) → unknown"]
-        IWC2b["published(id: string) → unknown"]
-        IWC3["waitForAll(...) → unknown"]
-    end
-
-    WC -.->|"as unknown as"| IWC
-    IWC -.->|"as unknown as"| WC
-
-    style WC fill:#e8f5e9
-    style IWC fill:#fff3e0
+graph LR
+    FF["activity('fetch', fn)"] -->|yields| DESC["ActivityDescriptor"]
+    DESC -->|interpreter assigns seq| CMD["ActivityCommand { seq: 1 }"]
 ```
 
-The interpreter constructs an `InternalWorkflowContext` (unconstrained) and casts it to `WorkflowContext` when calling the workflow function. This is safe because:
-
-- The interpreter never reads from `SignalMap` or `WorkflowMap` — it only passes the context through
-- The user's `WorkflowFunction<T, SignalMap, WorkflowMap>` narrows the types at the call site
-- The cast exists because TypeScript can't unify the `waitForAll` mapped-tuple return type with `unknown`
-
-### Heterogeneous waitForAll
-
-`waitForAll` accepts a mix of signal names (strings) and workflow references (`WorkflowRef<T>`). The return type is a tuple that preserves each argument's type:
-
-```typescript
-ctx.waitForAll("email", "password", ctx.workflow("profile"))
-//          ↓ string  ↓ string   ↓ WorkflowRef<UserProfile>
-// returns: [string,   string,    UserProfile]
-```
-
-The mapped tuple type:
-```typescript
-{
-  [I in keyof K]: K[I] extends WorkflowRef<infer R>
-    ? R
-    : K[I] extends keyof SignalMap & string
-      ? SignalMap[K[I]]
-      : never
-}
-```
+This separation keeps workflow code deterministic — the generator never sees or depends on sequence numbers.
 
 ---
 
@@ -287,8 +244,8 @@ sequenceDiagram
     participant INT_P as Profile Interpreter
     participant PW as Profile Workflow
 
-    CW->>INT_C: yield join("profile")
-    INT_C->>REG: waitForCompletion("profile", { start: true })
+    CW->>INT_C: yield query("profile")
+    INT_C->>REG: waitFor("profile", { start: true })
     REG->>INT_P: start("profile")
     INT_P->>PW: run()
 
@@ -540,17 +497,23 @@ const result = await createTestRuntime(workflow, {
 
 ```
 src/
-  types.ts              Commands, events, context types, storage interface
+  types.ts              Commands, events, descriptors, storage interface
   event-log.ts          Append-only in-memory event log
   interpreter.ts        Core execution engine (run loop, replay, signals)
   registry.ts           Shared workflow management, cross-workflow deps
+  registry-builder.ts   Type-safe builder: createRegistry().add().build()
   storage.ts            MemoryStorage and LocalStorage implementations
+  bindings.ts           createBindings() — typed Provider, useWorkflow, usePublished
   registry-provider.tsx RegistryContext (shared React context)
   use-workflow.ts       useWorkflow() hook (inline + registry modes)
+  use-published.ts      usePublished() selector hook (useSyncExternalStore)
   use-workflow-events.ts useWorkflowEvents() hook (debug/inspection)
   debug-panel.tsx       WorkflowDebugPanel component
+  devtools-data.ts      Framework-agnostic timeline data layer
   test-runtime.ts       createTestRuntime() for testing workflows
-  index.ts              Public API exports
+  index.ts              Core entry point (React-free)
+  react.ts              React bindings entry point
+  devtools.ts           Devtools entry point (data layer + React panel)
 ```
 
 ---

@@ -7,35 +7,34 @@ Initial release.
 ### Core
 
 - Generator-based workflow engine with event-sourcing replay
-- `activity(name, fn)` for side effects (API calls, timers, etc.)
-- `waitFor(signal)` to pause until external input arrives
-- `waitForAny(...signals)` to pause until any of several signals arrives
-- `waitForAll(...items)` for heterogeneous parallel waits (signals + workflow refs)
+- `workflow(fn)` wraps a generator as a composable `Workflow<A, R>` class
+- `activity(name, fn)` for side effects (API calls, computations, etc.)
+- `query(label)` to pause until a named query is resolved (signal or cross-workflow dep)
 - `sleep(ms)` for durable timers that survive page reload
-- `child(name, workflowFn)` for nested sub-workflows via `yield*`
+- `child(name, wf)` for nested sub-workflows via `yield*`
+- `all(...branches)` for concurrent parallel waits
 - `race(...branches)` for concurrent branch racing with automatic cleanup
-- `on(handlers)` / `done(value)` for event-loop style signal handling
+- `handler().on(signal, fn).as<T>()` for multi-signal receive loops
+- `loop(body)` / `loopBreak(value)` for repeating patterns (e.g. retry)
 - `publish(value)` for exposing intermediate workflow state to consumers
 - `cancel()` with `AbortSignal` propagation to in-flight activities
-- `withRetry(fn, policy)` HOF for activity retry with fixed/linear/exponential backoff
-- `withCircuitBreaker(fn, policy)` HOF for fail-fast circuit breaking (closed → open → half-open)
-- `wrapActivity(...wrappers)` for composing multiple activity wrappers as an endomorphism monoid
+- `Workflow.map()` and `Workflow.provide()` combinators
 
 ### Cross-Workflow Dependencies
 
 - `WorkflowRegistry` for shared workflow instance management
-- `join(id)` to block on another workflow's completion
-- `published(id)` to block on another workflow's published value
-- `workflow(id)` refs for use in `waitForAll`
+- `query(id)` resolves against the registry (published value → completed → wait)
 - Circular dependency detection (DFS-based, throws immediately with full cycle path)
-- Fail-fast error propagation in `waitForAll` when a dependency fails
+- Fail-fast error propagation in `all` when a dependency fails
 
 ### React Integration
 
 - `useWorkflow(id, fn, options)` hook with two modes: inline (standalone) and registry (pre-registered)
 - `createRegistry(storage).add(id, wf).build()` / `createBindings(registry)` for typed workflow registries
-- `useWorkflowEvents(id)` hook for observing workflow events in real time
+- `usePublished(id, selector)` for selecting slices of published state with memoization
+- `useWorkflowEvents()` hook for observing workflow events in real time
 - `WorkflowDebugPanel` component with event log viewer and timeline
+- Registry `merge()` for composing registries across modules
 
 ### Storage
 
@@ -43,6 +42,7 @@ Initial release.
 - `MemoryStorage` for tests and ephemeral use
 - Pluggable `WorkflowStorage` interface for custom backends
 - Automatic storage compaction after workflow completion
+- Workflow versioning with automatic stale storage detection
 
 ### Testing
 
@@ -57,7 +57,12 @@ Initial release.
 - `cookie-banner` — result derived from event log history
 - `chat-room` — long-running workflow with repeated signals
 - `checkout` — cross-workflow dependency (profile + checkout)
-- `shop` — product browse/cart/checkout with real HTTP
+- `shop` — multi-workflow registry with error simulation
 - `env-config` — workflow as environment provider
 - `error-recovery` — dependency failure handling
 - `race` — fetch-with-timeout pattern
+- `ssr` — server-side execution with snapshot hydration
+- `opentelemetry` — event observer integration
+- `publish` — intermediate state via `publish`
+- `merge` — type-safe registry merging
+- `user-list` — multi-signal handler loop with `handler()`

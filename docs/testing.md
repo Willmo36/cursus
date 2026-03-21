@@ -64,7 +64,7 @@ const result = await createTestRuntime(myWorkflow, {
 });
 ```
 
-Signals also work with `all`, `race`, and `handle` loops:
+Signals also work with `all`, `race`, and `handler` loops:
 
 ```ts
 // all — waits for all signals
