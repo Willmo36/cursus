@@ -734,9 +734,9 @@ describe("WorkflowRegistry", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ greet: wf }, storage, [
-				observer,
-			]);
+			const registry = new WorkflowRegistry({ greet: wf }, storage, {
+				observers: [observer],
+			});
 			await registry.start("greet");
 
 			const types = observed
@@ -759,8 +759,7 @@ describe("WorkflowRegistry", () => {
 			const registry = new WorkflowRegistry(
 				{ greet: wf },
 				storage,
-				undefined,
-				{ greet: 1 },
+				{ versions: { greet: 1 } },
 			);
 			await registry.start("greet");
 
@@ -780,8 +779,7 @@ describe("WorkflowRegistry", () => {
 			const registry1 = new WorkflowRegistry(
 				{ greet: wf },
 				storage,
-				undefined,
-				{ greet: 1 },
+				{ versions: { greet: 1 } },
 			);
 			await registry1.start("greet");
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -790,8 +788,7 @@ describe("WorkflowRegistry", () => {
 			const registry2 = new WorkflowRegistry(
 				{ greet: wf },
 				storage,
-				undefined,
-				{ greet: 1 },
+				{ versions: { greet: 1 } },
 			);
 			await registry2.start("greet");
 			expect(activityFn).toHaveBeenCalledTimes(1);
@@ -811,8 +808,7 @@ describe("WorkflowRegistry", () => {
 			const registry1 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
-				undefined,
-				{ counter: 1 },
+				{ versions: { counter: 1 } },
 			);
 			await registry1.start("counter");
 			expect(await registry1.waitFor("counter")).toBe(1);
@@ -821,8 +817,7 @@ describe("WorkflowRegistry", () => {
 			const registry2 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
-				undefined,
-				{ counter: 2 },
+				{ versions: { counter: 2 } },
 			);
 			await registry2.start("counter");
 			expect(await registry2.waitFor("counter")).toBe(2);
@@ -841,8 +836,7 @@ describe("WorkflowRegistry", () => {
 			const registry1 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
-				undefined,
-				{ counter: 1 },
+				{ versions: { counter: 1 } },
 			);
 			await registry1.start("counter");
 
@@ -855,8 +849,7 @@ describe("WorkflowRegistry", () => {
 			const registry2 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
-				undefined,
-				{ counter: 2 },
+				{ versions: { counter: 2 } },
 			);
 			await registry2.start("counter");
 			expect(await registry2.waitFor("counter")).toBe(2);

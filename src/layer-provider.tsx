@@ -26,8 +26,7 @@ export function WorkflowLayerProvider({
 			new WorkflowRegistry(
 				layer.workflows,
 				layer.storage,
-				layer.onEvent,
-				layer.versions,
+				{ observers: layer.onEvent, versions: layer.versions },
 			),
 		[layer],
 	);

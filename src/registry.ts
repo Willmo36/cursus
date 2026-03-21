@@ -51,13 +51,15 @@ export class WorkflowRegistry<K extends string = string>
 	constructor(
 		workflows: Record<K, AnyWorkflow>,
 		storage: WorkflowStorage,
-		observers?: WorkflowEventObserver[],
-		versions?: Partial<Record<K, number>>,
-		storageMap?: Record<string, WorkflowStorage>,
+		options?: {
+			observers?: WorkflowEventObserver[];
+			versions?: Partial<Record<K, number>>;
+			storageMap?: Record<string, WorkflowStorage>;
+		},
 	) {
 		this._defaultStorage = storage;
-		this.observers = observers ?? [];
-		this.versions = versions;
+		this.observers = options?.observers ?? [];
+		this.versions = options?.versions;
 		this.entries = new Map();
 		for (const [id, wf] of Object.entries(workflows) as [
 			string,
@@ -65,7 +67,7 @@ export class WorkflowRegistry<K extends string = string>
 		][]) {
 			this.entries.set(id, {
 				workflow: wf,
-				storage: storageMap?.[id] ?? storage,
+				storage: options?.storageMap?.[id] ?? storage,
 				completed: false,
 				failed: false,
 				published: false,

@@ -117,7 +117,7 @@ function makeBuilder(
 					? options.onEvent
 					: [options.onEvent]
 				: undefined;
-			const inner = new WorkflowRegistry(workflows, defaultStorage, observers, undefined, storageMap);
+			const inner = new WorkflowRegistry(workflows, defaultStorage, { observers, storageMap });
 			const registry = Object.create(inner);
 			registry._registry = inner;
 			return registry as unknown as Registry;
