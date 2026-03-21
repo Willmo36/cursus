@@ -1,5 +1,5 @@
 // ABOUTME: React hook that runs a durable workflow and provides reactive state.
-// ABOUTME: Supports both inline workflows and layer-provided workflows.
+// ABOUTME: Supports both inline workflows and registry-provided workflows.
 
 import {
 	useCallback,
@@ -46,7 +46,7 @@ type UseWorkflowResult<
 	reset: () => void;
 };
 
-// Overload 1: consume a workflow from the layer by ID (untyped, legacy)
+// Overload 1: consume a workflow from the registry by ID
 export function useWorkflow<T = unknown>(
 	workflowId: string,
 ): UseWorkflowResult<T, Record<string, unknown>>;
@@ -60,7 +60,7 @@ export function useWorkflow<
 	registry: Registry<P>,
 ): UseWorkflowResult<P[K]["result"], P[K]["signals"]>;
 
-// Overload 3: run an inline workflow with optional layer deps
+// Overload 3: run an inline workflow
 // biome-ignore lint/suspicious/noExplicitAny: type-erased to infer T and signal map from the Workflow instance
 export function useWorkflow<W extends AnyWorkflow>(
 	workflowId: string,
@@ -82,7 +82,7 @@ export function useWorkflow(
 		? (workflowFnOrRegistry as Registry<any>)._registry
 		: contextRegistry;
 	const workflowFn = isRegistryMode ? undefined : workflowFnOrRegistry as AnyWorkflow | undefined;
-	const isLayerMode = workflowFn === undefined;
+	const isRegistered = workflowFn === undefined;
 
 	// For inline workflows: explicit storage > registry storage > ephemeral fallback
 	const storage = options?.storage ?? registry?.storage ?? new MemoryStorage();
@@ -97,11 +97,11 @@ export function useWorkflow(
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runId triggers re-run on reset
 	useEffect(() => {
-		if (isLayerMode) {
-			// Layer mode: delegate to registry
+		if (isRegistered) {
+			// Registry mode: delegate to registry
 			if (!registry) {
 				throw new Error(
-					"useWorkflow without a workflow function requires a WorkflowLayerProvider",
+					"useWorkflow without a workflow function requires a registry Provider",
 				);
 			}
 
@@ -233,13 +233,13 @@ export function useWorkflow(
 
 	const signal = useCallback(
 		(name: string, payload?: unknown) => {
-			if (isLayerMode && registry) {
+			if (isRegistered && registry) {
 				registry.signal(workflowId, name, payload);
 			} else {
 				interpreterRef.current?.signal(name, payload);
 			}
 		},
-		[isLayerMode, registry, workflowId],
+		[isRegistered, registry, workflowId],
 	);
 
 	const cancel = useCallback(() => {
@@ -247,7 +247,7 @@ export function useWorkflow(
 	}, []);
 
 	const reset = useCallback(async () => {
-		if (isLayerMode && registry) {
+		if (isRegistered && registry) {
 			await registry.reset(workflowId);
 			setState({ status: "running" });
 			setPublished(undefined);
@@ -260,7 +260,7 @@ export function useWorkflow(
 		setState({ status: "running" });
 		setPublished(undefined);
 		restart();
-	}, [isLayerMode, registry, workflowId]);
+	}, [isRegistered, registry, workflowId]);
 
 	return {
 		state,

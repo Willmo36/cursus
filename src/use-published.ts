@@ -11,7 +11,7 @@ export function usePublished<T>(
 	const registry = useContext(RegistryContext);
 	if (!registry) {
 		throw new Error(
-			"usePublished requires a WorkflowLayerProvider or registry context",
+			"usePublished requires a registry Provider",
 		);
 	}
 

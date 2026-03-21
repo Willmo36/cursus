@@ -6,21 +6,25 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { createBindings } from "./bindings";
 import { WorkflowDebugPanel } from "./debug-panel";
-import { createLayer } from "./layer";
-import { WorkflowLayerProvider } from "./layer-provider";
+import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
 import { activity, workflow } from "./types";
 import type { AnyWorkflow } from "./types";
-import { useWorkflow } from "./use-workflow";
 
 function createWrapper(
 	workflows: Record<string, AnyWorkflow>,
 	storage: MemoryStorage,
 ) {
-	const layer = createLayer(workflows, storage);
-	return ({ children }: { children: ReactNode }) =>
-		createElement(WorkflowLayerProvider, { layer }, children);
+	let builder: any = createRegistry(storage);
+	for (const [id, wf] of Object.entries(workflows)) {
+		builder = builder.add(id, wf);
+	}
+	const registry = builder.build();
+	const { useWorkflow, Provider } = createBindings(registry);
+	return { useWorkflow, wrapper: ({ children }: { children: ReactNode }) =>
+		createElement(Provider, null, children) };
 }
 
 describe("WorkflowDebugPanel", () => {
@@ -30,7 +34,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { wrapper: Wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		render(createElement(Wrapper, null, createElement(WorkflowDebugPanel)));
 
@@ -43,7 +47,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -73,7 +77,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 		const onClear = vi.fn();
 
 		function TestApp() {
@@ -105,7 +109,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -135,7 +139,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("greet");
@@ -183,7 +187,7 @@ describe("WorkflowDebugPanel", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper(
+		const { useWorkflow, wrapper: Wrapper } = createWrapper(
 			{ alpha: workflowA, beta: workflowB },
 			storage,
 		);
@@ -218,7 +222,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -264,7 +268,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper(
+		const { useWorkflow, wrapper: Wrapper } = createWrapper(
 			{ alpha: workflowA, beta: workflowB },
 			storage,
 		);
@@ -297,7 +301,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -329,7 +333,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -359,7 +363,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");
@@ -392,7 +396,7 @@ describe("TimelineView rendering", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const Wrapper = createWrapper({ myflow: fetchWorkflow }, storage);
+		const { useWorkflow, wrapper: Wrapper } = createWrapper({ myflow: fetchWorkflow }, storage);
 
 		function TestApp() {
 			useWorkflow("myflow");

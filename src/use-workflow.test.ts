@@ -1,20 +1,33 @@
 // ABOUTME: Tests for the useWorkflow React hook.
-// ABOUTME: Covers inline workflows, layer workflows, signals, reset, replay, and waiting state.
+// ABOUTME: Covers inline workflows, registry workflows, signals, reset, replay, and waiting state.
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createElement, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { createLayer } from "./layer";
-import { WorkflowLayerProvider } from "./layer-provider";
 import { createBindings } from "./bindings";
 import { createRegistry } from "./registry-builder";
 import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
+import type { AnyWorkflow } from "./types";
 import { activity, all, publish, query, race, workflow } from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
+
+function createWrapper(
+	workflows: Record<string, AnyWorkflow>,
+	storage: MemoryStorage,
+) {
+	let builder: any = createRegistry(storage);
+	for (const [id, wf] of Object.entries(workflows)) {
+		builder = builder.add(id, wf);
+	}
+	const registry = builder.build();
+	const { useWorkflow: useWf, Provider } = createBindings(registry);
+	return { useWorkflow: useWf, wrapper: ({ children }: { children: ReactNode }) =>
+		createElement(Provider, null, children) };
+}
 
 describe("useWorkflow", () => {
 	describe("inline mode (with workflowFn)", () => {
@@ -203,23 +216,19 @@ describe("useWorkflow", () => {
 		});
 
 		it("uses storage from registry context when no explicit storage provided", async () => {
-			const activityFn = vi.fn().mockResolvedValue("hello");
-			const w = workflow(function* () {
-				return yield* activity("greet", activityFn);
+			const providerStorage = new MemoryStorage();
+			const bgWorkflow = workflow(function* () {
+				return yield* activity("greet", async () => "hello");
 			});
 
-			const providerStorage = new MemoryStorage();
-			const layer = createLayer({ bg: w }, providerStorage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ bg: bgWorkflow }, providerStorage);
 
 			const inlineWorkflow = workflow(function* () {
 				return yield* activity("compute", async () => "inline-result");
 			});
 
 			const { result } = renderHook(
-				() => useWorkflow("inline-ctx", inlineWorkflow),
+				() => useWf("inline-ctx" as any, inlineWorkflow),
 				{ wrapper },
 			);
 
@@ -233,16 +242,13 @@ describe("useWorkflow", () => {
 		});
 
 		it("explicit options.storage overrides registry storage", async () => {
-			const w = workflow(function* () {
+			const providerStorage = new MemoryStorage();
+			const explicitStorage = new MemoryStorage();
+			const bgWorkflow = workflow(function* () {
 				return yield* activity("greet", async () => "hello");
 			});
 
-			const providerStorage = new MemoryStorage();
-			const explicitStorage = new MemoryStorage();
-			const layer = createLayer({ bg: w }, providerStorage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
+			const { wrapper } = createWrapper({ bg: bgWorkflow }, providerStorage);
 
 			const inlineWorkflow = workflow(function* () {
 				return yield* activity("compute", async () => "result");
@@ -376,8 +382,8 @@ describe("useWorkflow", () => {
 		});
 	});
 
-	describe("layer mode (without workflowFn)", () => {
-		it("auto-starts the layer workflow on mount", async () => {
+	describe("registry mode (without workflowFn)", () => {
+		it("auto-starts the registry workflow on mount", async () => {
 			let started = false;
 			const w = workflow(function* () {
 				started = true;
@@ -385,12 +391,9 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ greet: w }, storage);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ greet: w }, storage);
 
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			renderHook(() => useWorkflow("greet"), { wrapper });
+			renderHook(() => useWf("greet"), { wrapper });
 
 			await waitFor(() => {
 				expect(started).toBe(true);
@@ -403,12 +406,9 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ greet: w }, storage);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ greet: w }, storage);
 
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			const { result } = renderHook(() => useWorkflow<string>("greet"), {
+			const { result } = renderHook(() => useWf("greet"), {
 				wrapper,
 			});
 
@@ -417,19 +417,16 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("sends signals to the layer workflow", async () => {
+		it("sends signals to the registry workflow", async () => {
 			const w = workflow(function* () {
 				const data = yield* query<string>("submit");
 				return `got: ${data}`;
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ form: w }, storage);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ form: w }, storage);
 
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			const { result } = renderHook(() => useWorkflow("form"), {
+			const { result } = renderHook(() => useWf("form"), {
 				wrapper,
 			});
 
@@ -446,7 +443,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("state reactively updates as layer workflow progresses", async () => {
+		it("state reactively updates as registry workflow progresses", async () => {
 			const w = workflow(function* () {
 				const a = yield* query<string>("step1");
 				const b = yield* query<string>("step2");
@@ -454,12 +451,9 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ multi: w }, storage);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ multi: w }, storage);
 
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			const { result } = renderHook(() => useWorkflow("multi"), {
+			const { result } = renderHook(() => useWf("multi"), {
 				wrapper,
 			});
 
@@ -484,7 +478,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("reset() restarts a layer workflow", async () => {
+		it("reset() restarts a registry workflow", async () => {
 			let runCount = 0;
 			const w = workflow(function* () {
 				runCount++;
@@ -492,12 +486,9 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ counter: w }, storage);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ counter: w }, storage);
 
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
-
-			const { result } = renderHook(() => useWorkflow<number>("counter"), {
+			const { result } = renderHook(() => useWf("counter"), {
 				wrapper,
 			});
 
@@ -517,7 +508,7 @@ describe("useWorkflow", () => {
 		it("throws when used outside a provider", () => {
 			expect(() => {
 				renderHook(() => useWorkflow("anything"));
-			}).toThrow(/WorkflowLayerProvider/);
+			}).toThrow(/registry Provider/);
 		});
 	});
 
@@ -639,7 +630,7 @@ describe("useWorkflow", () => {
 	});
 
 	describe("cross-workflow dependencies", () => {
-		it("inline workflow can use query with layer workflows", async () => {
+		it("inline workflow can use query with registry workflows", async () => {
 			const loginWorkflow = workflow(function* () {
 				return yield* activity("login", async () => "user-123");
 			});
@@ -650,13 +641,10 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ login: loginWorkflow }, storage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ login: loginWorkflow }, storage);
 
 			const { result } = renderHook(
-				() => useWorkflow("local", localWorkflow, { storage }),
+				() => useWf("local" as any, localWorkflow),
 				{ wrapper },
 			);
 
@@ -681,15 +669,12 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ profile: profileWorkflow }, storage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ profile: profileWorkflow }, storage);
 
 			const { result } = renderHook(
 				() => ({
-					checkout: useWorkflow("checkout", checkoutWorkflow, { storage }),
-					profile: useWorkflow("profile"),
+					checkout: useWf("checkout" as any, checkoutWorkflow),
+					profile: useWf("profile"),
 				}),
 				{ wrapper },
 			);
@@ -737,19 +722,19 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ profile: profileWorkflow }, storage);
+			const { useWorkflow: useWf, wrapper: innerWrapper } = createWrapper({ profile: profileWorkflow }, storage);
 
 			const wrapper = ({ children }: { children: ReactNode }) =>
 				createElement(
 					StrictMode,
 					null,
-					createElement(WorkflowLayerProvider, { layer }, children),
+					innerWrapper({ children }),
 				);
 
 			const { result } = renderHook(
 				() => ({
-					checkout: useWorkflow("checkout", checkoutWf, { storage }),
-					profile: useWorkflow("profile"),
+					checkout: useWf("checkout" as any, checkoutWf),
+					profile: useWf("profile"),
 					events: useWorkflowEvents(),
 				}),
 				{ wrapper },
@@ -809,15 +794,12 @@ describe("useWorkflow", () => {
 			});
 
 			const storage = new MemoryStorage();
-			const layer = createLayer({ global: globalWorkflow }, storage);
-
-			const wrapper = ({ children }: { children: ReactNode }) =>
-				createElement(WorkflowLayerProvider, { layer }, children);
+			const { useWorkflow: useWf, wrapper } = createWrapper({ global: globalWorkflow }, storage);
 
 			const { result } = renderHook(
 				() => ({
-					local: useWorkflow("local", localWorkflow, { storage }),
-					global: useWorkflow("global"),
+					local: useWf("local" as any, localWorkflow),
+					global: useWf("global"),
 					events: useWorkflowEvents(),
 				}),
 				{ wrapper },

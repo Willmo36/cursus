@@ -6,13 +6,25 @@ import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { createBindings } from "./bindings";
-import { createLayer } from "./layer";
-import { WorkflowLayerProvider } from "./layer-provider";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
+import type { AnyWorkflow } from "./types";
 import { activity, publish, query, workflow } from "./types";
 import { usePublished } from "./use-published";
-import { useWorkflow } from "./use-workflow";
+
+function createWrapper(
+	workflows: Record<string, AnyWorkflow>,
+	storage: MemoryStorage,
+) {
+	let builder: any = createRegistry(storage);
+	for (const [id, wf] of Object.entries(workflows)) {
+		builder = builder.add(id, wf);
+	}
+	const registry = builder.build();
+	const { useWorkflow, Provider } = createBindings(registry);
+	return { useWorkflow, wrapper: ({ children }: { children: ReactNode }) =>
+		createElement(Provider, null, children) };
+}
 
 describe("usePublished", () => {
 	it("returns undefined before publish", async () => {
@@ -23,10 +35,7 @@ describe("usePublished", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const layer = createLayer({ test: w }, storage);
-
-		const wrapper = ({ children }: { children: ReactNode }) =>
-			createElement(WorkflowLayerProvider, { layer }, children);
+		const { useWorkflow, wrapper } = createWrapper({ test: w }, storage);
 
 		const { result } = renderHook(
 			() => ({
@@ -51,10 +60,7 @@ describe("usePublished", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const layer = createLayer({ test: w }, storage);
-
-		const wrapper = ({ children }: { children: ReactNode }) =>
-			createElement(WorkflowLayerProvider, { layer }, children);
+		const { useWorkflow, wrapper } = createWrapper({ test: w }, storage);
 
 		const { result } = renderHook(
 			() => ({
@@ -79,10 +85,7 @@ describe("usePublished", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const layer = createLayer({ test: w }, storage);
-
-		const wrapper = ({ children }: { children: ReactNode }) =>
-			createElement(WorkflowLayerProvider, { layer }, children);
+		const { useWorkflow, wrapper } = createWrapper({ test: w }, storage);
 
 		// Use a stable selector that returns a primitive — useSyncExternalStore
 		// will skip re-renders when getSnapshot returns the same value
@@ -123,7 +126,7 @@ describe("usePublished", () => {
 	it("throws without registry context", () => {
 		expect(() => {
 			renderHook(() => usePublished("test", (v) => v));
-		}).toThrow(/WorkflowLayerProvider/);
+		}).toThrow(/registry Provider/);
 	});
 
 	describe("createBindings", () => {

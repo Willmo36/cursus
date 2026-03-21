@@ -5,21 +5,25 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
-import { createLayer } from "./layer";
-import { WorkflowLayerProvider } from "./layer-provider";
+import { createBindings } from "./bindings";
+import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
 import { activity, query, workflow } from "./types";
 import type { AnyWorkflow } from "./types";
-import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
 function createWrapper(
 	workflows: Record<string, AnyWorkflow>,
 	storage: MemoryStorage,
 ) {
-	const layer = createLayer(workflows, storage);
-	return ({ children }: { children: ReactNode }) =>
-		createElement(WorkflowLayerProvider, { layer }, children);
+	let builder: any = createRegistry(storage);
+	for (const [id, wf] of Object.entries(workflows)) {
+		builder = builder.add(id, wf);
+	}
+	const registry = builder.build();
+	const { useWorkflow, Provider } = createBindings(registry);
+	return { useWorkflow, wrapper: ({ children }: { children: ReactNode }) =>
+		createElement(Provider, null, children) };
 }
 
 describe("useWorkflowEvents", () => {
@@ -29,7 +33,7 @@ describe("useWorkflowEvents", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		const { result } = renderHook(() => useWorkflowEvents(), { wrapper });
 
@@ -44,7 +48,7 @@ describe("useWorkflowEvents", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const wrapper = createWrapper({ greet: greetWorkflow }, storage);
+		const { useWorkflow, wrapper } = createWrapper({ greet: greetWorkflow }, storage);
 
 		const { result } = renderHook(
 			() => ({
@@ -75,7 +79,7 @@ describe("useWorkflowEvents", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const wrapper = createWrapper({ form: formWorkflow }, storage);
+		const { useWorkflow, wrapper } = createWrapper({ form: formWorkflow }, storage);
 
 		const { result } = renderHook(
 			() => ({
@@ -120,12 +124,12 @@ describe("useWorkflowEvents", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const wrapper = createWrapper({}, storage);
+		const { useWorkflow, wrapper } = createWrapper({}, storage);
 
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				local: useWorkflow("local", localWorkflow, { storage }),
+				local: useWorkflow("local", localWorkflow),
 			}),
 			{ wrapper },
 		);
@@ -157,12 +161,12 @@ describe("useWorkflowEvents", () => {
 		});
 
 		const storage = new MemoryStorage();
-		const wrapper = createWrapper({}, storage);
+		const { useWorkflow, wrapper } = createWrapper({}, storage);
 
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				local: useWorkflow("local", localWorkflow, { storage }),
+				local: useWorkflow("local", localWorkflow),
 			}),
 			{ wrapper },
 		);
@@ -197,6 +201,6 @@ describe("useWorkflowEvents", () => {
 	it("throws when used outside a provider", () => {
 		expect(() => {
 			renderHook(() => useWorkflowEvents());
-		}).toThrow(/WorkflowLayerProvider/);
+		}).toThrow(/registry Provider/);
 	});
 });

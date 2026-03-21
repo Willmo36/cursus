@@ -20,7 +20,7 @@ export function useWorkflowEvents(): WorkflowEventLog[] {
 	const maybeRegistry = useContext(RegistryContext);
 	if (!maybeRegistry) {
 		throw new Error(
-			"useWorkflowEvents must be used within a WorkflowLayerProvider",
+			"useWorkflowEvents requires a registry Provider",
 		);
 	}
 	const registry = maybeRegistry;
