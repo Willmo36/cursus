@@ -1,8 +1,6 @@
-// ABOUTME: Payment and order workflows demonstrating dependency error recovery.
-// ABOUTME: The payment workflow always fails; the order workflow catches the failure gracefully.
-import { activity, query, withRetry, workflow } from "cursus";
-
-// --- Payment workflow (registered in layer, always fails) ---
+// ABOUTME: Payment and order workflows demonstrating error recovery with try/catch.
+// ABOUTME: The payment activity fails intermittently; the workflow retries within a loop.
+import { activity, loop, loopBreak, query, sleep, workflow } from "cursus";
 
 type CardInfo = {
 	number: string;
@@ -13,21 +11,30 @@ type Receipt = {
 	amount: string;
 };
 
-const charge = withRetry<Receipt>(
-	async () => {
-		await new Promise((r) => setTimeout(r, 800));
-		throw new Error("Card declined");
-	},
-	{ maxAttempts: 3, initialDelayMs: 500 },
-);
-
 export const paymentWorkflow = workflow(function* () {
 	const card = yield* query("card").as<CardInfo>();
-	const receipt = yield* activity("charge", charge);
+
+	const receipt = yield* loop(function* () {
+		try {
+			const result = yield* activity("charge", async () => {
+				await new Promise((r) => setTimeout(r, 800));
+				if (Math.random() < 0.7) throw new Error("Card declined");
+				return {
+					last4: card.number.slice(-4),
+					amount: "$49.99",
+				} satisfies Receipt;
+			});
+			yield* loopBreak(result);
+		} catch {
+			// Wait before retrying
+			yield* sleep(1000);
+		}
+	});
+
 	return receipt;
 });
 
-// --- Order workflow (inline, catches payment failure) ---
+// --- Order workflow (catches payment failure) ---
 
 type ShippingInfo = {
 	name: string;

@@ -7,17 +7,6 @@ export { createLayer } from "./layer";
 export { WorkflowRegistry } from "./registry";
 export type { MergeResolver, Registry } from "./registry-builder";
 export { createRegistry } from "./registry-builder";
-export type {
-	ActivityWrapper,
-	CircuitBreakerPolicy,
-	RetryPolicy,
-} from "./retry";
-export {
-	CircuitOpenError,
-	withCircuitBreaker,
-	withRetry,
-	wrapActivity,
-} from "./retry";
 export type { WorkflowSnapshot } from "./run-workflow";
 export { runWorkflow } from "./run-workflow";
 export { checkVersion, LocalStorage, MemoryStorage } from "./storage";

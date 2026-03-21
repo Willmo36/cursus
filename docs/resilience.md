@@ -4,132 +4,72 @@ sidebar_position: 6
 
 # Resilience
 
-cursus provides higher-order functions that wrap activity functions with retry and circuit breaker logic. These wrappers are transparent to the event log — they compose around the `(AbortSignal) => Promise<T>` signature that activities already use.
+cursus workflows are generators, so standard try/catch works naturally. Combined with `loop`, `loopBreak`, and `sleep`, you can build retry and error recovery patterns directly in workflow code.
 
-## withRetry
-
-Retries a failed activity with configurable backoff:
+## Retry with try/catch in a loop
 
 ```ts
-import { withRetry, activity } from "cursus";
+import { activity, loop, loopBreak, sleep, workflow } from "cursus";
 
-const result = yield* activity(
-  "fetch-data",
-  withRetry(
-    async (signal) => {
-      const res = await fetch("/api/data", { signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    },
-    { maxAttempts: 3, backoff: "exponential", initialDelayMs: 1000 },
-  ),
-);
+const fetchWorkflow = workflow(function* () {
+  const data = yield* loop(function* () {
+    try {
+      const result = yield* activity("fetch-data", async (signal) => {
+        const res = await fetch("/api/data", { signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      });
+      yield* loopBreak(result);
+    } catch {
+      yield* sleep(1000);
+    }
+  });
+
+  return data;
+});
 ```
 
-### RetryPolicy
+Each iteration of the loop attempts the activity. On failure, the workflow sleeps before retrying. On success, `loopBreak` exits the loop with the result.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `maxAttempts` | `number` | `3` | Total attempts (including the first) |
-| `backoff` | `"fixed" \| "linear" \| "exponential"` | `"exponential"` | Delay strategy between retries |
-| `initialDelayMs` | `number` | `1000` | Base delay in milliseconds |
-| `maxDelayMs` | `number` | `30000` | Maximum delay cap |
+## Bounded retries
 
-**Backoff strategies:**
-
-- `"fixed"` — always `initialDelayMs`
-- `"linear"` — `initialDelayMs * (attempt + 1)`
-- `"exponential"` — `initialDelayMs * 2^attempt`
-
-All strategies are capped at `maxDelayMs`.
-
-Retries respect the `AbortSignal` — if the workflow is cancelled during a retry delay, the delay aborts immediately.
-
-## withCircuitBreaker
-
-Prevents repeated calls to a failing service. After enough failures, the circuit opens and calls fail immediately with `CircuitOpenError`:
+To limit attempts, track a counter in the loop body:
 
 ```ts
-import { withCircuitBreaker, CircuitOpenError, activity } from "cursus";
-
-const fetchWithBreaker = withCircuitBreaker(
-  async (signal) => {
-    const res = await fetch("/api/flaky", { signal });
-    return res.json();
-  },
-  { failureThreshold: 5, resetTimeoutMs: 30000 },
-);
-
-try {
-  const result = yield* activity("fetch", fetchWithBreaker);
-} catch (err) {
-  if (err instanceof CircuitOpenError) {
-    // Circuit is open — service is down, don't retry
+const data = yield* loop(function* () {
+  attempt++;
+  try {
+    const result = yield* activity("fetch-data", fetchFn);
+    yield* loopBreak(result);
+  } catch (e) {
+    if (attempt >= 3) throw e; // Give up after 3 attempts
+    yield* sleep(1000 * attempt); // Linear backoff
   }
-}
+});
 ```
 
-### CircuitBreakerPolicy
+## Error recovery across workflows
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `failureThreshold` | `number` | `5` | Consecutive failures before opening |
-| `resetTimeoutMs` | `number` | `30000` | Time before trying again (half-open) |
-
-**Circuit states:**
-
-1. **Closed** — calls pass through normally. Failures increment a counter.
-2. **Open** — all calls throw `CircuitOpenError` immediately. After `resetTimeoutMs`, transitions to half-open.
-3. **Half-open** — one call is allowed through. Success closes the circuit; failure re-opens it.
-
-## Composing Wrappers
-
-`wrapActivity` composes multiple wrappers into one. Wrappers apply right-to-left (innermost first):
+When one workflow depends on another via `query`, failures propagate as exceptions. The consuming workflow can catch and handle them:
 
 ```ts
-import { wrapActivity, withRetry, withCircuitBreaker, activity } from "cursus";
-
-const resilient = wrapActivity(
-  withCircuitBreaker,  // outer: stops calling if service is down
-  withRetry,           // inner: retries transient failures
-);
-
-const result = yield* activity(
-  "fetch",
-  resilient(async (signal) => {
-    const res = await fetch("/api/data", { signal });
-    return res.json();
-  }),
-);
+const orderWorkflow = workflow(function* () {
+  const shipping = yield* query("shipping").as<ShippingInfo>();
+  try {
+    const receipt = yield* query("payment").as<Receipt>();
+    return { status: "confirmed", ...shipping, ...receipt };
+  } catch (e) {
+    return {
+      status: "payment-failed",
+      ...shipping,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+});
 ```
 
-In this example, each call is retried up to 3 times. If enough retried calls still fail, the circuit opens.
+## Interaction with replay
 
-### ActivityWrapper Type
+Activities are replayed by returning the stored result, not by re-running the function. If an activity succeeded on the original execution, it won't be retried on replay — the stored result is returned immediately.
 
-The `ActivityWrapper` type is the common signature for all wrappers:
-
-```ts
-type ActivityWrapper = <T>(
-  fn: (signal: AbortSignal) => Promise<T>,
-) => (signal: AbortSignal) => Promise<T>;
-```
-
-You can write your own wrappers that conform to this type:
-
-```ts
-const withLogging: ActivityWrapper = (fn) => async (signal) => {
-  console.log("starting activity");
-  const result = await fn(signal);
-  console.log("activity completed");
-  return result;
-};
-
-const wrapped = wrapActivity(withLogging, withRetry);
-```
-
-## Interaction with Replay
-
-Retry and circuit breaker logic runs inside the activity function. Since activities are replayed by returning the stored result (not by re-running the function), retries only happen on the original execution — not on replay.
-
-This means the event log records a single `activity_scheduled` / `activity_completed` pair regardless of how many retries occurred internally.
+If an activity *failed* and the workflow caught the error and retried via the loop, the retry attempts are each recorded as separate activity events. On replay, each attempt replays in order.
