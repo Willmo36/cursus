@@ -4,5 +4,6 @@
 export { createBindings } from "./bindings";
 export { useLayerRegistry, WorkflowLayerProvider } from "./layer-provider";
 export { RegistryContext } from "./registry-provider";
+export { usePublished } from "./use-published";
 export { useWorkflow } from "./use-workflow";
 export { useWorkflowEvents } from "./use-workflow-events";

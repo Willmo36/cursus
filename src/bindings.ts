@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
+import { usePublished as usePublishedBase } from "./use-published";
 import { useWorkflow as useWorkflowBase } from "./use-workflow";
 import type {
 	AnyWorkflow,
@@ -61,5 +62,12 @@ export function createBindings<Provides extends Record<string, RegistryEntry>>(
 		return useWorkflowBase(workflowId, registry as any);
 	}) as any;
 
-	return { useWorkflow, Provider };
+	function usePublished<K extends keyof Provides & string, T>(
+		workflowId: K,
+		selector: (published: Provides[K]["published"]) => T,
+	): T | undefined {
+		return usePublishedBase(workflowId, selector as (published: unknown) => T);
+	}
+
+	return { useWorkflow, usePublished, Provider };
 }

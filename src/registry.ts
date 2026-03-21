@@ -349,6 +349,10 @@ export class WorkflowRegistry<K extends string = string>
 		return this.entries.get(id)?.interpreter;
 	}
 
+	getPublished(id: string): unknown {
+		return this.getEntry(id).publishedValue;
+	}
+
 	getState(id: string): WorkflowState | undefined {
 		return this.entries.get(id)?.interpreter?.state;
 	}
