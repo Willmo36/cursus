@@ -209,6 +209,11 @@ expect(result).toEqual({ displayName: "Alice" });
 | `MemoryStorage` | Tests, ephemeral workflows |
 | Custom `WorkflowStorage` | Implement `load`, `append`, `compact`, `clear` for any backend |
 
+## Tutorials
+
+- [Todo App](./docs/tutorials/todo-app.md) — build a durable todo app with `handler`, `publish`, and `useWorkflow`
+- [E-Commerce Multi-Workflow](./docs/tutorials/multi-workflow.md) — registries, cross-workflow dependencies, `merge`, and `usePublished`
+
 ## Documentation
 
 - [Getting Started](./docs/getting-started.md)
