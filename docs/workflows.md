@@ -49,7 +49,7 @@ Wait for multiple queries, workflow results, or activities to all complete. Retu
 const [email, password] = yield* all(query("email"), query("password"));
 ```
 
-You can mix queries with workflow dependencies (see [Layers](./layers.md)):
+You can mix queries with workflow dependencies (see [Registries](./registries.md)):
 
 ```ts
 const [payment, profile] = yield* all(query("payment"), query("profile"));

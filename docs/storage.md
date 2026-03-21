@@ -82,19 +82,21 @@ When a workflow's code structure changes (adding/removing/reordering `yield*` st
 
 No migration logic — just wipe and restart.
 
-### Layer Mode
+### Registry Mode
+
+Versioning in registries is configured per-workflow via `checkVersion` before building:
 
 ```ts
-const layer = createLayer<{ checkout: string; profile: Profile }>(
-  { checkout: checkoutWorkflow, profile: profileWorkflow },
-  storage,
-  { versions: { checkout: 2 } },
-);
+const registry = createRegistry(storage)
+  .add("checkout", checkoutWorkflow)
+  .add("profile", profileWorkflow)
+  .build();
+
+// Check version before starting
+await checkVersion(storage, "checkout", 2);
 ```
 
 Only versioned workflows get the check. In this example, `profile` has no version and skips the check entirely.
-
-The `versions` keys are type-checked against the workflow IDs — TypeScript rejects keys that don't exist in the layer.
 
 ### Inline Mode
 

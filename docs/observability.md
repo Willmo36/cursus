@@ -18,19 +18,19 @@ const logger: WorkflowEventObserver = (workflowId, event) => {
 };
 ```
 
-### In Layers
+### In Registries
 
-Pass observers via `onEvent` in `createLayer`:
+Pass observers via `onEvent` when building a registry:
 
 ```ts
-const layer = createLayer(workflows, storage, {
-  onEvent: logger,
-});
+const registry = createRegistry(storage)
+  .add("checkout", checkoutWorkflow)
+  .build({ onEvent: logger });
 
 // Or multiple observers:
-const layer = createLayer(workflows, storage, {
-  onEvent: [logger, analyticsObserver],
-});
+const registry = createRegistry(storage)
+  .add("checkout", checkoutWorkflow)
+  .build({ onEvent: [logger, analyticsObserver] });
 ```
 
 ### In Inline Workflows
@@ -102,7 +102,7 @@ const valid = validate(trace);
 
 ## useWorkflowEvents
 
-The `useWorkflowEvents` hook gives you live event logs for all workflows in the current layer. It re-renders when events are appended:
+The `useWorkflowEvents` hook gives you live event logs for all workflows in the current registry. It re-renders when events are appended:
 
 ```tsx
 import { useWorkflowEvents } from "cursus/react";
@@ -136,7 +136,7 @@ type WorkflowEventLog = {
 };
 ```
 
-Requires a `WorkflowLayerProvider` ancestor.
+Requires a registry `Provider` ancestor.
 
 ## WorkflowDebugPanel
 
@@ -146,14 +146,17 @@ A ready-made debug panel component with two views:
 - **Timeline** — visual timeline with spans and markers
 
 ```tsx
+import { createBindings } from "cursus/react";
 import { WorkflowDebugPanel } from "cursus/devtools";
+
+const { Provider } = createBindings(registry);
 
 function App() {
   return (
-    <WorkflowLayerProvider layer={layer}>
+    <Provider>
       <MyApp />
       <WorkflowDebugPanel />
-    </WorkflowLayerProvider>
+    </Provider>
   );
 }
 ```

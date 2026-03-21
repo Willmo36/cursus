@@ -80,7 +80,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Cross-workflow dependencies** — `query` with circular dependency detection
 - **Signal loops** — `handler()` for long-running interactive workflows
 - **Publish** — expose intermediate workflow state to consumers
-- **Layers** — share workflows across the component tree via React context
+- **Registries** — share workflows across the component tree via React context
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — try/catch + loop for retry patterns
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
@@ -133,21 +133,22 @@ const {
 Register multiple workflows and let them depend on each other:
 
 ```tsx
-import { createLayer } from "cursus";
-import { WorkflowLayerProvider, useWorkflow } from "cursus/react";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
 
-const layer = createLayer(
-  { profile: profileWorkflow, checkout: checkoutWorkflow },
-  new LocalStorage(),
-  { versions: { checkout: 2 } },  // optional versioning
-);
+const registry = createRegistry(new LocalStorage())
+  .add("profile", profileWorkflow)
+  .add("checkout", checkoutWorkflow)
+  .build();
+
+const { useWorkflow, Provider } = createBindings(registry);
 
 function App() {
   return (
-    <WorkflowLayerProvider layer={layer}>
+    <Provider>
       <ProfilePage />
       <CheckoutPage />
-    </WorkflowLayerProvider>
+    </Provider>
   );
 }
 
@@ -218,7 +219,7 @@ expect(result).toEqual({ displayName: "Alice" });
 
 - [Getting Started](./docs/getting-started.md)
 - [Workflows](./docs/workflows.md) — commands and composition
-- [Layers](./docs/layers.md) — shared workflows and cross-workflow dependencies
+- [Registries](./docs/registries.md) — shared workflows and cross-workflow dependencies
 - [Storage](./docs/storage.md) — persistence and versioning
 - [Testing](./docs/testing.md) — `createTestRuntime`
 - [Resilience](./docs/resilience.md) — retry patterns with loop and try/catch
@@ -237,7 +238,7 @@ The `examples/` directory contains runnable Vite apps:
 | `wizard` | Sequential multi-step form |
 | `job-application` | Nested child workflows |
 | `checkout` | Cross-workflow dependencies with `all` |
-| `shop` | Multi-workflow layer with error simulation |
+| `shop` | Multi-workflow registry with error simulation |
 | `chat-room` | Long-running `handle` loop |
 | `cookie-banner` | Result derived from event history |
 | `env-config` | Workflow as environment provider |

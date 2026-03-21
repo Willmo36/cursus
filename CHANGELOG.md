@@ -32,8 +32,8 @@ Initial release.
 
 ### React Integration
 
-- `useWorkflow(id, fn, options)` hook with two modes: inline (standalone) and layer (pre-registered)
-- `createLayer(workflows, storage)` / `WorkflowLayerProvider` for typed workflow layers
+- `useWorkflow(id, fn, options)` hook with two modes: inline (standalone) and registry (pre-registered)
+- `createRegistry(storage).add(id, wf).build()` / `createBindings(registry)` for typed workflow registries
 - `useWorkflowEvents(id)` hook for observing workflow events in real time
 - `WorkflowDebugPanel` component with event log viewer and timeline
 

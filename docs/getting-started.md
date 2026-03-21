@@ -104,6 +104,6 @@ Events are persisted incrementally. When the workflow completes, storage is comp
 ## What's Next
 
 - [Workflows](./workflows.md) — the full workflow API
-- [Layers](./layers.md) — shared workflows across your component tree
+- [Registries](./registries.md) — shared workflows across your component tree
 - [Storage](./storage.md) — persistence options and versioning
 - [Testing](./testing.md) — test workflows without React

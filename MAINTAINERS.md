@@ -8,10 +8,10 @@ A durable workflow engine for React. Workflows are generator functions that yiel
 
 ```mermaid
 graph TB
-    subgraph "React Layer"
+    subgraph "React Bindings"
         UW["useWorkflow()"]
         UWE["useWorkflowEvents()"]
-        WLP["WorkflowLayerProvider"]
+        PROV["Provider (createBindings)"]
         DP["WorkflowDebugPanel"]
     end
 
@@ -26,8 +26,8 @@ graph TB
         LS[LocalStorage]
     end
 
-    WLP -->|creates| REG
-    UW -->|layer mode| REG
+    PROV -->|creates| REG
+    UW -->|registry mode| REG
     UW -->|inline mode| INT
     UW -->|observe/unobserve| REG
     INT -->|appends events| EL
@@ -262,7 +262,7 @@ graph TB
         end
     end
 
-    LAYER["createLayer({ profile }, storage)"] -->|constructor| ENTRIES
+    BUILD["createRegistry(storage).add('profile', wf).build()"] -->|constructor| ENTRIES
     UW_INLINE["useWorkflow('checkout', fn)"] -->|observe()| ENTRIES
 ```
 
@@ -272,7 +272,7 @@ graph TB
 |-------|---------|
 | `fn` | The workflow function (stub for observed entries) |
 | `interpreter` | The running interpreter instance |
-| `observed` | `true` if added via `observe()`, `false` if from the layer |
+| `observed` | `true` if added via `observe()`, `false` if from the registry |
 | `completed` / `failed` | Terminal state flags |
 | `waiters` | Promises from other workflows waiting on this one |
 | `listeners` | State change callbacks (from hooks) |
@@ -313,7 +313,7 @@ unmount: cleanup                     → unobserve("checkout")
 `observe()` behavior:
 - **New entry**: Creates it with `observed: true`, notifies workflows-change listeners
 - **Existing observed entry**: Replaces the interpreter (handles React StrictMode re-mounts)
-- **Existing layer entry**: No-op (layer workflows are never overridden)
+- **Existing registry entry**: No-op (registry workflows are never overridden)
 
 ---
 
@@ -326,10 +326,10 @@ flowchart TD
     CALL["useWorkflow(id, fn?, options?)"]
     CALL --> CHECK{fn provided?}
 
-    CHECK -->|No| LAYER_MODE
+    CHECK -->|No| REGISTRY_MODE
     CHECK -->|Yes| INLINE_MODE
 
-    subgraph LAYER_MODE["Layer Mode"]
+    subgraph REGISTRY_MODE["Registry Mode"]
         L1[Get registry from context]
         L2["registry.start(id)"]
         L3["Subscribe to registry.onStateChange"]
@@ -347,7 +347,7 @@ flowchart TD
         I1 --> I2 --> I3 --> I4 --> I5 --> I6
     end
 
-    LAYER_MODE --> RESULT
+    REGISTRY_MODE --> RESULT
     INLINE_MODE --> RESULT
     RESULT["{ state, result, error, receiving, signal, reset }"]
 ```
@@ -357,22 +357,19 @@ flowchart TD
 ```mermaid
 graph TB
     subgraph "Component Tree"
-        SLP["&lt;WorkflowLayerProvider layer={layer}&gt;"]
-        LRC["LayerRegistryContext.Provider"]
+        PROV2["&lt;Provider&gt; (from createBindings)"]
         RC["RegistryContext.Provider"]
         APP["&lt;App /&gt;"]
     end
 
-    SLP --> LRC --> RC --> APP
+    PROV2 --> RC --> APP
 
     REG["WorkflowRegistry"]
-    SLP -->|"useMemo → new"| REG
-    LRC -->|value| REG
+    PROV2 -->|value| REG
     RC -->|value| REG
 
     UW["useWorkflow()"] -->|"useContext(RegistryContext)"| REG
     UWE["useWorkflowEvents()"] -->|"useContext(RegistryContext)"| REG
-    ULR["useLayerRegistry()"] -->|"useContext(LayerRegistryContext)"| REG
 ```
 
 ### Signal Flow Through React
@@ -548,10 +545,8 @@ src/
   interpreter.ts        Core execution engine (run loop, replay, signals)
   registry.ts           Shared workflow management, cross-workflow deps
   storage.ts            MemoryStorage and LocalStorage implementations
-  layer.ts              createLayer() factory
-  layer-provider.tsx    WorkflowLayerProvider component
   registry-provider.tsx RegistryContext (shared React context)
-  use-workflow.ts       useWorkflow() hook (inline + layer modes)
+  use-workflow.ts       useWorkflow() hook (inline + registry modes)
   use-workflow-events.ts useWorkflowEvents() hook (debug/inspection)
   debug-panel.tsx       WorkflowDebugPanel component
   test-runtime.ts       createTestRuntime() for testing workflows
@@ -568,7 +563,7 @@ src/
 
 3. **Sequence numbers are monotonic.** Each command gets the next `seq` value. This is how the interpreter matches commands to their recorded events during replay.
 
-4. **Layer entries are never overridden by observe().** Only entries created via `observe()` (with `observed: true`) can have their interpreter replaced. This prevents inline workflows from clobbering layer-registered workflows.
+4. **Registry entries are never overridden by observe().** Only entries created via `observe()` (with `observed: true`) can have their interpreter replaced. This prevents inline workflows from clobbering registry-registered workflows.
 
 5. **Storage persistence is incremental.** Only new events (since last persist) are appended. The hook tracks `persistedCount` to avoid redundant writes.
 

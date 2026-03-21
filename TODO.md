@@ -8,7 +8,6 @@ Priority: fill gaps in feature coverage and add real-world scenarios.
 
 - [ ] **Child workflow example** — No example uses `ctx.child()`. Job-application uses sequential `waitFor` instead. Either fix job-application to use `child()` or add a dedicated example.
 - [ ] **Timer/expiry example** — `sleep` only appears inside `race`. Need a standalone example showing durable timers, e.g. "complete payment within 10 minutes or reservation expires."
-- [ ] **Layer mode example** — Every example uses inline `useWorkflow`. Need one that shows `createLayer` + `WorkflowLayerProvider` as the primary pattern.
 - [ ] **Per-example READMEs** — Each example needs a 3-5 line README explaining what it demonstrates and which features it exercises.
 
 ### Missing feature combinations

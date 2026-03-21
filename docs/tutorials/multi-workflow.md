@@ -407,7 +407,7 @@ This check happens when the dependency edge is added, not at runtime — you get
 
 ## What's Next
 
-- [Layers](../layers.md) — an alternative to registries for simpler cross-workflow setups
+- [Registries](../registries.md) — shared workflows and cross-workflow dependencies
 - [Testing](../testing.md) — test individual workflows in isolation with `createTestRuntime`
 - [SSR](../ssr.md) — run workflows on the server and hydrate on the client
 - [API Reference](../api-reference.md) — full reference for `createRegistry`, `merge`, `usePublished`, and more

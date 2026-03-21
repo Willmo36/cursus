@@ -44,7 +44,7 @@ type Query<K extends string = string, V = unknown> = {
 ```
 
 A workflow's requirements become a set of `Query` tags. The registry and React
-layer are responsible for fulfilling them.
+registry are responsible for fulfilling them.
 
 ### Workflow as profunctor
 

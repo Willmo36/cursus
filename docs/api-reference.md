@@ -11,7 +11,7 @@ Exhaustive reference for all public exports from `cursus`.
 ### useWorkflow
 
 ```ts
-// Layer mode — consumes a workflow from WorkflowLayerProvider
+// Registry mode — consumes a workflow from a registry Provider
 function useWorkflow<T>(
   workflowId: string,
 ): UseWorkflowResult<T>;
@@ -60,7 +60,7 @@ type WorkflowState<T> =
 function useWorkflowEvents(): WorkflowEventLog[];
 ```
 
-Returns live event logs for all workflows in the current registry. Requires `WorkflowLayerProvider`.
+Returns live event logs for all workflows in the current registry. Requires a registry `Provider`.
 
 **WorkflowEventLog:**
 
@@ -80,7 +80,7 @@ function usePublished<T>(
 ): T | undefined;
 ```
 
-Selects a slice of a workflow's published state. Only re-renders when the selected value changes (by reference). Requires a registry context (`WorkflowLayerProvider` or `createBindings`).
+Selects a slice of a workflow's published state. Only re-renders when the selected value changes (by reference). Requires a registry context (`createBindings` `Provider`).
 
 Returns `undefined` before the workflow publishes.
 
@@ -94,16 +94,6 @@ const name = usePublished("profile", (pub) => pub.name);
 
 ## Components
 
-### WorkflowLayerProvider
-
-```tsx
-<WorkflowLayerProvider layer={layer}>
-  {children}
-</WorkflowLayerProvider>
-```
-
-Provides a workflow layer to the component tree via React context.
-
 ### WorkflowDebugPanel
 
 ```tsx
@@ -111,36 +101,6 @@ Provides a workflow layer to the component tree via React context.
 ```
 
 Fixed-position debug panel with event inspector and timeline views.
-
-## Layer
-
-### createLayer
-
-```ts
-function createLayer<Provides extends Record<string, unknown>>(
-  workflows: { [K in keyof Provides]: AnyWorkflow },
-  storage: WorkflowStorage,
-  options?: CreateLayerOptions<Provides>,
-): WorkflowLayer<Provides>;
-```
-
-**CreateLayerOptions:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `onEvent` | `WorkflowEventObserver \| WorkflowEventObserver[]` | Event observer(s) |
-| `versions` | `Partial<{ [K in keyof Provides]: number }>` | Version stamps per workflow |
-
-### WorkflowLayer
-
-```ts
-type WorkflowLayer<Provides> = {
-  workflows: { [K in keyof Provides]: AnyWorkflow };
-  storage: WorkflowStorage;
-  onEvent?: WorkflowEventObserver[];
-  versions?: Partial<{ [K in keyof Provides]: number }>;
-};
-```
 
 ## Registry
 
@@ -150,7 +110,7 @@ type WorkflowLayer<Provides> = {
 class WorkflowRegistry<K extends string = string>
 ```
 
-Manages shared workflow instances. Created automatically by `WorkflowLayerProvider`.
+Manages shared workflow instances. Created via `createRegistry().build()`.
 
 | Method | Description |
 |--------|-------------|

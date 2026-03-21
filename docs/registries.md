@@ -2,55 +2,51 @@
 sidebar_position: 3
 ---
 
-# Layers
+# Registries
 
-Layers let you share workflows across your component tree. Instead of each component running its own inline workflow, you define a set of named workflows once and provide them via React context.
+Registries let you share workflows across your component tree. Instead of each component running its own inline workflow, you define a set of named workflows once and provide them via React context.
 
 This is how you build multi-step flows where different components drive different parts of the same workflow, or where workflows depend on each other's results.
 
-## Creating a Layer
+## Creating a Registry
 
 ```ts
-import { createLayer, LocalStorage } from "cursus";
+import { createRegistry, LocalStorage } from "cursus";
 
-const layer = createLayer<{
-  profile: { name: string };
-  checkout: string;
-}>(
-  {
-    profile: profileWorkflow,
-    checkout: checkoutWorkflow,
-  },
-  new LocalStorage("my-app"),
-);
+const registry = createRegistry(new LocalStorage("my-app"))
+  .add("profile", profileWorkflow)
+  .add("checkout", checkoutWorkflow)
+  .build();
 ```
 
-The generic parameter maps workflow IDs to their result types.
+The builder tracks types — each `.add()` call registers the workflow's result and signal types.
 
-## Providing the Layer
+## Providing the Registry
 
-Wrap your component tree with `WorkflowLayerProvider`:
+Use `createBindings` to get a typed `Provider`, `useWorkflow`, and `usePublished`:
 
 ```tsx
-import { WorkflowLayerProvider } from "cursus/react";
+import { createBindings } from "cursus/react";
+
+const { useWorkflow, usePublished, Provider } = createBindings(registry);
 
 function App() {
   return (
-    <WorkflowLayerProvider layer={layer}>
+    <Provider>
       <ProfilePage />
       <CheckoutPage />
-    </WorkflowLayerProvider>
+    </Provider>
   );
 }
 ```
 
-## Consuming Layer Workflows
+## Consuming Registry Workflows
 
-Use `useWorkflow` with just an ID (no workflow function) to consume a layer workflow:
+Use `useWorkflow` with just an ID (no workflow function) to consume a registry workflow:
 
 ```tsx
 function ProfilePage() {
-  const { state, signal } = useWorkflow<{ name: string }>("profile");
+  const { state, signal } = useWorkflow("profile");
 
   if (state.status === "waiting") {
     return <ProfileForm onSubmit={(data) => signal("profile", data)} />;
@@ -64,11 +60,11 @@ function ProfilePage() {
 }
 ```
 
-Layer workflows are started automatically on first `useWorkflow` call and shared across all consumers.
+Registry workflows are started automatically on first `useWorkflow` call and shared across all consumers.
 
 ## Cross-Workflow Dependencies
 
-Workflows can wait on other workflows in the same layer using `join`:
+Workflows can wait on other workflows in the same registry using `query`:
 
 ```ts
 import { workflow, query, activity } from "cursus";
@@ -116,13 +112,13 @@ You can mix signal-backed and workflow-backed queries in `all`:
 const [payment, profile] = yield* all(query("payment"), query("profile"));
 ```
 
-## Inline Workflows Alongside Layers
+## Inline Workflows Alongside Registries
 
-You can run inline workflows inside a layer provider. They get access to the layer's registry for cross-workflow dependencies, and use the layer's storage by default:
+You can run inline workflows inside a registry provider. They get access to the registry for cross-workflow dependencies:
 
 ```tsx
 function CheckoutPage() {
-  // Inline workflow that depends on the layer's "profile" workflow
+  // Inline workflow that depends on the registry's "profile" workflow
   const { state } = useWorkflow("checkout", checkoutWorkflow);
   // ...
 }
@@ -140,37 +136,35 @@ Circular dependency detected: A -> B -> A
 
 This applies to both `query` and `all` with workflow generators.
 
-## Layer Options
+## Merging Registries
 
-### Versioning
-
-See [Storage > Versioning](./storage.md#versioning) for details.
+Combine registries from different modules:
 
 ```ts
-const layer = createLayer<{ checkout: string; profile: Profile }>(
-  { checkout: checkoutWorkflow, profile: profileWorkflow },
-  storage,
-  { versions: { checkout: 2 } },
-);
+const combined = authRegistry.merge(paymentRegistry).build();
 ```
 
-### Event Observers
+Overlapping keys must have compatible result types (enforced at compile time). See [API Reference > merge](./api-reference.md#merge) for details.
 
-Attach observers that fire for every event across all workflows in the layer:
+## Event Observers
+
+Attach observers that fire for every event across all workflows in the registry:
 
 ```ts
-const layer = createLayer(workflows, storage, {
-  onEvent: (workflowId, event) => {
-    console.log(`[${workflowId}] ${event.type}`);
-  },
-});
+const registry = createRegistry(storage)
+  .add("checkout", checkoutWorkflow)
+  .build({
+    onEvent: (workflowId, event) => {
+      console.log(`[${workflowId}] ${event.type}`);
+    },
+  });
 ```
 
 See [Observability](./observability.md) for more.
 
 ## Reset
 
-Reset a layer workflow through the hook — this clears storage and restarts:
+Reset a registry workflow through the hook — this clears storage and restarts:
 
 ```tsx
 const { reset } = useWorkflow("checkout");
