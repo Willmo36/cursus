@@ -354,6 +354,38 @@ describe("Registry builder", () => {
 			expect(merged).toBeDefined();
 		});
 
+		it("merge preserves per-registry storage", async () => {
+			const storageA = new MemoryStorage();
+			const storageB = new MemoryStorage();
+
+			const r1 = createRegistry(storageA)
+				.add("a", workflow(function* () {
+					return yield* activity("fetchA", async () => "A");
+				}));
+
+			const r2 = createRegistry(storageB)
+				.add("b", workflow(function* () {
+					return yield* activity("fetchB", async () => "B");
+				}));
+
+			const registry = r1.merge(r2).build();
+
+			await registry.start("a");
+			await registry.start("b");
+
+			// "a" should be persisted in storageA, not storageB
+			const eventsA = await storageA.load("a");
+			expect(eventsA.length).toBeGreaterThan(0);
+			const eventsAInB = await storageB.load("a");
+			expect(eventsAInB).toEqual([]);
+
+			// "b" should be persisted in storageB, not storageA
+			const eventsB = await storageB.load("b");
+			expect(eventsB.length).toBeGreaterThan(0);
+			const eventsBInA = await storageA.load("b");
+			expect(eventsBInA).toEqual([]);
+		});
+
 		it("merge is associative: (r1.merge(r2)).merge(r3) works", () => {
 			const r1 = createRegistry(new MemoryStorage())
 				.add("a", workflow(function* () { return "A"; }));

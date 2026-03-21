@@ -24,6 +24,7 @@ type Waiter = {
 
 type WorkflowEntry = {
 	workflow: AnyWorkflow;
+	storage: WorkflowStorage;
 	interpreter?: Interpreter;
 	result?: unknown;
 	completed: boolean;
@@ -41,7 +42,7 @@ export class WorkflowRegistry<K extends string = string>
 	implements WorkflowRegistryInterface
 {
 	private entries: Map<string, WorkflowEntry>;
-	private _storage: WorkflowStorage;
+	private _defaultStorage: WorkflowStorage;
 	private workflowChangeListeners: Array<() => void> = [];
 	private deps = new Map<string, Set<string>>();
 	private observers: WorkflowEventObserver[];
@@ -52,8 +53,9 @@ export class WorkflowRegistry<K extends string = string>
 		storage: WorkflowStorage,
 		observers?: WorkflowEventObserver[],
 		versions?: Partial<Record<K, number>>,
+		storageMap?: Record<string, WorkflowStorage>,
 	) {
-		this._storage = storage;
+		this._defaultStorage = storage;
 		this.observers = observers ?? [];
 		this.versions = versions;
 		this.entries = new Map();
@@ -63,6 +65,7 @@ export class WorkflowRegistry<K extends string = string>
 		][]) {
 			this.entries.set(id, {
 				workflow: wf,
+				storage: storageMap?.[id] ?? storage,
 				completed: false,
 				failed: false,
 				published: false,
@@ -75,7 +78,7 @@ export class WorkflowRegistry<K extends string = string>
 	}
 
 	get storage(): WorkflowStorage {
-		return this._storage;
+		return this._defaultStorage;
 	}
 
 	has(id: string): boolean {
@@ -133,8 +136,8 @@ export class WorkflowRegistry<K extends string = string>
 		// Idempotent — no-op if already started
 		if (entry.interpreter) return;
 
-		await checkVersion(this._storage, id, this.versions?.[id as K]);
-		const events = await this._storage.load(id);
+		await checkVersion(entry.storage, id, this.versions?.[id as K]);
+		const events = await entry.storage.load(id);
 		const onAppend =
 			this.observers.length > 0
 				? (event: WorkflowEvent) => {
@@ -159,7 +162,7 @@ export class WorkflowRegistry<K extends string = string>
 			const allEvents = log.events();
 			const newEvents = allEvents.slice(persistedCount);
 			if (newEvents.length > 0) {
-				await this._storage.append(id, newEvents);
+				await entry.storage.append(id, newEvents);
 				persistedCount = allEvents.length;
 			}
 		};
@@ -198,7 +201,7 @@ export class WorkflowRegistry<K extends string = string>
 				compacted.push(terminalEvent);
 			}
 			if (compacted.length > 0) {
-				await this._storage.compact(id, compacted);
+				await entry.storage.compact(id, compacted);
 			}
 		}
 
@@ -309,7 +312,7 @@ export class WorkflowRegistry<K extends string = string>
 		entry.error = undefined;
 		this.removeDependency(id);
 
-		await this._storage.clear(id);
+		await entry.storage.clear(id);
 
 		for (const listener of entry.listeners) {
 			listener();
@@ -362,6 +365,7 @@ export class WorkflowRegistry<K extends string = string>
 		}
 		const entry: WorkflowEntry = {
 			workflow: new Workflow(() => (function* () {})()),
+			storage: this._defaultStorage,
 			interpreter,
 			completed: false,
 			failed: false,

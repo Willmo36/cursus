@@ -73,36 +73,43 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 	/** @internal */
 	readonly _workflows: Record<string, AnyWorkflow>;
 	/** @internal */
-	readonly _storage: WorkflowStorage;
+	readonly _storageMap: Record<string, WorkflowStorage>;
+	/** @internal */
+	readonly _defaultStorage: WorkflowStorage;
 };
 
 export function createRegistry(
 	storage: WorkflowStorage,
 ): RegistryBuilder {
-	return makeBuilder(storage, {});
+	return makeBuilder(storage, {}, {});
 }
 
 function makeBuilder(
-	storage: WorkflowStorage,
+	defaultStorage: WorkflowStorage,
 	workflows: Record<string, AnyWorkflow>,
+	storageMap: Record<string, WorkflowStorage>,
 ): RegistryBuilder {
 	const builder: RegistryBuilder = {
 		_workflows: workflows,
-		_storage: storage,
+		_storageMap: storageMap,
+		_defaultStorage: defaultStorage,
 		add(id: string, wf: AnyWorkflow) {
 			workflows[id] = wf;
+			storageMap[id] = defaultStorage;
 			return builder;
 		},
 		merge(other: RegistryBuilder, resolver?: MergeResolver) {
 			const merged = { ...workflows };
+			const mergedStorage = { ...storageMap };
 			for (const [id, wf] of Object.entries(other._workflows)) {
 				if (id in merged && resolver) {
 					merged[id] = resolver(merged[id], wf, id);
 				} else {
 					merged[id] = wf;
 				}
+				mergedStorage[id] = other._storageMap[id] ?? other._defaultStorage;
 			}
-			return makeBuilder(storage, merged);
+			return makeBuilder(defaultStorage, merged, mergedStorage);
 		},
 		build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }) {
 			const observers = options?.onEvent
@@ -110,7 +117,7 @@ function makeBuilder(
 					? options.onEvent
 					: [options.onEvent]
 				: undefined;
-			const inner = new WorkflowRegistry(workflows, storage, observers);
+			const inner = new WorkflowRegistry(workflows, defaultStorage, observers, undefined, storageMap);
 			const registry = Object.create(inner);
 			registry._registry = inner;
 			return registry as unknown as Registry;
