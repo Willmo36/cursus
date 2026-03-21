@@ -2,6 +2,7 @@
 // ABOUTME: Each add() call verifies that Output deps are already provided.
 
 import { WorkflowRegistry } from "./registry";
+import { MemoryStorage } from "./storage";
 import type {
 	AnyWorkflow,
 	CheckDeps,
@@ -79,7 +80,7 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 };
 
 export function createRegistry(
-	storage: WorkflowStorage,
+	storage: WorkflowStorage = new MemoryStorage(),
 ): RegistryBuilder {
 	return makeBuilder(storage, {}, {});
 }

@@ -15,6 +15,22 @@ describe("Registry builder", () => {
 		expect(registry).toBeDefined();
 	});
 
+	it("defaults to MemoryStorage when no storage provided", async () => {
+		const wf = workflow(function* () {
+			return yield* activity("fetch", async () => "hello");
+		});
+		const registry = createRegistry()
+			.add("greet", wf)
+			.build();
+
+		await registry.start("greet");
+		const state = registry.getState("greet");
+		expect(state?.status).toBe("completed");
+		if (state?.status === "completed") {
+			expect(state.result).toBe("hello");
+		}
+	});
+
 	it("adds a workflow with no dependencies", () => {
 		const profileWorkflow = workflow(function* () {
 			return yield* activity("fetch", async () => ({ name: "Max" }));
