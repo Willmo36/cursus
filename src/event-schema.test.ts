@@ -66,6 +66,7 @@ describe("event schema", () => {
 			"activity_completed",
 			"activity_failed",
 			"query_resolved",
+			"workflow_query_resolved",
 			"timer_started",
 			"timer_fired",
 			"child_started",

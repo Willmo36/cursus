@@ -82,6 +82,9 @@
 						"$ref": "#/$defs/QueryResolvedEvent"
 					},
 					{
+						"$ref": "#/$defs/WorkflowQueryResolvedEvent"
+					},
+					{
 						"$ref": "#/$defs/LoopStartedEvent"
 					},
 					{
@@ -527,6 +530,30 @@
 					"type": "string"
 				},
 				"value": {},
+				"seq": {
+					"type": "integer"
+				},
+				"timestamp": {
+					"type": "number"
+				}
+			}
+		},
+		"WorkflowQueryResolvedEvent": {
+			"type": "object",
+			"required": [
+				"type",
+				"label",
+				"seq",
+				"timestamp"
+			],
+			"additionalProperties": false,
+			"properties": {
+				"type": {
+					"const": "workflow_query_resolved"
+				},
+				"label": {
+					"type": "string"
+				},
 				"seq": {
 					"type": "integer"
 				},

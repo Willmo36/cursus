@@ -453,10 +453,33 @@ export class Interpreter {
 	private async executeQuery(
 		command: Extract<Command, { type: "query" }>,
 	): Promise<unknown> {
-		// Check for replay
-		const resolved = this.log.findCompleted(command.seq, "query_resolved");
-		if (resolved) {
-			return (resolved as QueryResolvedEvent).value;
+		// Replay: signal-resolved query returns the cached value.
+		const signalResolved = this.log.findCompleted(command.seq, "query_resolved");
+		if (signalResolved) {
+			if (this.registry?.has(command.label)) {
+				throw new Error(
+					`Log at seq ${command.seq} has a query_resolved event for "${command.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+				);
+			}
+			return (signalResolved as QueryResolvedEvent).value;
+		}
+
+		// Replay: workflow-resolved query re-hydrates via the registry. The marker
+		// event has no value; ask the registry for the current hydrated value.
+		const workflowMarker = this.log.findCompleted(
+			command.seq,
+			"workflow_query_resolved",
+		);
+		if (workflowMarker) {
+			if (!this.registry?.has(command.label)) {
+				throw new Error(
+					`Cannot replay workflow query "${command.label}": registry has no entry. Did the registry change between runs?`,
+				);
+			}
+			return this.registry.waitFor(command.label, {
+				start: true,
+				caller: this._workflowId,
+			});
 		}
 
 		// Self-reference detection: a workflow cannot query its own output
@@ -466,7 +489,9 @@ export class Interpreter {
 			);
 		}
 
-		// Auto-match: if registry has a workflow with this label, use waitFor
+		// Auto-match: if the registry has a workflow with this label, use waitFor
+		// and record a marker-only event. The value is never serialized to the log —
+		// it re-hydrates via the registry on every replay.
 		if (this.registry?.has(command.label)) {
 			try {
 				const result = await this.registry.waitFor(command.label, {
@@ -475,9 +500,8 @@ export class Interpreter {
 				});
 
 				this.log.append({
-					type: "query_resolved",
+					type: "workflow_query_resolved",
 					label: command.label,
-					value: result,
 					seq: command.seq,
 					timestamp: Date.now(),
 				});
@@ -800,16 +824,38 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside an all branch");
 				}
 				case "query": {
-					// Replay check
+					// Replay: signal-resolved query returns the cached value.
 					const queryResolved = this.log.findCompleted(
 						item.seq,
 						"query_resolved",
 					);
 					if (queryResolved) {
+						if (this.registry?.has(item.label)) {
+							return Promise.reject(new Error(
+								`Log at seq ${item.seq} has a query_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+							));
+						}
 						return Promise.resolve({
 							index,
 							value: (queryResolved as QueryResolvedEvent).value,
 						});
+					}
+
+					// Replay: workflow-resolved query re-hydrates via the registry.
+					const workflowMarker = this.log.findCompleted(
+						item.seq,
+						"workflow_query_resolved",
+					);
+					if (workflowMarker) {
+						if (!this.registry?.has(item.label)) {
+							return Promise.reject(new Error(
+								`Cannot replay workflow query "${item.label}": registry has no entry.`,
+							));
+						}
+						return this.registry.waitFor(item.label, {
+							start: true,
+							caller: this._workflowId,
+						}).then((value) => ({ index, value }));
 					}
 
 					// Self-reference check
@@ -819,16 +865,15 @@ export class Interpreter {
 						));
 					}
 
-					// Auto-match registry
+					// Auto-match registry: record a marker, never cache the value.
 					if (this.registry?.has(item.label)) {
 						return this.registry.waitFor(item.label, {
 							start: true,
 							caller: this._workflowId,
 						}).then((result) => {
 							this.log.append({
-								type: "query_resolved",
+								type: "workflow_query_resolved",
 								label: item.label,
-								value: result,
 								seq: item.seq,
 								timestamp: Date.now(),
 							});
@@ -1034,16 +1079,38 @@ export class Interpreter {
 					throw new Error("loop_break cannot be used inside a race branch");
 				}
 				case "query": {
-					// Replay check
+					// Replay: signal-resolved query returns the cached value.
 					const queryResolved = this.log.findCompleted(
 						item.seq,
 						"query_resolved",
 					);
 					if (queryResolved) {
+						if (this.registry?.has(item.label)) {
+							return Promise.reject(new Error(
+								`Log at seq ${item.seq} has a query_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+							));
+						}
 						return Promise.resolve({
 							index,
 							value: (queryResolved as QueryResolvedEvent).value,
 						});
+					}
+
+					// Replay: workflow-resolved query re-hydrates via the registry.
+					const workflowMarker = this.log.findCompleted(
+						item.seq,
+						"workflow_query_resolved",
+					);
+					if (workflowMarker) {
+						if (!this.registry?.has(item.label)) {
+							return Promise.reject(new Error(
+								`Cannot replay workflow query "${item.label}": registry has no entry.`,
+							));
+						}
+						return this.registry.waitFor(item.label, {
+							start: true,
+							caller: this._workflowId,
+						}).then((value) => ({ index, value }));
 					}
 
 					// Self-reference check
@@ -1053,16 +1120,15 @@ export class Interpreter {
 						));
 					}
 
-					// Auto-match registry
+					// Auto-match registry: record a marker, never cache the value.
 					if (this.registry?.has(item.label)) {
 						return this.registry.waitFor(item.label, {
 							start: true,
 							caller: this._workflowId,
 						}).then((result) => {
 							this.log.append({
-								type: "query_resolved",
+								type: "workflow_query_resolved",
 								label: item.label,
-								value: result,
 								seq: item.seq,
 								timestamp: Date.now(),
 							});

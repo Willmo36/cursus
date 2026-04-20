@@ -589,11 +589,11 @@ describe("Interpreter", () => {
 					items: [{ type: "query" }, { type: "query" }],
 				}),
 			);
+			// Registry-resolved queries record a marker, never the value.
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "query_resolved",
+					type: "workflow_query_resolved",
 					label: "profile",
-					value: "profile-data",
 				}),
 			);
 			expect(events).toContainEqual(
@@ -3473,7 +3473,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("records query_resolved event", async () => {
+		it("records workflow_query_resolved marker (no value) for registry-resolved queries", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
 				waitFor: vi.fn().mockResolvedValue("config-data"),
@@ -3493,17 +3493,30 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "query_resolved",
+					type: "workflow_query_resolved",
 					label: "config",
-					value: "config-data",
 				}),
 			);
+			// Must NOT record a query_resolved event for a registry-resolved query —
+			// the value is re-hydrated live on replay, never serialized.
+			const queryResolved = events.find((e) => e.type === "query_resolved");
+			expect(queryResolved).toBeUndefined();
+			// Marker must not carry the value.
+			const marker = events.find((e) => e.type === "workflow_query_resolved") as
+				| { value?: unknown }
+				| undefined;
+			expect(marker).toBeDefined();
+			expect((marker as Record<string, unknown>).value).toBeUndefined();
 		});
 
-		it("replays from event log without calling registry", async () => {
+		it("re-hydrates via registry on replay (value is not cached in log)", async () => {
+			let call = 0;
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
-				waitFor: vi.fn().mockResolvedValue("config-data"),
+				waitFor: vi.fn().mockImplementation(async () => {
+					call += 1;
+					return `config-data-${call}`;
+				}),
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
@@ -3513,18 +3526,50 @@ describe("Interpreter", () => {
 				return yield* query("config");
 			});
 
-			// First run
 			const log = new EventLog();
 			const interp1 = new Interpreter(wf, log, mockRegistry);
-			await interp1.run();
+			const r1 = await interp1.run();
+			expect(r1).toBe("config-data-1");
 
-			// Second run — replays from log
+			// Second run — registry is asked again because the value is not stored.
 			const interp2 = new Interpreter(wf, log, mockRegistry);
-			const result = await interp2.run();
+			const r2 = await interp2.run();
+			expect(r2).toBe("config-data-2");
+			expect(mockRegistry.waitFor).toHaveBeenCalledTimes(2);
+		});
 
-			expect(result).toBe("config-data");
-			// waitFor called once for first run, not again for replay
-			expect(mockRegistry.waitFor).toHaveBeenCalledTimes(1);
+		it("non-serializable workflow-resolved values survive storage round-trip", async () => {
+			// Simulates what durable storage does — JSON.stringify + parse.
+			// Registry values that contain functions would be lost through this pipe;
+			// the hydration model avoids the round-trip by not logging them.
+			const liveServices = {
+				placeOrder: () => "ok",
+				cancel: () => "cancelled",
+			};
+			const mockRegistry: WorkflowRegistryInterface = {
+				has: vi.fn().mockReturnValue(true),
+				waitFor: vi.fn().mockResolvedValue(liveServices),
+				start: vi.fn(),
+				publish: vi.fn(),
+				getPublishSeq: vi.fn().mockReturnValue(0),
+			};
+
+			const wf = workflow(function* () {
+				const svc = yield* query("services");
+				return (svc as typeof liveServices).placeOrder();
+			});
+
+			const log = new EventLog();
+			const interp1 = new Interpreter(wf, log, mockRegistry);
+			const r1 = await interp1.run();
+			expect(r1).toBe("ok");
+
+			// Simulate durable round-trip of the log.
+			const rehydratedEvents = JSON.parse(JSON.stringify(log.events()));
+			const log2 = new EventLog(rehydratedEvents);
+			const interp2 = new Interpreter(wf, log2, mockRegistry);
+			const r2 = await interp2.run();
+			expect(r2).toBe("ok"); // functions still callable after JSON round-trip of log
 		});
 
 		it("fails workflow on registry error", async () => {

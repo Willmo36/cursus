@@ -295,6 +295,17 @@ export type QueryResolvedEvent = {
 	timestamp: number;
 };
 
+// Marker that a workflow query was resolved by hydrating another registered
+// workflow. No value is stored — on replay the registry re-hydrates and
+// produces the value live. This keeps non-serializable values (e.g. method
+// bundles) safe across durable storage.
+export type WorkflowQueryResolvedEvent = {
+	type: "workflow_query_resolved";
+	label: string;
+	seq: number;
+	timestamp: number;
+};
+
 export type WorkflowPublishedEvent = {
 	type: "workflow_published";
 	value: unknown;
@@ -373,6 +384,7 @@ export type WorkflowEvent =
 	| ChildCompletedEvent
 	| ChildFailedEvent
 	| QueryResolvedEvent
+	| WorkflowQueryResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
 	| AllCompletedEvent

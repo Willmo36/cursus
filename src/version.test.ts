@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "./version";
 
 describe("version constants", () => {
-	it("EVENT_SCHEMA_VERSION is 2", () => {
-		expect(EVENT_SCHEMA_VERSION).toBe(2);
+	it("EVENT_SCHEMA_VERSION is 3", () => {
+		expect(EVENT_SCHEMA_VERSION).toBe(3);
 	});
 
 	it("LIBRARY_VERSION is a string", () => {
