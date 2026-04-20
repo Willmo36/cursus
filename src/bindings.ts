@@ -1,14 +1,9 @@
 // ABOUTME: Creates pre-typed React bindings (hooks + provider) from a built registry.
 // ABOUTME: Returned useWorkflow and Provider are locked to the registry's types at compile time.
 
-import {
-	createElement,
-	type PropsWithChildren,
-} from "react";
+import { createElement, type PropsWithChildren } from "react";
 import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
-import { usePublished as usePublishedBase } from "./use-published";
-import { useWorkflow as useWorkflowBase } from "./use-workflow";
 import type {
 	AnyWorkflow,
 	CheckDeps,
@@ -17,6 +12,8 @@ import type {
 	WorkflowReturn,
 	WorkflowState,
 } from "./types";
+import { usePublished as usePublishedBase } from "./use-published";
+import { useWorkflow as useWorkflowBase } from "./use-workflow";
 
 type UseWorkflowResult<T, SignalMap extends Record<string, unknown>> = {
 	state: WorkflowState<T>;
@@ -55,7 +52,10 @@ export function createBindings<Provides extends Record<string, RegistryEntry>>(
 	}
 
 	// biome-ignore lint/suspicious/noExplicitAny: runtime delegates to base useWorkflow
-	const useWorkflow: UseWorkflowHook<Provides> = ((workflowId: string, workflowFn?: any) => {
+	const useWorkflow: UseWorkflowHook<Provides> = ((
+		workflowId: string,
+		workflowFn?: any,
+	) => {
 		if (workflowFn) {
 			return useWorkflowBase(workflowId, workflowFn);
 		}

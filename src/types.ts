@@ -53,10 +53,14 @@ export type Requires<R extends Requirement = never> = {
 export type Requirements<W> =
 	W extends Generator<infer Y, unknown, unknown>
 		? Y extends { __requirement?: infer R }
-			? R extends Requirement ? R : never
+			? R extends Requirement
+				? R
+				: never
 			: never
 		: W extends { readonly __requirement?: infer R }
-			? R extends Requirement ? R : never
+			? R extends Requirement
+				? R
+				: never
 			: never;
 
 // Extracts a signal map { name: payload } from a workflow function's requirements.
@@ -71,27 +75,43 @@ export type SignalMap<W> =
 // Merges a union of single-key records into one record.
 // e.g. { profile: UserProfile } | { payment: PaymentInfo } → { profile: UserProfile; payment: PaymentInfo }
 // biome-ignore lint/complexity/noBannedTypes: {} is the identity element for intersection accumulation
-type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends (x: infer I) => void ? I : never;
+type UnionToIntersection<U> = (
+	U extends unknown
+		? (x: U) => void
+		: never
+) extends (x: infer I) => void
+	? I
+	: never;
 export type SignalMapOf<W> = W extends (...args: any[]) => infer G
-	? [SignalMap<G>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<G>>
-	: [SignalMap<W>] extends [never] ? Record<string, never> : UnionToIntersection<SignalMap<W>>;
+	? [SignalMap<G>] extends [never]
+		? Record<string, never>
+		: UnionToIntersection<SignalMap<G>>
+	: [SignalMap<W>] extends [never]
+		? Record<string, never>
+		: UnionToIntersection<SignalMap<W>>;
 
 // --- Dependency checking utilities ---
 
 // Extracts the return type from a Workflow or workflow function
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-export type WorkflowReturn<W> = W extends Workflow<infer T, any> ? T
-	: W extends (...args: any[]) => Generator<any, infer T, any> ? T : never;
+export type WorkflowReturn<W> =
+	W extends Workflow<infer T, any>
+		? T
+		: W extends (...args: any[]) => Generator<any, infer T, any>
+			? T
+			: never;
 
 // Extracts the Publishes<V> value type from a requirement union
 export type ExtractPublishes<R> = R extends Publishes<infer V> ? V : never;
 
 // Extracts requirements from a Workflow or workflow function
 // biome-ignore lint/suspicious/noExplicitAny: need any for generator inference
-export type ReqsOf<W> = W extends Workflow<any, infer R> ? R
-	: W extends (...args: any[]) => Generator<any, any, any>
-		? Requirements<ReturnType<W>>
-		: never;
+export type ReqsOf<W> =
+	W extends Workflow<any, infer R>
+		? R
+		: W extends (...args: any[]) => Generator<any, any, any>
+			? Requirements<ReturnType<W>>
+			: never;
 
 // All dependency keys from a requirement union.
 // With unified query, all requirements are flexible (auto-match registry
@@ -99,14 +119,17 @@ export type ReqsOf<W> = W extends Workflow<any, infer R> ? R
 export type DepKeys<R> = never;
 
 // Dependency keys from R that are NOT satisfied by Provides
-export type UnsatisfiedDeps<R, Provides extends Record<string, unknown>> =
-	Exclude<DepKeys<R>, keyof Provides>;
+export type UnsatisfiedDeps<
+	R,
+	Provides extends Record<string, unknown>,
+> = Exclude<DepKeys<R>, keyof Provides>;
 
 // Resolves to F if all deps are satisfied, otherwise a descriptive error string
-export type CheckDeps<F, Provides extends Record<string, unknown>> =
-	[UnsatisfiedDeps<ReqsOf<F>, Provides>] extends [never]
-		? F
-		: `Missing dependencies: ${UnsatisfiedDeps<ReqsOf<F>, Provides> & string}`;
+export type CheckDeps<F, Provides extends Record<string, unknown>> = [
+	UnsatisfiedDeps<ReqsOf<F>, Provides>,
+] extends [never]
+	? F
+	: `Missing dependencies: ${UnsatisfiedDeps<ReqsOf<F>, Provides> & string}`;
 
 // --- Descriptors (yielded by workflow generators, no seq) ---
 
@@ -368,7 +391,11 @@ export type WorkflowTrace = {
 // --- Workflow types ---
 
 // Raw generator type for inner primitives (activity, query, sleep, etc.)
-export type WorkflowGenerator<A, R extends Requirement = never> = Generator<Descriptor & Requires<R>, A, unknown>;
+export type WorkflowGenerator<A, R extends Requirement = never> = Generator<
+	Descriptor & Requires<R>,
+	A,
+	unknown
+>;
 
 // A workflow wraps a generator factory with combinators and yield* support.
 // biome-ignore lint/suspicious/noExplicitAny: Generator protocol requires any for type-erased delegation
@@ -399,7 +426,9 @@ export class Workflow<A, R extends Requirement = never> {
 		label: K,
 		provider: G,
 	): Workflow<A, Exclude<R, Query<K, any>> | Requirements<ReturnType<G>>> {
-		return new Workflow(() => wrapProvide(this._factory(), label, provider) as any);
+		return new Workflow(
+			() => wrapProvide(this._factory(), label, provider) as any,
+		);
 	}
 }
 
@@ -418,9 +447,9 @@ function* wrapMap(
 	gen: Generator<any, any, unknown>,
 	mapFn: (a: unknown) => unknown,
 ): Generator<any, any, unknown> {
-	let input: unknown = undefined;
+	let input: unknown;
 	let threw = false;
-	let thrownValue: unknown = undefined;
+	let thrownValue: unknown;
 
 	for (;;) {
 		const next = threw ? gen.throw(thrownValue) : gen.next(input);
@@ -444,9 +473,9 @@ function* wrapProvide(
 	label: string,
 	provider: () => Generator<any, any, any>,
 ): Generator<any, any, unknown> {
-	let input: unknown = undefined;
+	let input: unknown;
 	let threw = false;
-	let thrownValue: unknown = undefined;
+	let thrownValue: unknown;
 
 	for (;;) {
 		const next = threw ? gen.throw(thrownValue) : gen.next(input);
@@ -459,7 +488,10 @@ function* wrapProvide(
 		const descriptor = next.value as Descriptor;
 
 		// Intercept query descriptors matching the label
-		if (descriptor.type === "query" && (descriptor as QueryDescriptor).label === label) {
+		if (
+			descriptor.type === "query" &&
+			(descriptor as QueryDescriptor).label === label
+		) {
 			// Run the provider workflow inline via yield* delegation
 			try {
 				input = yield* provider();
@@ -486,7 +518,11 @@ export function activity<T>(
 	fn: (signal: AbortSignal) => Promise<T>,
 ): Generator<ActivityDescriptor & Requires<never>, T, unknown> {
 	return (function* () {
-		const result = yield { type: "activity" as const, name, fn } as ActivityDescriptor & Requires<never>;
+		const result = yield {
+			type: "activity" as const,
+			name,
+			fn,
+		} as ActivityDescriptor & Requires<never>;
 		return result as T;
 	})();
 }
@@ -505,18 +541,22 @@ export type SignalReceiver<Reqs extends Requirement = never> = {
 
 export function handler(): SignalReceiver {
 	// biome-ignore lint/suspicious/noExplicitAny: internal handler storage
-	const handlers: Array<{ signal: string; fn: (...args: any[]) => Generator<any, void, any> }> = [];
+	const handlers: Array<{
+		signal: string;
+		fn: (...args: any[]) => Generator<any, void, any>;
+	}> = [];
 	const builder: SignalReceiver = {
 		on(sig, fn) {
 			handlers.push({ signal: sig, fn: fn as any });
 			return builder as any;
 		},
 		as() {
-			const doneFn = <D>(value: D): WorkflowGenerator<never> => loopBreak(value) as WorkflowGenerator<never>;
+			const doneFn = <D>(value: D): WorkflowGenerator<never> =>
+				loopBreak(value) as WorkflowGenerator<never>;
 			return loop(function* () {
-				const result = yield* (race(
+				const result = yield* race(
 					...handlers.map((h) => query(h.signal)),
-				) as Generator<any, { winner: number; value: unknown }, unknown>);
+				) as Generator<any, { winner: number; value: unknown }, unknown>;
 				const h = handlers[result.winner];
 				if (h) {
 					yield* h.fn(result.value, doneFn);
@@ -527,16 +567,23 @@ export function handler(): SignalReceiver {
 	return builder;
 }
 
-export function sleep(durationMs: number): Generator<SleepDescriptor & Requires<never>, void, unknown> {
+export function sleep(
+	durationMs: number,
+): Generator<SleepDescriptor & Requires<never>, void, unknown> {
 	return (function* () {
-		yield { type: "sleep" as const, durationMs } as SleepDescriptor & Requires<never>;
+		yield { type: "sleep" as const, durationMs } as SleepDescriptor &
+			Requires<never>;
 	})();
 }
 
 export function child<W extends Workflow<any, any>>(
 	name: string,
 	wf: W,
-): Generator<ChildDescriptor & Requires<Requirements<W>>, WorkflowReturn<W>, unknown> {
+): Generator<
+	ChildDescriptor & Requires<Requirements<W>>,
+	WorkflowReturn<W>,
+	unknown
+> {
 	return (function* () {
 		const result = yield {
 			type: "child" as const,
@@ -547,9 +594,12 @@ export function child<W extends Workflow<any, any>>(
 	})();
 }
 
-export function publish<V>(value: V): Generator<PublishDescriptor & Requires<Publishes<V>>, void, unknown> {
+export function publish<V>(
+	value: V,
+): Generator<PublishDescriptor & Requires<Publishes<V>>, void, unknown> {
 	return (function* () {
-		yield { type: "publish" as const, value } as PublishDescriptor & Requires<Publishes<V>>;
+		yield { type: "publish" as const, value } as PublishDescriptor &
+			Requires<Publishes<V>>;
 	})();
 }
 
@@ -558,7 +608,11 @@ export function query<V, K extends string = string>(
 ): Generator<QueryDescriptor & Requires<Query<K, V>>, V, unknown> & {
 	as: <W>() => Generator<QueryDescriptor & Requires<Query<K, W>>, W, unknown>;
 } {
-	const gen = (function* (): Generator<QueryDescriptor & Requires<Query<K, V>>, V, unknown> {
+	const gen = (function* (): Generator<
+		QueryDescriptor & Requires<Query<K, V>>,
+		V,
+		unknown
+	> {
 		const result = yield {
 			type: "query" as const,
 			label,
@@ -570,46 +624,150 @@ export function query<V, K extends string = string>(
 }
 
 // Extracts requirements from a generator's yield type
-type Req<G> = G extends Generator<infer Y, any, any>
-	? Y extends { __requirement?: infer R } ? R extends Requirement ? R : never : never
-	: never;
+type Req<G> =
+	G extends Generator<infer Y, any, any>
+		? Y extends { __requirement?: infer R }
+			? R extends Requirement
+				? R
+				: never
+			: never
+		: never;
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<RaceDescriptor & Requires<Req<A> | Req<B>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never]>, unknown>;
+export function race<
+	A extends Generator<any, any, any>,
+	B extends Generator<any, any, any>,
+>(
+	a: A,
+	b: B,
+): Generator<
+	RaceDescriptor & Requires<Req<A> | Req<B>>,
+	RaceResult<
+		[
+			A extends Generator<any, infer RA, any> ? RA : never,
+			B extends Generator<any, infer RB, any> ? RB : never,
+		]
+	>,
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<RaceDescriptor & Requires<Req<A> | Req<B> | Req<C>>, RaceResult<[A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never]>, unknown>;
+export function race<
+	A extends Generator<any, any, any>,
+	B extends Generator<any, any, any>,
+	C extends Generator<any, any, any>,
+>(
+	a: A,
+	b: B,
+	c: C,
+): Generator<
+	RaceDescriptor & Requires<Req<A> | Req<B> | Req<C>>,
+	RaceResult<
+		[
+			A extends Generator<any, infer RA, any> ? RA : never,
+			B extends Generator<any, infer RB, any> ? RB : never,
+			C extends Generator<any, infer RC, any> ? RC : never,
+		]
+	>,
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Requires<Requirement>, { winner: number; value: unknown }, unknown>;
+export function race(
+	...branches: Generator<any, unknown, any>[]
+): Generator<
+	RaceDescriptor & Requires<Requirement>,
+	{ winner: number; value: unknown },
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function race(...branches: Generator<any, unknown, any>[]): Generator<RaceDescriptor & Requires<Requirement>, { winner: number; value: unknown }, unknown> {
+export function race(
+	...branches: Generator<any, unknown, any>[]
+): Generator<
+	RaceDescriptor & Requires<Requirement>,
+	{ winner: number; value: unknown },
+	unknown
+> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("Race branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "race" as const, items } as RaceDescriptor & Requires<Requirement>;
+		const result = yield { type: "race" as const, items } as RaceDescriptor &
+			Requires<Requirement>;
 		return result as { winner: number; value: unknown };
 	})();
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>>(a: A, b: B): Generator<AllDescriptor & Requires<Req<A> | Req<B>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never], unknown>;
+export function all<
+	A extends Generator<any, any, any>,
+	B extends Generator<any, any, any>,
+>(
+	a: A,
+	b: B,
+): Generator<
+	AllDescriptor & Requires<Req<A> | Req<B>>,
+	[
+		A extends Generator<any, infer RA, any> ? RA : never,
+		B extends Generator<any, infer RB, any> ? RB : never,
+	],
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>>(a: A, b: B, c: C): Generator<AllDescriptor & Requires<Req<A> | Req<B> | Req<C>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never], unknown>;
+export function all<
+	A extends Generator<any, any, any>,
+	B extends Generator<any, any, any>,
+	C extends Generator<any, any, any>,
+>(
+	a: A,
+	b: B,
+	c: C,
+): Generator<
+	AllDescriptor & Requires<Req<A> | Req<B> | Req<C>>,
+	[
+		A extends Generator<any, infer RA, any> ? RA : never,
+		B extends Generator<any, infer RB, any> ? RB : never,
+		C extends Generator<any, infer RC, any> ? RC : never,
+	],
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all<A extends Generator<any, any, any>, B extends Generator<any, any, any>, C extends Generator<any, any, any>, D extends Generator<any, any, any>>(a: A, b: B, c: C, d: D): Generator<AllDescriptor & Requires<Req<A> | Req<B> | Req<C> | Req<D>>, [A extends Generator<any, infer RA, any> ? RA : never, B extends Generator<any, infer RB, any> ? RB : never, C extends Generator<any, infer RC, any> ? RC : never, D extends Generator<any, infer RD, any> ? RD : never], unknown>;
+export function all<
+	A extends Generator<any, any, any>,
+	B extends Generator<any, any, any>,
+	C extends Generator<any, any, any>,
+	D extends Generator<any, any, any>,
+>(
+	a: A,
+	b: B,
+	c: C,
+	d: D,
+): Generator<
+	AllDescriptor & Requires<Req<A> | Req<B> | Req<C> | Req<D>>,
+	[
+		A extends Generator<any, infer RA, any> ? RA : never,
+		B extends Generator<any, infer RB, any> ? RB : never,
+		C extends Generator<any, infer RC, any> ? RC : never,
+		D extends Generator<any, infer RD, any> ? RD : never,
+	],
+	unknown
+>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown>;
+export function all(
+	...branches: Generator<any, unknown, any>[]
+): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown>;
 // biome-ignore lint/suspicious/noExplicitAny: variadic overloads require any for branch type inference
-export function all(...branches: Generator<any, unknown, any>[]): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown> {
+export function all(
+	...branches: Generator<any, unknown, any>[]
+): Generator<AllDescriptor & Requires<Requirement>, unknown[], unknown> {
 	const items: Descriptor[] = branches.map((gen) => {
 		const result = gen.next();
 		if (result.done) throw new Error("All branch yielded no command");
 		return result.value as Descriptor;
 	});
 	return (function* () {
-		const result = yield { type: "all" as const, items } as AllDescriptor & Requires<Requirement>;
+		const result = yield { type: "all" as const, items } as AllDescriptor &
+			Requires<Requirement>;
 		return result as unknown[];
 	})();
 }
@@ -634,9 +792,16 @@ export function loop<F extends () => Generator<any, void, any>>(
 	})();
 }
 
-export function loopBreak<V>(value: V): Generator<LoopBreakDescriptor<V> & Requires<never>, never, unknown> {
-	return (function* (): Generator<LoopBreakDescriptor<V> & Requires<never>, never, unknown> {
-		yield { type: "loop_break" as const, value } as LoopBreakDescriptor<V> & Requires<never>;
+export function loopBreak<V>(
+	value: V,
+): Generator<LoopBreakDescriptor<V> & Requires<never>, never, unknown> {
+	return (function* (): Generator<
+		LoopBreakDescriptor<V> & Requires<never>,
+		never,
+		unknown
+	> {
+		yield { type: "loop_break" as const, value } as LoopBreakDescriptor<V> &
+			Requires<never>;
 		// The interpreter will intercept this — control never returns here
 		throw new Error("loopBreak must be used inside a loop");
 	})();
@@ -649,7 +814,6 @@ type YieldOf<G> = G extends Generator<infer Y, any, any> ? Y : never;
 // Type-erased Workflow for registry storage and other untyped boundaries.
 // biome-ignore lint/suspicious/noExplicitAny: type-erased boundary for registry storage
 export type AnyWorkflow = Workflow<any, any>;
-
 
 // --- Workflow state (tagged union) ---
 
@@ -687,7 +851,6 @@ export type WorkflowRegistryInterface = {
 	publish(workflowId: string, value: unknown): void;
 	getPublishSeq(workflowId: string): number;
 };
-
 
 // --- Observers ---
 
