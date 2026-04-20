@@ -79,10 +79,10 @@
 						"$ref": "#/$defs/RaceCompletedEvent"
 					},
 					{
-						"$ref": "#/$defs/QueryResolvedEvent"
+						"$ref": "#/$defs/ReceiveResolvedEvent"
 					},
 					{
-						"$ref": "#/$defs/WorkflowQueryResolvedEvent"
+						"$ref": "#/$defs/ReadResolvedEvent"
 					},
 					{
 						"$ref": "#/$defs/LoopStartedEvent"
@@ -512,7 +512,7 @@
 				}
 			}
 		},
-		"QueryResolvedEvent": {
+		"ReceiveResolvedEvent": {
 			"type": "object",
 			"required": [
 				"type",
@@ -524,7 +524,7 @@
 			"additionalProperties": false,
 			"properties": {
 				"type": {
-					"const": "query_resolved"
+					"const": "receive_resolved"
 				},
 				"label": {
 					"type": "string"
@@ -538,7 +538,7 @@
 				}
 			}
 		},
-		"WorkflowQueryResolvedEvent": {
+		"ReadResolvedEvent": {
 			"type": "object",
 			"required": [
 				"type",
@@ -549,7 +549,7 @@
 			"additionalProperties": false,
 			"properties": {
 				"type": {
-					"const": "workflow_query_resolved"
+					"const": "read_resolved"
 				},
 				"label": {
 					"type": "string"

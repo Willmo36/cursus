@@ -10,7 +10,7 @@ import {
 	type Command,
 	type Descriptor,
 	type RaceCompletedEvent,
-	type QueryResolvedEvent,
+	type ReceiveResolvedEvent,
 	type WorkflowCancelledEvent,
 	type WorkflowCompletedEvent,
 	type WorkflowEvent,
@@ -168,7 +168,7 @@ export class Interpreter {
 		if (this._receiving === name) {
 			const seq = this.findWaitingSeq();
 			this.log.append({
-				type: "query_resolved",
+				type: "receive_resolved",
 				label: name,
 				value: payload,
 				seq,
@@ -454,21 +454,21 @@ export class Interpreter {
 		command: Extract<Command, { type: "query" }>,
 	): Promise<unknown> {
 		// Replay: signal-resolved query returns the cached value.
-		const signalResolved = this.log.findCompleted(command.seq, "query_resolved");
+		const signalResolved = this.log.findCompleted(command.seq, "receive_resolved");
 		if (signalResolved) {
 			if (this.registry?.has(command.label)) {
 				throw new Error(
-					`Log at seq ${command.seq} has a query_resolved event for "${command.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+					`Log at seq ${command.seq} has a receive_resolved event for "${command.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
 				);
 			}
-			return (signalResolved as QueryResolvedEvent).value;
+			return (signalResolved as ReceiveResolvedEvent).value;
 		}
 
 		// Replay: workflow-resolved query re-hydrates via the registry. The marker
 		// event has no value; ask the registry for the current hydrated value.
 		const workflowMarker = this.log.findCompleted(
 			command.seq,
-			"workflow_query_resolved",
+			"read_resolved",
 		);
 		if (workflowMarker) {
 			if (!this.registry?.has(command.label)) {
@@ -500,7 +500,7 @@ export class Interpreter {
 				});
 
 				this.log.append({
-					type: "workflow_query_resolved",
+					type: "read_resolved",
 					label: command.label,
 					seq: command.seq,
 					timestamp: Date.now(),
@@ -827,24 +827,24 @@ export class Interpreter {
 					// Replay: signal-resolved query returns the cached value.
 					const queryResolved = this.log.findCompleted(
 						item.seq,
-						"query_resolved",
+						"receive_resolved",
 					);
 					if (queryResolved) {
 						if (this.registry?.has(item.label)) {
 							return Promise.reject(new Error(
-								`Log at seq ${item.seq} has a query_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+								`Log at seq ${item.seq} has a receive_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
 							));
 						}
 						return Promise.resolve({
 							index,
-							value: (queryResolved as QueryResolvedEvent).value,
+							value: (queryResolved as ReceiveResolvedEvent).value,
 						});
 					}
 
 					// Replay: workflow-resolved query re-hydrates via the registry.
 					const workflowMarker = this.log.findCompleted(
 						item.seq,
-						"workflow_query_resolved",
+						"read_resolved",
 					);
 					if (workflowMarker) {
 						if (!this.registry?.has(item.label)) {
@@ -872,7 +872,7 @@ export class Interpreter {
 							caller: this._workflowId,
 						}).then((result) => {
 							this.log.append({
-								type: "workflow_query_resolved",
+								type: "read_resolved",
 								label: item.label,
 								seq: item.seq,
 								timestamp: Date.now(),
@@ -887,7 +887,7 @@ export class Interpreter {
 							signal: item.label,
 							resolve: (payload: unknown) => {
 								this.log.append({
-									type: "query_resolved",
+									type: "receive_resolved",
 									label: item.label,
 									value: payload,
 									seq: item.seq,
@@ -1082,24 +1082,24 @@ export class Interpreter {
 					// Replay: signal-resolved query returns the cached value.
 					const queryResolved = this.log.findCompleted(
 						item.seq,
-						"query_resolved",
+						"receive_resolved",
 					);
 					if (queryResolved) {
 						if (this.registry?.has(item.label)) {
 							return Promise.reject(new Error(
-								`Log at seq ${item.seq} has a query_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
+								`Log at seq ${item.seq} has a receive_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
 							));
 						}
 						return Promise.resolve({
 							index,
-							value: (queryResolved as QueryResolvedEvent).value,
+							value: (queryResolved as ReceiveResolvedEvent).value,
 						});
 					}
 
 					// Replay: workflow-resolved query re-hydrates via the registry.
 					const workflowMarker = this.log.findCompleted(
 						item.seq,
-						"workflow_query_resolved",
+						"read_resolved",
 					);
 					if (workflowMarker) {
 						if (!this.registry?.has(item.label)) {
@@ -1127,7 +1127,7 @@ export class Interpreter {
 							caller: this._workflowId,
 						}).then((result) => {
 							this.log.append({
-								type: "workflow_query_resolved",
+								type: "read_resolved",
 								label: item.label,
 								seq: item.seq,
 								timestamp: Date.now(),
@@ -1145,7 +1145,7 @@ export class Interpreter {
 									this._raceWaiters = null;
 									this._status = "running";
 									this.log.append({
-										type: "query_resolved",
+										type: "receive_resolved",
 										label: item.label,
 										value: payload,
 										seq: item.seq,

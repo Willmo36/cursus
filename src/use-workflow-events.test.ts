@@ -110,7 +110,7 @@ describe("useWorkflowEvents", () => {
 		await waitFor(() => {
 			const formLog = result.current.events.find((l) => l.id === "form");
 			expect(formLog?.events).toContainEqual(
-				expect.objectContaining({ type: "query_resolved", label: "submit" }),
+				expect.objectContaining({ type: "receive_resolved", label: "submit" }),
 			);
 			expect(formLog?.events).toContainEqual(
 				expect.objectContaining({ type: "workflow_completed" }),
@@ -188,7 +188,7 @@ describe("useWorkflowEvents", () => {
 			expect(localLog).toBeDefined();
 			expect(localLog?.events).toContainEqual(
 				expect.objectContaining({
-					type: "query_resolved",
+					type: "receive_resolved",
 					label: "submit",
 				}),
 			);

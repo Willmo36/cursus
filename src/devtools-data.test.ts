@@ -57,7 +57,7 @@ describe("buildTimelineData", () => {
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
 				{
-					type: "query_resolved",
+					type: "receive_resolved",
 					label: "submit",
 					value: { x: 1 },
 					seq: 0,
@@ -70,10 +70,10 @@ describe("buildTimelineData", () => {
 		const result = buildTimelineData(logs);
 		const row = result.rows[0];
 
-		// Point events: workflow_started, query_resolved, workflow_completed
+		// Point events: workflow_started, receive_resolved, workflow_completed
 		expect(row.markers).toHaveLength(3);
 
-		const query = row.markers.find((m) => m.type === "query_resolved");
+		const query = row.markers.find((m) => m.type === "receive_resolved");
 		expect(query).toBeDefined();
 		expect(query?.pos).toBeCloseTo(300 / 600);
 		expect(query?.label).toBe("submit");

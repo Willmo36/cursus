@@ -142,19 +142,19 @@ describe("EventLog", () => {
 		expect(found).toBeUndefined();
 	});
 
-	it("finds query_resolved events by seq", () => {
+	it("finds receive_resolved events by seq", () => {
 		const log = new EventLog();
 		log.append({
-			type: "query_resolved",
+			type: "receive_resolved",
 			label: "submit",
 			value: { x: 1 },
 			seq: 1,
 			timestamp: 1,
 		});
 
-		const found = log.findCompleted(1, "query_resolved");
+		const found = log.findCompleted(1, "receive_resolved");
 		expect(found).toEqual({
-			type: "query_resolved",
+			type: "receive_resolved",
 			label: "submit",
 			value: { x: 1 },
 			seq: 1,

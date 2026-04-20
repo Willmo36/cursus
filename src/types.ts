@@ -287,20 +287,21 @@ export type ChildFailedEvent = {
 	timestamp: number;
 };
 
-export type QueryResolvedEvent = {
-	type: "query_resolved";
+// Signal-resolved: an external send() delivered a value for this label.
+// The payload is serialized to the log and returned verbatim on replay.
+export type ReceiveResolvedEvent = {
+	type: "receive_resolved";
 	label: string;
 	value: unknown;
 	seq: number;
 	timestamp: number;
 };
 
-// Marker that a workflow query was resolved by hydrating another registered
-// workflow. No value is stored — on replay the registry re-hydrates and
-// produces the value live. This keeps non-serializable values (e.g. method
-// bundles) safe across durable storage.
-export type WorkflowQueryResolvedEvent = {
-	type: "workflow_query_resolved";
+// Marker that a registry read was performed. No value is stored — on replay
+// the registry re-hydrates and produces the value live. This keeps
+// non-serializable values (e.g. method bundles) safe across durable storage.
+export type ReadResolvedEvent = {
+	type: "read_resolved";
 	label: string;
 	seq: number;
 	timestamp: number;
@@ -383,8 +384,8 @@ export type WorkflowEvent =
 	| ChildStartedEvent
 	| ChildCompletedEvent
 	| ChildFailedEvent
-	| QueryResolvedEvent
-	| WorkflowQueryResolvedEvent
+	| ReceiveResolvedEvent
+	| ReadResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
 	| AllCompletedEvent

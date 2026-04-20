@@ -240,7 +240,7 @@ describe("Interpreter", () => {
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
-					type: "query_resolved",
+					type: "receive_resolved",
 					label: "submit",
 					value: "saved-data",
 					seq: 1,
@@ -592,7 +592,7 @@ describe("Interpreter", () => {
 			// Registry-resolved queries record a marker, never the value.
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "workflow_query_resolved",
+					type: "read_resolved",
 					label: "profile",
 				}),
 			);
@@ -3473,7 +3473,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("records workflow_query_resolved marker (no value) for registry-resolved queries", async () => {
+		it("records read_resolved marker (no value) for registry-resolved queries", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
 				waitFor: vi.fn().mockResolvedValue("config-data"),
@@ -3493,16 +3493,16 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "workflow_query_resolved",
+					type: "read_resolved",
 					label: "config",
 				}),
 			);
-			// Must NOT record a query_resolved event for a registry-resolved query —
+			// Must NOT record a receive_resolved event for a registry-resolved query —
 			// the value is re-hydrated live on replay, never serialized.
-			const queryResolved = events.find((e) => e.type === "query_resolved");
+			const queryResolved = events.find((e) => e.type === "receive_resolved");
 			expect(queryResolved).toBeUndefined();
 			// Marker must not carry the value.
-			const marker = events.find((e) => e.type === "workflow_query_resolved") as
+			const marker = events.find((e) => e.type === "read_resolved") as
 				| { value?: unknown }
 				| undefined;
 			expect(marker).toBeDefined();

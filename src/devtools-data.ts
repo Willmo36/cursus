@@ -74,8 +74,8 @@ export function spanName(event: WorkflowEvent): string {
 }
 
 export function markerLabel(event: WorkflowEvent): string {
-	if (event.type === "query_resolved") return event.label;
-	if (event.type === "workflow_query_resolved") return event.label;
+	if (event.type === "receive_resolved") return event.label;
+	if (event.type === "read_resolved") return event.label;
 	if (event.type === "workflow_started") return "started";
 	if (event.type === "workflow_completed") return "completed";
 	if (event.type === "workflow_failed") return "failed";
@@ -179,9 +179,9 @@ export function formatDetails(event: WorkflowEvent): string {
 			return truncate(JSON.stringify(event.result));
 		case "activity_failed":
 			return event.error;
-		case "query_resolved":
+		case "receive_resolved":
 			return `${event.label} = ${truncate(JSON.stringify(event.value))}`;
-		case "workflow_query_resolved":
+		case "read_resolved":
 			return `${event.label} (live)`;
 		case "workflow_completed":
 			return truncate(JSON.stringify(event.result));
