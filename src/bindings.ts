@@ -1,7 +1,7 @@
 // ABOUTME: Creates pre-typed React bindings (hooks + provider) from a built registry.
 // ABOUTME: Returned useWorkflow and Provider are locked to the registry's types at compile time.
 
-import { createElement, type PropsWithChildren } from "react";
+import { createElement, type ReactNode } from "react";
 import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
 import type {
@@ -43,7 +43,7 @@ type UseWorkflowHook<Provides extends Record<string, RegistryEntry>> = {
 export function createBindings<Provides extends Record<string, RegistryEntry>>(
 	registry: Registry<Provides>,
 ) {
-	function Provider({ children }: PropsWithChildren) {
+	function Provider({ children }: { children?: ReactNode }) {
 		return createElement(
 			RegistryContext.Provider,
 			{ value: (registry as any)._registry },

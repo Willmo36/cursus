@@ -63,12 +63,17 @@ export type Requirements<W> =
 				: never
 			: never;
 
+// Canonical "no payload" spelling for queries that don't carry data.
+// Prefer this over `void` in `query('name').as<NoPayload>()` calls.
+export type NoPayload = undefined;
+
 // Extracts a signal map { name: payload } from a workflow function's requirements.
 // Filters to Signal requirements and builds a record from their key-value pairs.
+// `void` payloads are normalized to `undefined` so callers can pass `undefined` explicitly.
 export type SignalMap<W> =
 	Requirements<W> extends infer R
 		? R extends Query<infer K, infer V>
-			? { readonly [P in K]: V }
+			? { readonly [P in K]: [V] extends [void] ? undefined : V }
 			: never
 		: never;
 

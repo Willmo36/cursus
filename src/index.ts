@@ -25,6 +25,7 @@ export type {
 	LoopBreakDescriptor,
 	LoopCommand,
 	LoopDescriptor,
+	NoPayload,
 	PublishCommand,
 	PublishDescriptor,
 	Publishes,
