@@ -115,7 +115,6 @@
 			"type": "object",
 			"required": [
 				"type",
-				"result",
 				"timestamp"
 			],
 			"additionalProperties": false,
@@ -123,7 +122,6 @@
 				"type": {
 					"const": "workflow_completed"
 				},
-				"result": {},
 				"timestamp": {
 					"type": "number"
 				}
@@ -319,7 +317,7 @@
 				"type",
 				"workflowId",
 				"seq",
-				"result",
+				"childLog",
 				"timestamp"
 			],
 			"additionalProperties": false,
@@ -333,7 +331,9 @@
 				"seq": {
 					"type": "integer"
 				},
-				"result": {},
+				"childLog": {
+					"type": "array"
+				},
 				"timestamp": {
 					"type": "number"
 				}
@@ -374,7 +374,6 @@
 			"type": "object",
 			"required": [
 				"type",
-				"value",
 				"seq",
 				"timestamp"
 			],
@@ -383,7 +382,6 @@
 				"type": {
 					"const": "workflow_published"
 				},
-				"value": {},
 				"seq": {
 					"type": "integer"
 				},
@@ -432,7 +430,6 @@
 			"required": [
 				"type",
 				"seq",
-				"results",
 				"timestamp"
 			],
 			"additionalProperties": false,
@@ -442,9 +439,6 @@
 				},
 				"seq": {
 					"type": "integer"
-				},
-				"results": {
-					"type": "array"
 				},
 				"timestamp": {
 					"type": "number"
@@ -492,7 +486,6 @@
 				"type",
 				"seq",
 				"winner",
-				"value",
 				"timestamp"
 			],
 			"additionalProperties": false,
@@ -506,7 +499,6 @@
 				"winner": {
 					"type": "integer"
 				},
-				"value": {},
 				"timestamp": {
 					"type": "number"
 				}
@@ -587,7 +579,6 @@
 			"required": [
 				"type",
 				"seq",
-				"value",
 				"timestamp"
 			],
 			"additionalProperties": false,
@@ -598,7 +589,6 @@
 				"seq": {
 					"type": "integer"
 				},
-				"value": {},
 				"timestamp": {
 					"type": "number"
 				}

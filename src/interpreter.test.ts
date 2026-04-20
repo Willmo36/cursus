@@ -58,7 +58,6 @@ describe("Interpreter", () => {
 			});
 			expect(events[3]).toMatchObject({
 				type: "workflow_completed",
-				result: "hello",
 			});
 		});
 
@@ -148,7 +147,7 @@ describe("Interpreter", () => {
 				{ type: "workflow_started", timestamp: 1 },
 				{ type: "activity_scheduled", name: "greet", seq: 1, timestamp: 2 },
 				{ type: "activity_completed", seq: 1, result: "hello", timestamp: 3 },
-				{ type: "workflow_completed", result: "hello", timestamp: 4 },
+				{ type: "workflow_completed", timestamp: 4 },
 			]);
 
 			const interpreter = new Interpreter(wf, log);
@@ -246,7 +245,7 @@ describe("Interpreter", () => {
 					seq: 1,
 					timestamp: 2,
 				},
-				{ type: "workflow_completed", result: "got: saved-data", timestamp: 3 },
+				{ type: "workflow_completed", timestamp: 3 },
 			]);
 
 			const interpreter = new Interpreter(wf, log);
@@ -330,7 +329,7 @@ describe("Interpreter", () => {
 				{ type: "workflow_started", timestamp: 1 },
 				{ type: "timer_started", seq: 1, durationMs: 1000, timestamp: 2 },
 				{ type: "timer_fired", seq: 1, timestamp: 1003 },
-				{ type: "workflow_completed", result: "done", timestamp: 1004 },
+				{ type: "workflow_completed", timestamp: 1004 },
 			]);
 
 			const interpreter = new Interpreter(wf, log);
@@ -372,19 +371,23 @@ describe("Interpreter", () => {
 					items: [{ type: "activity" }, { type: "activity" }],
 					timestamp: 2,
 				},
+				{ type: "activity_scheduled", name: "a", seq: 1, timestamp: 2 },
+				{ type: "activity_completed", seq: 1, result: "one", timestamp: 2 },
+				{ type: "activity_scheduled", name: "b", seq: 2, timestamp: 2 },
+				{ type: "activity_completed", seq: 2, result: "two", timestamp: 2 },
 				{
 					type: "all_completed",
 					seq: 3,
-					results: ["one", "two"],
 					timestamp: 3,
 				},
-				{ type: "workflow_completed", result: ["one", "two"], timestamp: 4 },
+				{ type: "workflow_completed", timestamp: 4 },
 			]);
 
 			const interpreter = new Interpreter(wf, log);
 			const result = await interpreter.run();
 
 			expect(result).toEqual(["one", "two"]);
+			// Activity functions never fire on replay — results come from the log.
 			expect(fnA).not.toHaveBeenCalled();
 			expect(fnB).not.toHaveBeenCalled();
 		});
@@ -468,7 +471,6 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_completed",
-					results: ["val-a", "val-b"],
 				}),
 			);
 		});
@@ -478,7 +480,7 @@ describe("Interpreter", () => {
 				return yield* all(receive("name"), receive("age"));
 			});
 
-			// seq 1 = query "name", seq 2 = query "age", seq 3 = all command
+			// seq 1 = receive "name", seq 2 = receive "age", seq 3 = all command
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
@@ -488,14 +490,26 @@ describe("Interpreter", () => {
 					timestamp: 2,
 				},
 				{
+					type: "receive_resolved",
+					label: "name",
+					value: "Max",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "receive_resolved",
+					label: "age",
+					value: 30,
+					seq: 2,
+					timestamp: 2,
+				},
+				{
 					type: "all_completed",
 					seq: 3,
-					results: ["Max", 30],
 					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
-					result: ["Max", 30],
 					timestamp: 4,
 				},
 			]);
@@ -599,7 +613,6 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_completed",
-					results: ["pay-data", "profile-data"],
 				}),
 			);
 		});
@@ -627,7 +640,7 @@ describe("Interpreter", () => {
 		it("replays mixed all() from event log", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn((id: string) => id === "profile"),
-				waitFor: vi.fn(),
+				waitFor: vi.fn().mockResolvedValue({ name: "Max" }),
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
@@ -637,24 +650,37 @@ describe("Interpreter", () => {
 				return yield* all(receive("payment"), ask("profile"));
 			});
 
-			// seq 1 = query "payment", seq 2 = query "profile", seq 3 = all command
+			// seq 1 = receive "payment", seq 2 = ask "profile", seq 3 = all command.
+			// The ask() marker replays by re-hydrating from the registry;
+			// the receive_resolved carries its value verbatim.
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "receive" }, { type: "receive" }],
+					items: [{ type: "receive" }, { type: "ask" }],
+					timestamp: 2,
+				},
+				{
+					type: "receive_resolved",
+					label: "payment",
+					value: { card: "1234" },
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "ask_resolved",
+					label: "profile",
+					seq: 2,
 					timestamp: 2,
 				},
 				{
 					type: "all_completed",
 					seq: 3,
-					results: [{ card: "1234" }, { name: "Max" }],
 					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
-					result: [{ card: "1234" }, { name: "Max" }],
 					timestamp: 4,
 				},
 			]);
@@ -663,7 +689,8 @@ describe("Interpreter", () => {
 			const result = await interpreter.run();
 
 			expect(result).toEqual([{ card: "1234" }, { name: "Max" }]);
-			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
+			// ask() re-hydrates via the registry on replay (that's the whole point).
+			expect(mockRegistry.waitFor).toHaveBeenCalledWith("profile", expect.anything());
 		});
 
 		it("handles signal arriving after workflow completes in all()", async () => {
@@ -831,7 +858,6 @@ describe("Interpreter", () => {
 			expect(parentEvents).toContainEqual(
 				expect.objectContaining({
 					type: "child_completed",
-					result: "child-result",
 				}),
 			);
 			// Child's activity events should NOT be in the parent log
@@ -868,18 +894,21 @@ describe("Interpreter", () => {
 					type: "child_completed",
 					workflowId: "sub",
 					seq: 1,
-					result: "child-result",
+					childLog: [
+						{ type: "workflow_started", timestamp: 1 },
+						{ type: "workflow_completed", timestamp: 2 },
+					],
 					timestamp: 3,
 				},
-				{ type: "workflow_completed", result: "child-result", timestamp: 4 },
+				{ type: "workflow_completed", timestamp: 4 },
 			]);
 
 			const interpreter = new Interpreter(parentWorkflow, log);
 			const result = await interpreter.run();
 
+			// Under the hydration model the child re-runs from the embedded log;
+			// its generator is called but activities (if any) fast-forward.
 			expect(result).toBe("child-result");
-			// Child workflow generator should not even be called during replay
-			expect(childFn).not.toHaveBeenCalled();
 		});
 
 		it("preserves stack trace on child_failed event", async () => {
@@ -1057,7 +1086,6 @@ describe("Interpreter", () => {
 				},
 				{
 					type: "workflow_completed",
-					result: "recovered",
 					timestamp: 6,
 				},
 			]);
@@ -1072,27 +1100,8 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("compacted fast path", () => {
-		it("returns result immediately from compacted workflow_completed event", async () => {
-			const activityFn = vi.fn().mockResolvedValue("hello");
-			const wf = workflow(function* () {
-				return yield* activity("greet", activityFn);
-			});
-
-			const log = new EventLog([
-				{ type: "workflow_completed", result: "hello", timestamp: 4 },
-			]);
-
-			const interpreter = new Interpreter(wf, log);
-			const result = await interpreter.run();
-
-			expect(result).toBe("hello");
-			expect(interpreter.status).toBe("completed");
-			expect(interpreter.result).toBe("hello");
-			expect(activityFn).not.toHaveBeenCalled();
-		});
-
-		it("sets failed state from compacted workflow_failed event", async () => {
+	describe("terminal fast paths", () => {
+		it("sets failed state from workflow_failed event", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
 			const wf = workflow(function* () {
 				return yield* activity("greet", activityFn);
@@ -1177,13 +1186,11 @@ describe("Interpreter", () => {
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "workflow_published",
-					value: { user: "max" },
 					seq: 1,
 					timestamp: 2,
 				},
 				{
 					type: "workflow_completed",
-					result: "done",
 					timestamp: 3,
 				},
 			]);
@@ -1472,15 +1479,20 @@ describe("Interpreter", () => {
 					timestamp: 2,
 				},
 				{
+					type: "receive_resolved",
+					label: "b",
+					value: "replayed",
+					seq: 2,
+					timestamp: 3,
+				},
+				{
 					type: "race_completed",
 					seq: 3,
 					winner: 1,
-					value: "replayed",
 					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
-					result: "b:replayed",
 					timestamp: 4,
 				},
 			]);
@@ -1511,10 +1523,16 @@ describe("Interpreter", () => {
 					timestamp: 2,
 				},
 				{
+					type: "receive_resolved",
+					label: "a",
+					value: "x",
+					seq: 1,
+					timestamp: 3,
+				},
+				{
 					type: "race_completed",
 					seq: 3,
 					winner: 0,
-					value: "x",
 					timestamp: 3,
 				},
 				{
@@ -1524,15 +1542,20 @@ describe("Interpreter", () => {
 					timestamp: 4,
 				},
 				{
+					type: "receive_resolved",
+					label: "b",
+					value: "y",
+					seq: 5,
+					timestamp: 5,
+				},
+				{
 					type: "race_completed",
 					seq: 6,
 					winner: 1,
-					value: "y",
 					timestamp: 5,
 				},
 				{
 					type: "workflow_completed",
-					result: "a-b",
 					timestamp: 6,
 				},
 			]);
@@ -1574,7 +1597,6 @@ describe("Interpreter", () => {
 				expect.objectContaining({
 					type: "race_completed",
 					winner: 0,
-					value: "payload-a",
 				}),
 			);
 		});
@@ -2241,7 +2263,6 @@ describe("Interpreter", () => {
 					type: "race_completed",
 					seq: 3,
 					winner: 0,
-					value: "data",
 				}),
 			);
 		});
@@ -2266,15 +2287,25 @@ describe("Interpreter", () => {
 					timestamp: 2,
 				},
 				{
+					type: "activity_scheduled",
+					name: "fetch",
+					seq: 1,
+					timestamp: 2,
+				},
+				{
+					type: "activity_completed",
+					seq: 1,
+					result: "data",
+					timestamp: 3,
+				},
+				{
 					type: "race_completed",
 					seq: 3,
 					winner: 0,
-					value: "data",
 					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
-					result: { winner: 0, value: "data" },
 					timestamp: 4,
 				},
 			]);
@@ -2881,7 +2912,6 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_completed",
-					results: ["one", "two"],
 				}),
 			);
 		});
@@ -2903,15 +2933,17 @@ describe("Interpreter", () => {
 					items: [{ type: "activity" }, { type: "activity" }],
 					timestamp: 2,
 				},
+				{ type: "activity_scheduled", name: "a", seq: 1, timestamp: 2 },
+				{ type: "activity_completed", seq: 1, result: "one", timestamp: 2 },
+				{ type: "activity_scheduled", name: "b", seq: 2, timestamp: 2 },
+				{ type: "activity_completed", seq: 2, result: "two", timestamp: 2 },
 				{
 					type: "all_completed",
 					seq: 3,
-					results: ["one", "two"],
 					timestamp: 3,
 				},
 				{
 					type: "workflow_completed",
-					result: ["one", "two"],
 					timestamp: 4,
 				},
 			]);
@@ -3143,7 +3175,6 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_published",
-					value: "account-123",
 					seq: 1,
 				}),
 			);
@@ -3202,7 +3233,7 @@ describe("Interpreter", () => {
 			expect(interpreter.status).toBe("completed");
 		});
 
-		it("replays publish from event log without calling registry", async () => {
+		it("republishes to the registry on replay (value comes from the generator, not the log)", async () => {
 			const publishFn = vi.fn();
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
@@ -3217,16 +3248,15 @@ describe("Interpreter", () => {
 				return "done";
 			});
 
-			// Pre-populate log with the publish event (replay scenario)
+			// Pre-populate log with the marker-only publish event (replay scenario).
 			const log = new EventLog([
 				{ type: "workflow_started", timestamp: 1 },
 				{
 					type: "workflow_published",
-					value: "account-123",
 					seq: 1,
 					timestamp: 2,
 				},
-				{ type: "workflow_completed", result: "done", timestamp: 3 },
+				{ type: "workflow_completed", timestamp: 3 },
 			]);
 
 			const interpreter = new Interpreter(
@@ -3237,7 +3267,9 @@ describe("Interpreter", () => {
 			);
 			await interpreter.run();
 
-			expect(publishFn).not.toHaveBeenCalled();
+			// The value is no longer in the log; the generator re-yields it and
+			// the interpreter re-publishes to the registry with the live value.
+			expect(publishFn).toHaveBeenCalledWith("session", "account-123");
 		});
 
 		it("works without registry (sets published value locally)", async () => {
@@ -3378,7 +3410,6 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "loop_completed",
-					value: "result",
 				}),
 			);
 		});

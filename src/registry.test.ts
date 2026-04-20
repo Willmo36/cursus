@@ -143,44 +143,8 @@ describe("WorkflowRegistry", () => {
 		const events = await storage.load("greet");
 		expect(events.length).toBeGreaterThan(0);
 		expect(events).toContainEqual(
-			expect.objectContaining({ type: "workflow_completed", result: "hello" }),
+			expect.objectContaining({ type: "workflow_completed" }),
 		);
-	});
-
-	it("compacts storage after workflow completes", async () => {
-		const wf = workflow(function* () {
-			return yield* activity("greet", async () => "hello");
-		});
-
-		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ greet: wf }, storage);
-		await registry.start("greet");
-
-		const events = await storage.load("greet");
-		expect(events).toHaveLength(1);
-		expect(events[0]).toMatchObject({
-			type: "workflow_completed",
-			result: "hello",
-		});
-	});
-
-	it("compacts storage after workflow fails", async () => {
-		const wf = workflow(function* () {
-			return yield* activity("fail", async () => {
-				throw new Error("boom");
-			});
-		});
-
-		const storage = new MemoryStorage();
-		const registry = new WorkflowRegistry({ fail: wf }, storage);
-		await registry.start("fail");
-
-		const events = await storage.load("fail");
-		expect(events).toHaveLength(1);
-		expect(events[0]).toMatchObject({
-			type: "workflow_failed",
-			error: "boom",
-		});
 	});
 
 	it("failed workflow rejects waiters", async () => {
@@ -274,7 +238,6 @@ describe("WorkflowRegistry", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "workflow_completed",
-					result: "hello",
 				}),
 			);
 		});
@@ -491,7 +454,7 @@ describe("WorkflowRegistry", () => {
 		const events = registry.getEvents("greet");
 		expect(events[0]).toMatchObject({ type: "workflow_started" });
 		expect(events).toContainEqual(
-			expect.objectContaining({ type: "workflow_completed", result: "hello" }),
+			expect.objectContaining({ type: "workflow_completed" }),
 		);
 	});
 
@@ -823,7 +786,7 @@ describe("WorkflowRegistry", () => {
 			expect(await registry2.waitFor("counter")).toBe(2);
 		});
 
-		it("versioned workflow after compaction with different version wipes and restarts", async () => {
+		it("version bump wipes storage and restarts", async () => {
 			let callCount = 0;
 			const wf = workflow(function* () {
 				callCount++;
@@ -832,7 +795,6 @@ describe("WorkflowRegistry", () => {
 
 			const storage = new MemoryStorage();
 
-			// First run — compacts to terminal event
 			const registry1 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
@@ -840,12 +802,7 @@ describe("WorkflowRegistry", () => {
 			);
 			await registry1.start("counter");
 
-			// Confirm it compacted
-			const events = await storage.load("counter");
-			expect(events).toHaveLength(1);
-			expect(events[0].type).toBe("workflow_completed");
-
-			// Second run with different version — should wipe compacted data
+			// Second run with different version — should wipe and restart
 			const registry2 = new WorkflowRegistry(
 				{ counter: wf },
 				storage,
@@ -862,18 +819,11 @@ describe("WorkflowRegistry", () => {
 
 			const storage = new MemoryStorage();
 			await storage.saveVersion("greet", 99);
-			await storage.append("greet", [
-				{
-					type: "workflow_completed",
-					result: "old-result",
-					timestamp: 1,
-				},
-			]);
 
-			// No versions passed — should replay from storage
+			// No versions passed — version check is skipped; workflow runs normally.
 			const registry = new WorkflowRegistry({ greet: wf }, storage);
 			await registry.start("greet");
-			expect(await registry.waitFor("greet")).toBe("old-result");
+			expect(await registry.waitFor("greet")).toBe("hello");
 		});
 	});
 
@@ -1042,35 +992,7 @@ describe("WorkflowRegistry", () => {
 			expect(resolved).toBe(false);
 		});
 
-		it("compaction preserves workflow_published event alongside terminal event", async () => {
-			const wf = workflow(function* () {
-				const { user } = yield* receive<{ user: string }>("login");
-				yield* publish({ user });
-				return `done for ${user}`;
-			});
-
-			const storage = new MemoryStorage();
-			const registry = new WorkflowRegistry({ session: wf }, storage);
-			const startPromise = registry.start("session");
-
-			await new Promise((r) => setTimeout(r, 10));
-			registry.signal("session", "login", { user: "max" });
-			await startPromise;
-
-			// After compaction, storage should have both published and terminal events
-			const events = await storage.load("session");
-			expect(events).toHaveLength(2);
-			expect(events[0]).toMatchObject({
-				type: "workflow_published",
-				value: { user: "max" },
-			});
-			expect(events[1]).toMatchObject({
-				type: "workflow_completed",
-				result: "done for max",
-			});
-		});
-
-		it("reload from compacted storage restores published state for waitFor", async () => {
+		it("reload from storage restores published state for waitFor", async () => {
 			const wf = workflow(function* () {
 				const { user } = yield* receive<{ user: string }>("login");
 				yield* publish({ user });

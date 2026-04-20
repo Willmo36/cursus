@@ -184,13 +184,13 @@ export function formatDetails(event: WorkflowEvent): string {
 		case "ask_resolved":
 			return `${event.label} (live)`;
 		case "workflow_completed":
-			return truncate(JSON.stringify(event.result));
+			return "completed";
 		case "workflow_failed":
 			return event.error;
 		case "child_started":
 			return event.name;
 		case "child_completed":
-			return truncate(JSON.stringify(event.result));
+			return "completed";
 		case "child_failed":
 			return event.error;
 		case "timer_started":
@@ -198,7 +198,7 @@ export function formatDetails(event: WorkflowEvent): string {
 		case "timer_fired":
 			return "";
 		case "all_completed":
-			return truncate(JSON.stringify(event.results));
+			return "completed";
 		default:
 			return "";
 	}

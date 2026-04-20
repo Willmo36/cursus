@@ -288,25 +288,7 @@ describe("useWorkflow", () => {
 			});
 		});
 
-		it("compacts storage after inline workflow completes", async () => {
-			const w = workflow(function* () {
-				return yield* activity("greet", async () => "hello");
-			});
-
-			const storage = new MemoryStorage();
-			renderHook(() => useWorkflow("test-compact", w, { storage }));
-
-			await waitFor(async () => {
-				const events = await storage.load("test-compact");
-				expect(events).toHaveLength(1);
-				expect(events[0]).toMatchObject({
-					type: "workflow_completed",
-					result: "hello",
-				});
-			});
-		});
-
-		it("round-trips through compaction: run, compact, remount, fast path", async () => {
+		it("round-trips storage: activity does not re-fire on remount", async () => {
 			const activityFn = vi.fn().mockResolvedValue("hello");
 			const w = workflow(function* () {
 				return yield* activity("greet", activityFn);
@@ -325,12 +307,8 @@ describe("useWorkflow", () => {
 			expect(activityFn).toHaveBeenCalledTimes(1);
 			unmount();
 
-			// Storage should be compacted
-			const events = await storage.load("test-roundtrip");
-			expect(events).toHaveLength(1);
-			expect(events[0]).toMatchObject({ type: "workflow_completed" });
-
-			// Remount — should hit fast path, activity NOT re-called
+			// Remount — generator replays from the stored log; activity's result
+			// comes from activity_completed events, not a fresh call.
 			const { result: result2 } = renderHook(() =>
 				useWorkflow("test-roundtrip", w, { storage }),
 			);

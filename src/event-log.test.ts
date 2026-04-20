@@ -17,7 +17,6 @@ describe("EventLog", () => {
 			};
 			const e2: WorkflowEvent = {
 				type: "workflow_completed",
-				result: "done",
 				timestamp: 2,
 			};
 			log.append(e1);
@@ -38,7 +37,6 @@ describe("EventLog", () => {
 
 			const e: WorkflowEvent = {
 				type: "workflow_completed",
-				result: "ok",
 				timestamp: 3,
 			};
 			log.append(e);
@@ -193,7 +191,7 @@ describe("EventLog", () => {
 			type: "child_completed",
 			workflowId: "parent/sub",
 			seq: 1,
-			result: "done",
+			childLog: [],
 			timestamp: 2,
 		});
 
@@ -202,7 +200,7 @@ describe("EventLog", () => {
 			type: "child_completed",
 			workflowId: "parent/sub",
 			seq: 1,
-			result: "done",
+			childLog: [],
 			timestamp: 2,
 		});
 	});

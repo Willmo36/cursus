@@ -181,41 +181,15 @@ export class WorkflowRegistry<K extends string = string>
 		// Persist final events
 		await persistEvents();
 
-		// Compact storage for terminal workflows — keep published + terminal events for reload
-		if (interpreter.status === "completed" || interpreter.status === "failed") {
-			const allEvents = log.events();
-			const compacted: WorkflowEvent[] = [];
-			const publishedEvent = allEvents
-				.slice()
-				.reverse()
-				.find((e) => e.type === "workflow_published");
-			if (publishedEvent) {
-				compacted.push(publishedEvent);
-			}
-			const terminalEvent = allEvents
-				.slice()
-				.reverse()
-				.find(
-					(e) =>
-						e.type === "workflow_completed" || e.type === "workflow_failed",
-				);
-			if (terminalEvent) {
-				compacted.push(terminalEvent);
-			}
-			if (compacted.length > 0) {
-				await entry.storage.compact(id, compacted);
-			}
-		}
-
-		// Hydrate published state from persisted events (survives compaction)
-		const publishedEvent = log
+		// Hydrate published state from the interpreter's in-memory value. The
+		// log only records that a publish happened; the value itself is live on
+		// the interpreter (recomputed from activity/receive history on replay).
+		const didPublish = log
 			.events()
-			.slice()
-			.reverse()
-			.find((e) => e.type === "workflow_published");
-		if (publishedEvent && publishedEvent.type === "workflow_published") {
+			.some((e) => e.type === "workflow_published");
+		if (didPublish) {
 			entry.published = true;
-			entry.publishedValue = publishedEvent.value;
+			entry.publishedValue = interpreter.published;
 		}
 
 		if (interpreter.status === "completed") {

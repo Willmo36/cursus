@@ -28,7 +28,7 @@ describe("buildTimelineData", () => {
 					result: "ok",
 					timestamp: base + 500,
 				},
-				{ type: "workflow_completed", result: "done", timestamp: base + 600 },
+				{ type: "workflow_completed", timestamp: base + 600 },
 			]),
 		];
 
@@ -63,7 +63,7 @@ describe("buildTimelineData", () => {
 					seq: 0,
 					timestamp: base + 300,
 				},
-				{ type: "workflow_completed", result: "done", timestamp: base + 600 },
+				{ type: "workflow_completed", timestamp: base + 600 },
 			]),
 		];
 
@@ -83,11 +83,11 @@ describe("buildTimelineData", () => {
 		const logs: WorkflowEventLog[] = [
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
-				{ type: "workflow_completed", result: "a", timestamp: base + 200 },
+				{ type: "workflow_completed", timestamp: base + 200 },
 			]),
 			makeLog("wf2", [
 				{ type: "workflow_started", timestamp: base + 100 },
-				{ type: "workflow_completed", result: "b", timestamp: base + 500 },
+				{ type: "workflow_completed", timestamp: base + 500 },
 			]),
 		];
 
@@ -122,7 +122,6 @@ describe("buildTimelineData", () => {
 				{ type: "timer_fired", seq: 0, timestamp: base + 1050 },
 				{
 					type: "workflow_completed",
-					result: "done",
 					timestamp: base + 1100,
 				},
 			]),
@@ -140,7 +139,7 @@ describe("buildTimelineData", () => {
 		const logs: WorkflowEventLog[] = [
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
-				{ type: "workflow_completed", result: "done", timestamp: base + 2500 },
+				{ type: "workflow_completed", timestamp: base + 2500 },
 			]),
 		];
 
@@ -152,7 +151,7 @@ describe("buildTimelineData", () => {
 		const logs: WorkflowEventLog[] = [
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
-				{ type: "workflow_completed", result: "done", timestamp: base + 3200 },
+				{ type: "workflow_completed", timestamp: base + 3200 },
 			]),
 		];
 
@@ -183,7 +182,7 @@ describe("buildTimelineData", () => {
 					result: "ok",
 					timestamp: base + 500,
 				},
-				{ type: "workflow_completed", result: "done", timestamp: base + 600 },
+				{ type: "workflow_completed", timestamp: base + 600 },
 			]),
 		];
 
@@ -196,7 +195,7 @@ describe("buildTimelineData", () => {
 		const logs: WorkflowEventLog[] = [
 			makeLog("wf1", [
 				{ type: "workflow_started", timestamp: base },
-				{ type: "workflow_completed", result: "done", timestamp: base + 80 },
+				{ type: "workflow_completed", timestamp: base + 80 },
 			]),
 		];
 

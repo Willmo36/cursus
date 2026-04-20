@@ -16,10 +16,6 @@ export class MemoryStorage implements WorkflowStorage {
 		this.store.set(workflowId, [...existing, ...events]);
 	}
 
-	async compact(workflowId: string, events: WorkflowEvent[]): Promise<void> {
-		this.store.set(workflowId, [...events]);
-	}
-
 	async clear(workflowId: string): Promise<void> {
 		this.store.delete(workflowId);
 		this.versions.delete(workflowId);
@@ -61,10 +57,6 @@ export class LocalStorage implements WorkflowStorage {
 			this.key(workflowId),
 			JSON.stringify([...existing, ...events]),
 		);
-	}
-
-	async compact(workflowId: string, events: WorkflowEvent[]): Promise<void> {
-		localStorage.setItem(this.key(workflowId), JSON.stringify(events));
 	}
 
 	async clear(workflowId: string): Promise<void> {

@@ -3,7 +3,7 @@
 
 declare const __LIBRARY_VERSION__: string;
 
-export const EVENT_SCHEMA_VERSION = 4;
+export const EVENT_SCHEMA_VERSION = 5;
 
 export const LIBRARY_VERSION: string =
 	typeof __LIBRARY_VERSION__ !== "undefined"

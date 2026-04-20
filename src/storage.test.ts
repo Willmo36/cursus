@@ -52,21 +52,6 @@ describe("MemoryStorage", () => {
 		expect(events).toEqual([]);
 	});
 
-	it("compact() replaces all events atomically", async () => {
-		const storage = new MemoryStorage();
-		await storage.append("wf-1", testEvents);
-
-		const terminalEvent: WorkflowEvent = {
-			type: "workflow_completed",
-			result: "data",
-			timestamp: 4,
-		};
-		await storage.compact("wf-1", [terminalEvent]);
-
-		const events = await storage.load("wf-1");
-		expect(events).toEqual([terminalEvent]);
-	});
-
 	it("loadVersion returns undefined for unknown workflow", async () => {
 		const storage = new MemoryStorage();
 		expect(await storage.loadVersion("unknown")).toBeUndefined();
@@ -134,24 +119,6 @@ describe("LocalStorage", () => {
 		expect(localStorage.getItem(`${prefix}:wf-1`)).toBeNull();
 	});
 
-	it("compact() replaces all events atomically", async () => {
-		const storage = new LocalStorage(prefix);
-		await storage.append("wf-1", testEvents);
-
-		const terminalEvent: WorkflowEvent = {
-			type: "workflow_completed",
-			result: "data",
-			timestamp: 4,
-		};
-		await storage.compact("wf-1", [terminalEvent]);
-
-		const events = await storage.load("wf-1");
-		expect(events).toEqual([terminalEvent]);
-
-		const raw = localStorage.getItem(`${prefix}:wf-1`);
-		expect(JSON.parse(raw as string)).toEqual([terminalEvent]);
-	});
-
 	it("returns empty array when localStorage contains corrupted data", async () => {
 		const storage = new LocalStorage(prefix);
 		localStorage.setItem(`${prefix}:wf-1`, "not valid json{{{");
@@ -196,7 +163,6 @@ describe("checkVersion", () => {
 		const storage: WorkflowStorage = {
 			load: async () => [],
 			append: async () => {},
-			compact: async () => {},
 			clear: async () => {},
 		};
 		expect(await checkVersion(storage, "wf-1", 1)).toBe(false);

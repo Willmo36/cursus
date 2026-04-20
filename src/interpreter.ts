@@ -268,37 +268,29 @@ export class Interpreter {
 	}
 
 	async run(): Promise<unknown> {
-		if (!this.hasEvent("workflow_started")) {
-			// No workflow_started in the log — either a fresh run or compacted storage.
-			// Check for compacted terminal events before starting the generator.
-			const events = this.log.events();
-			const completed = events.find(
-				(e): e is WorkflowCompletedEvent => e.type === "workflow_completed",
-			);
-			if (completed) {
-				this._status = "completed";
-				this._result = completed.result;
-				this.notifyChange();
-				return this._result;
-			}
-			const failed = events.find(
-				(e): e is WorkflowFailedEvent => e.type === "workflow_failed",
-			);
-			if (failed) {
-				this._status = "failed";
-				this._error = failed.error;
-				this.notifyChange();
-				return undefined;
-			}
-			const cancelled = events.find(
-				(e): e is WorkflowCancelledEvent => e.type === "workflow_cancelled",
-			);
-			if (cancelled) {
-				this._status = "cancelled";
-				this.notifyChange();
-				return undefined;
-			}
+		// Fast paths for terminal states already recorded (re-running a workflow
+		// that previously failed or was cancelled — the generator body shouldn't
+		// re-execute).
+		const events = this.log.events();
+		const failed = events.find(
+			(e): e is WorkflowFailedEvent => e.type === "workflow_failed",
+		);
+		if (failed) {
+			this._status = "failed";
+			this._error = failed.error;
+			this.notifyChange();
+			return undefined;
+		}
+		const cancelled = events.find(
+			(e): e is WorkflowCancelledEvent => e.type === "workflow_cancelled",
+		);
+		if (cancelled) {
+			this._status = "cancelled";
+			this.notifyChange();
+			return undefined;
+		}
 
+		if (!this.hasEvent("workflow_started")) {
 			this.log.append({ type: "workflow_started", timestamp: Date.now() });
 		}
 
@@ -323,7 +315,6 @@ export class Interpreter {
 			if (!this.hasEvent("workflow_completed")) {
 				this.log.append({
 					type: "workflow_completed",
-					result: next.value,
 					timestamp: Date.now(),
 				});
 			}
@@ -555,10 +546,23 @@ export class Interpreter {
 	private async executeChild(
 		command: Extract<Command, { type: "child" }>,
 	): Promise<unknown> {
-		// Check for replay
+		// Replay: re-run the child against its embedded log. Activities
+		// fast-forward from stored results (no side effects re-fire) and the
+		// child's return value is produced live in memory.
 		const completed = this.log.findCompleted(command.seq, "child_completed");
 		if (completed) {
-			return (completed as { result: unknown }).result;
+			const { childLog: storedEvents } = completed as {
+				childLog: WorkflowEvent[];
+			};
+			const replayLog = new EventLog(storedEvents);
+			const replayInterpreter = new Interpreter(
+				command.workflow,
+				replayLog,
+				undefined,
+				undefined,
+				this.observers,
+			);
+			return replayInterpreter.run();
 		}
 
 		// Live: create a sub-interpreter with its own event log
@@ -625,7 +629,7 @@ export class Interpreter {
 				type: "child_completed",
 				workflowId: command.name,
 				seq: command.seq,
-				result,
+				childLog: childLog.events(),
 				timestamp: Date.now(),
 			});
 
@@ -642,38 +646,36 @@ export class Interpreter {
 	private async executePublish(
 		command: Extract<Command, { type: "publish" }>,
 	): Promise<void> {
-		// Replay path
-		const existing = this.log.findCompleted(command.seq, "workflow_published");
-		if (existing) {
-			this._publishedValue = (existing as { value: unknown }).value;
-			return;
-		}
-
+		// The published value is never stored in the log; it lives in memory on
+		// the interpreter and registry entry. On replay the generator re-yields
+		// the same value (deterministic given activity/receive history), so we
+		// always update the in-memory state and publish into the registry.
 		this._publishedValue = command.value;
 		this.registry?.publish(this._workflowId!, command.value);
-		this.log.append({
-			type: "workflow_published",
-			value: command.value,
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
+
+		if (!this.log.findCompleted(command.seq, "workflow_published")) {
+			this.log.append({
+				type: "workflow_published",
+				seq: command.seq,
+				timestamp: Date.now(),
+			});
+		}
 		this.notifyChange();
 	}
 
 	private async executeLoop(
 		command: Extract<Command, { type: "loop" }>,
 	): Promise<unknown> {
-		// Replay path
-		const completed = this.log.findCompleted(command.seq, "loop_completed");
-		if (completed) {
-			return (completed as { value: unknown }).value;
+		// No value-cache replay: the body re-runs, inner commands fast-forward
+		// via their own seq-indexed events, and the loop_break value is produced
+		// live in memory. The loop_completed event is a marker only.
+		if (!this.log.findCompleted(command.seq, "loop_started")) {
+			this.log.append({
+				type: "loop_started",
+				seq: command.seq,
+				timestamp: Date.now(),
+			});
 		}
-
-		this.log.append({
-			type: "loop_started",
-			seq: command.seq,
-			timestamp: Date.now(),
-		});
 
 		for (;;) {
 			const bodyGen = command.body();
@@ -683,12 +685,13 @@ export class Interpreter {
 				const cmd = this.assignSeq(desc);
 				if (cmd.type === "loop_break") {
 					const value = cmd.value;
-					this.log.append({
-						type: "loop_completed",
-						seq: command.seq,
-						value,
-						timestamp: Date.now(),
-					});
+					if (!this.log.findCompleted(command.seq, "loop_completed")) {
+						this.log.append({
+							type: "loop_completed",
+							seq: command.seq,
+							timestamp: Date.now(),
+						});
+					}
 					return value;
 				}
 				const result = await this.executeCommand(cmd);
@@ -707,19 +710,16 @@ export class Interpreter {
 	private async executeAll(
 		command: Extract<Command, { type: "all" }>,
 	): Promise<unknown[]> {
-		// Replay path
-		const completed = this.log.findCompleted(command.seq, "all_completed");
-		if (completed) {
-			return (completed as AllCompletedEvent).results;
+		// No value-cache replay: branches are logged per-seq and fast-forward
+		// individually when re-executed. Results are produced live in memory.
+		if (!this.log.findCompleted(command.seq, "all_started")) {
+			this.log.append({
+				type: "all_started",
+				seq: command.seq,
+				items: command.items.map((item) => ({ type: item.type })),
+				timestamp: Date.now(),
+			});
 		}
-
-		// Live execution
-		this.log.append({
-			type: "all_started",
-			seq: command.seq,
-			items: command.items.map((item) => ({ type: item.type })),
-			timestamp: Date.now(),
-		});
 
 		type BranchState = {
 			controller?: AbortController;
@@ -923,12 +923,13 @@ export class Interpreter {
 				.sort((a, b) => a.index - b.index)
 				.map((r) => r.value);
 
-			this.log.append({
-				type: "all_completed",
-				seq: command.seq,
-				results: ordered,
-				timestamp: Date.now(),
-			});
+			if (!this.log.findCompleted(command.seq, "all_completed")) {
+				this.log.append({
+					type: "all_completed",
+					seq: command.seq,
+					timestamp: Date.now(),
+				});
+			}
 
 			return ordered;
 		} catch (err) {
@@ -941,20 +942,31 @@ export class Interpreter {
 	private async executeRace(
 		command: Extract<Command, { type: "race" }>,
 	): Promise<{ winner: number; value: unknown }> {
-		// Replay path
+		// Replay path: the winning index is in the log but the value is not —
+		// re-execute just the winning branch (its own logged events fast-forward
+		// it) and produce the value live in memory.
 		const completed = this.log.findCompleted(command.seq, "race_completed");
 		if (completed) {
 			const event = completed as RaceCompletedEvent;
-			return { winner: event.winner, value: event.value };
+			const winnerItem = command.items[event.winner];
+			if (!winnerItem) {
+				throw new Error(
+					`Cannot replay race at seq ${command.seq}: winner index ${event.winner} out of bounds.`,
+				);
+			}
+			const value = await this.executeCommand(winnerItem);
+			return { winner: event.winner, value };
 		}
 
 		// Live execution
-		this.log.append({
-			type: "race_started",
-			seq: command.seq,
-			items: command.items.map((item) => ({ type: item.type })),
-			timestamp: Date.now(),
-		});
+		if (!this.log.findCompleted(command.seq, "race_started")) {
+			this.log.append({
+				type: "race_started",
+				seq: command.seq,
+				items: command.items.map((item) => ({ type: item.type })),
+				timestamp: Date.now(),
+			});
+		}
 
 		type BranchState = {
 			controller?: AbortController;
@@ -1183,13 +1195,14 @@ export class Interpreter {
 		this._status = "running";
 		this._raceCleanup = null;
 
-		this.log.append({
-			type: "race_completed",
-			seq: command.seq,
-			winner: raceResult.index,
-			value: raceResult.value,
-			timestamp: Date.now(),
-		});
+		if (!this.log.findCompleted(command.seq, "race_completed")) {
+			this.log.append({
+				type: "race_completed",
+				seq: command.seq,
+				winner: raceResult.index,
+				timestamp: Date.now(),
+			});
+		}
 
 		return { winner: raceResult.index, value: raceResult.value };
 	}

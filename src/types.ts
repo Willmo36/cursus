@@ -75,6 +75,38 @@ export type Requirements<W> =
 // Prefer this over `void` in `receive('name').as<NoPayload>()` calls.
 export type NoPayload = undefined;
 
+// Types that cannot round-trip through JSON.stringify/parse. Logged values
+// (activity results, receive payloads) must not contain any of these — they
+// would silently corrupt replay under durable storage backends.
+// biome-ignore lint/suspicious/noExplicitAny: structural detection only
+type NonSerializable =
+	| ((...args: any[]) => unknown)
+	| Map<unknown, unknown>
+	| Set<unknown>
+	| Promise<unknown>
+	| RegExp
+	| WeakMap<object, unknown>
+	| WeakSet<object>
+	| bigint
+	| symbol;
+
+// Structural serializability check. Walks into objects and arrays; Date is
+// allowed (round-trips as an ISO string). Returns T unchanged when valid, or
+// a descriptive string type when a non-serializable member is found — the
+// error bubbles up through yield* as a readable type error.
+export type Serializable<T> =
+	T extends NonSerializable
+		? `value cannot be ${T extends (...args: any[]) => any ? "a function" : "non-JSON-serializable"}`
+		: T extends Date
+			? T
+			: T extends (infer U)[]
+				? Serializable<U>[]
+				: T extends readonly (infer U)[]
+					? ReadonlyArray<Serializable<U>>
+					: T extends object
+						? { [K in keyof T]: Serializable<T[K]> }
+						: T;
+
 // Extracts a receive map { name: payload } from a workflow function's requirements.
 // Filters to Receives requirements (reads do not appear here — they resolve from
 // the registry, not from external send() calls). `void` payloads are normalized
@@ -287,11 +319,15 @@ export type ChildStartedEvent = {
 	timestamp: number;
 };
 
+// Marker that a child workflow completed. The child's result is NOT stored —
+// instead the child's own event log is embedded so replay can re-run the child
+// against that log (activities fast-forward from stored results, no side
+// effects re-fire). The child's return value is recomputed live.
 export type ChildCompletedEvent = {
 	type: "child_completed";
 	workflowId: string;
 	seq: number;
-	result: unknown;
+	childLog: WorkflowEvent[];
 	timestamp: number;
 };
 
@@ -324,9 +360,11 @@ export type AskResolvedEvent = {
 	timestamp: number;
 };
 
+// Marker that publish() was called. The value is NOT stored — on replay, the
+// producer re-runs and the registry's in-memory entry holds the live value.
+// This lets producers publish non-serializable values (service bundles).
 export type WorkflowPublishedEvent = {
 	type: "workflow_published";
-	value: unknown;
 	seq: number;
 	timestamp: number;
 };
@@ -338,10 +376,11 @@ export type AllStartedEvent = {
 	timestamp: number;
 };
 
+// Marker that all() completed. Results are NOT stored — branches replay
+// individually via their own seq-indexed events and produce results live.
 export type AllCompletedEvent = {
 	type: "all_completed";
 	seq: number;
-	results: unknown[];
 	timestamp: number;
 };
 
@@ -352,17 +391,19 @@ export type RaceStartedEvent = {
 	timestamp: number;
 };
 
+// Marker that race() completed. The winner index is recorded (control flow
+// depends on it) but the value is NOT — the winning branch re-runs on replay.
 export type RaceCompletedEvent = {
 	type: "race_completed";
 	seq: number;
 	winner: number;
-	value: unknown;
 	timestamp: number;
 };
 
+// Marker that the workflow returned. The result is NOT stored — consumers
+// reading via ask() get the in-memory value, which is recomputed on replay.
 export type WorkflowCompletedEvent = {
 	type: "workflow_completed";
-	result: unknown;
 	timestamp: number;
 };
 
@@ -384,10 +425,11 @@ export type LoopStartedEvent = {
 	timestamp: number;
 };
 
+// Marker that a loop completed via loopBreak. The value is NOT stored — the
+// loop body re-runs on replay and produces the break value in memory.
 export type LoopCompletedEvent = {
 	type: "loop_completed";
 	seq: number;
-	value: unknown;
 	timestamp: number;
 };
 
@@ -552,18 +594,28 @@ function* wrapProvide(
 
 // --- Free functions (context-free workflow primitives) ---
 
+// activity() — run an async side effect and log its result. The result is
+// serialized to the event log and returned verbatim on replay, so T is
+// constrained to a serializable shape. Non-serializable returns would silently
+// corrupt replay under durable storage.
 export function activity<T>(
 	name: string,
 	fn: (signal: AbortSignal) => Promise<T>,
-): Generator<ActivityDescriptor & Requires<never>, T, unknown> {
-	return (function* () {
+): [T] extends [Serializable<T>]
+	? Generator<ActivityDescriptor & Requires<never>, T, unknown>
+	: Serializable<T> {
+	return (function* (): Generator<
+		ActivityDescriptor & Requires<never>,
+		T,
+		unknown
+	> {
 		const result = yield {
 			type: "activity" as const,
 			name,
 			fn,
 		} as ActivityDescriptor & Requires<never>;
 		return result as T;
-	})();
+	})() as any;
 }
 
 // --- handler: multi-signal loop builder ---
@@ -667,11 +719,15 @@ export function ask<V, K extends string = string>(
 
 // receive() — wait for an external send() to deliver a value with this label.
 // The payload is serialized to the event log and returned verbatim on replay,
-// so V should be a serializable shape (primitives, plain objects, arrays).
-export function receive<V, K extends string = string>(
+// so V is constrained to serializable shapes. Functions, Map, Set, Promise,
+// RegExp, bigint, and symbol are rejected at the type level to prevent silent
+// replay corruption under durable storage.
+export function receive<V = unknown, K extends string = string>(
 	label: K,
 ): Generator<ReceiveDescriptor & Requires<Receives<K, V>>, V, unknown> & {
-	as: <W>() => Generator<ReceiveDescriptor & Requires<Receives<K, W>>, W, unknown>;
+	as: <W>() => [W] extends [Serializable<W>]
+		? Generator<ReceiveDescriptor & Requires<Receives<K, W>>, W, unknown>
+		: Serializable<W>;
 } {
 	const gen = (function* (): Generator<
 		ReceiveDescriptor & Requires<Receives<K, V>>,
@@ -929,7 +985,6 @@ export type WorkflowEventObserver = (
 export type WorkflowStorage = {
 	load(workflowId: string): Promise<WorkflowEvent[]>;
 	append(workflowId: string, events: WorkflowEvent[]): Promise<void>;
-	compact(workflowId: string, events: WorkflowEvent[]): Promise<void>;
 	clear(workflowId: string): Promise<void>;
 	loadVersion?(workflowId: string): Promise<number | undefined>;
 	saveVersion?(workflowId: string, version: number): Promise<void>;
