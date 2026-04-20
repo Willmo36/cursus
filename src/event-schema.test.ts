@@ -66,7 +66,7 @@ describe("event schema", () => {
 			"activity_completed",
 			"activity_failed",
 			"receive_resolved",
-			"read_resolved",
+			"ask_resolved",
 			"timer_started",
 			"timer_fired",
 			"child_started",

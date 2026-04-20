@@ -82,7 +82,7 @@
 						"$ref": "#/$defs/ReceiveResolvedEvent"
 					},
 					{
-						"$ref": "#/$defs/ReadResolvedEvent"
+						"$ref": "#/$defs/AskResolvedEvent"
 					},
 					{
 						"$ref": "#/$defs/LoopStartedEvent"
@@ -538,7 +538,7 @@
 				}
 			}
 		},
-		"ReadResolvedEvent": {
+		"AskResolvedEvent": {
 			"type": "object",
 			"required": [
 				"type",
@@ -549,7 +549,7 @@
 			"additionalProperties": false,
 			"properties": {
 				"type": {
-					"const": "read_resolved"
+					"const": "ask_resolved"
 				},
 				"label": {
 					"type": "string"

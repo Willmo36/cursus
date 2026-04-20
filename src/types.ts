@@ -20,10 +20,18 @@ export class CancelledError extends Error {
 
 // --- Requirement tags ---
 
-// Declares that a workflow needs a named, typed value from outside
-export type Query<K extends string = string, V = unknown> = {
-	readonly _tag: "query";
-	readonly query: { readonly [P in K]: V };
+// Declares that a workflow asks for a named, typed value from a registered
+// workflow's output (ReaderT-style). Never serialized; hydrated live on replay.
+export type Asks<K extends string = string, V = unknown> = {
+	readonly _tag: "asks";
+	readonly asks: { readonly [P in K]: V };
+};
+
+// Declares that a workflow receives a named, typed value from an external
+// send() call. The value is serialized to the event log and replayed verbatim.
+export type Receives<K extends string = string, V = unknown> = {
+	readonly _tag: "receives";
+	readonly receives: { readonly [P in K]: V };
 };
 
 // Declares that a workflow publishes values of type V
@@ -33,7 +41,7 @@ export type Publishes<V = unknown> = {
 };
 
 // Union of all requirement tags
-export type Requirement = Query | Publishes;
+export type Requirement = Asks | Receives | Publishes;
 
 // --- Requires (internal yield carrier) ---
 
@@ -63,16 +71,17 @@ export type Requirements<W> =
 				: never
 			: never;
 
-// Canonical "no payload" spelling for queries that don't carry data.
-// Prefer this over `void` in `query('name').as<NoPayload>()` calls.
+// Canonical "no payload" spelling for receives that don't carry data.
+// Prefer this over `void` in `receive('name').as<NoPayload>()` calls.
 export type NoPayload = undefined;
 
-// Extracts a signal map { name: payload } from a workflow function's requirements.
-// Filters to Signal requirements and builds a record from their key-value pairs.
-// `void` payloads are normalized to `undefined` so callers can pass `undefined` explicitly.
-export type SignalMap<W> =
+// Extracts a receive map { name: payload } from a workflow function's requirements.
+// Filters to Receives requirements (reads do not appear here — they resolve from
+// the registry, not from external send() calls). `void` payloads are normalized
+// to `undefined` so callers can pass `undefined` explicitly.
+export type ReceiveMap<W> =
 	Requirements<W> extends infer R
-		? R extends Query<infer K, infer V>
+		? R extends Receives<infer K, infer V>
 			? { readonly [P in K]: [V] extends [void] ? undefined : V }
 			: never
 		: never;
@@ -87,13 +96,13 @@ type UnionToIntersection<U> = (
 ) extends (x: infer I) => void
 	? I
 	: never;
-export type SignalMapOf<W> = W extends (...args: any[]) => infer G
-	? [SignalMap<G>] extends [never]
+export type ReceiveMapOf<W> = W extends (...args: any[]) => infer G
+	? [ReceiveMap<G>] extends [never]
 		? Record<string, never>
-		: UnionToIntersection<SignalMap<G>>
-	: [SignalMap<W>] extends [never]
+		: UnionToIntersection<ReceiveMap<G>>
+	: [ReceiveMap<W>] extends [never]
 		? Record<string, never>
-		: UnionToIntersection<SignalMap<W>>;
+		: UnionToIntersection<ReceiveMap<W>>;
 
 // --- Dependency checking utilities ---
 
@@ -155,8 +164,13 @@ export type ChildDescriptor = {
 	workflow: AnyWorkflow;
 };
 
-export type QueryDescriptor = {
-	type: "query";
+export type AskDescriptor = {
+	type: "ask";
+	label: string;
+};
+
+export type ReceiveDescriptor = {
+	type: "receive";
 	label: string;
 };
 
@@ -190,7 +204,8 @@ export type Descriptor =
 	| ActivityDescriptor
 	| SleepDescriptor
 	| ChildDescriptor
-	| QueryDescriptor
+	| AskDescriptor
+	| ReceiveDescriptor
 	| RaceDescriptor
 	| AllDescriptor
 	| PublishDescriptor
@@ -202,7 +217,8 @@ export type Descriptor =
 export type ActivityCommand = ActivityDescriptor & { seq: number };
 export type SleepCommand = SleepDescriptor & { seq: number };
 export type ChildCommand = ChildDescriptor & { seq: number };
-export type QueryCommand = QueryDescriptor & { seq: number };
+export type AskCommand = AskDescriptor & { seq: number };
+export type ReceiveCommand = ReceiveDescriptor & { seq: number };
 export type PublishCommand = PublishDescriptor & { seq: number };
 export type RaceCommand = { type: "race"; items: Command[]; seq: number };
 export type AllCommand = { type: "all"; items: Command[]; seq: number };
@@ -213,7 +229,8 @@ export type Command =
 	| ActivityCommand
 	| SleepCommand
 	| ChildCommand
-	| QueryCommand
+	| AskCommand
+	| ReceiveCommand
 	| RaceCommand
 	| AllCommand
 	| PublishCommand
@@ -297,11 +314,11 @@ export type ReceiveResolvedEvent = {
 	timestamp: number;
 };
 
-// Marker that a registry read was performed. No value is stored — on replay
+// Marker that a registry ask was performed. No value is stored — on replay
 // the registry re-hydrates and produces the value live. This keeps
 // non-serializable values (e.g. method bundles) safe across durable storage.
-export type ReadResolvedEvent = {
-	type: "read_resolved";
+export type AskResolvedEvent = {
+	type: "ask_resolved";
 	label: string;
 	seq: number;
 	timestamp: number;
@@ -385,7 +402,7 @@ export type WorkflowEvent =
 	| ChildCompletedEvent
 	| ChildFailedEvent
 	| ReceiveResolvedEvent
-	| ReadResolvedEvent
+	| AskResolvedEvent
 	| WorkflowPublishedEvent
 	| AllStartedEvent
 	| AllCompletedEvent
@@ -408,7 +425,7 @@ export type WorkflowTrace = {
 
 // --- Workflow types ---
 
-// Raw generator type for inner primitives (activity, query, sleep, etc.)
+// Raw generator type for inner primitives (activity, receive, sleep, etc.)
 export type WorkflowGenerator<A, R extends Requirement = never> = Generator<
 	Descriptor & Requires<R>,
 	A,
@@ -443,7 +460,11 @@ export class Workflow<A, R extends Requirement = never> {
 	provide<K extends string, G extends () => Generator<any, any, any>>(
 		label: K,
 		provider: G,
-	): Workflow<A, Exclude<R, Query<K, any>> | Requirements<ReturnType<G>>> {
+	): Workflow<
+		A,
+		| Exclude<R, Asks<K, any> | Receives<K, any>>
+		| Requirements<ReturnType<G>>
+	> {
 		return new Workflow(
 			() => wrapProvide(this._factory(), label, provider) as any,
 		);
@@ -505,10 +526,10 @@ function* wrapProvide(
 
 		const descriptor = next.value as Descriptor;
 
-		// Intercept query descriptors matching the label
+		// Intercept ask/receive descriptors matching the label
 		if (
-			descriptor.type === "query" &&
-			(descriptor as QueryDescriptor).label === label
+			(descriptor.type === "ask" || descriptor.type === "receive") &&
+			(descriptor as AskDescriptor | ReceiveDescriptor).label === label
 		) {
 			// Run the provider workflow inline via yield* delegation
 			try {
@@ -547,13 +568,13 @@ export function activity<T>(
 
 // --- handler: multi-signal loop builder ---
 
-// Builder type that accumulates Query requirements via .on() calls
+// Builder type that accumulates Receives requirements via .on() calls
 export type SignalReceiver<Reqs extends Requirement = never> = {
 	// biome-ignore lint/suspicious/noExplicitAny: handler bodies can yield any command
 	on: <K extends string, V, G extends Generator<any, void, any>>(
 		signal: K,
 		fn: (payload: V, done: <D>(value: D) => WorkflowGenerator<never>) => G,
-	) => SignalReceiver<Reqs | Query<K, V> | Req<G>>;
+	) => SignalReceiver<Reqs | Receives<K, V> | Req<G>>;
 	as: <T>() => WorkflowGenerator<T, Reqs>;
 };
 
@@ -573,7 +594,7 @@ export function handler(): SignalReceiver {
 				loopBreak(value) as WorkflowGenerator<never>;
 			return loop(function* () {
 				const result = yield* race(
-					...handlers.map((h) => query(h.signal)),
+					...handlers.map((h) => receive(h.signal)),
 				) as Generator<any, { winner: number; value: unknown }, unknown>;
 				const h = handlers[result.winner];
 				if (h) {
@@ -621,23 +642,49 @@ export function publish<V>(
 	})();
 }
 
-export function query<V, K extends string = string>(
+// ask() — resolve a value from a registered workflow's output (ReaderT-style).
+// The value is hydrated live on replay (never stored in the event log), so the
+// V type is unconstrained — functions, class instances, service bundles are fine.
+export function ask<V, K extends string = string>(
 	label: K,
-): Generator<QueryDescriptor & Requires<Query<K, V>>, V, unknown> & {
-	as: <W>() => Generator<QueryDescriptor & Requires<Query<K, W>>, W, unknown>;
+): Generator<AskDescriptor & Requires<Asks<K, V>>, V, unknown> & {
+	as: <W>() => Generator<AskDescriptor & Requires<Asks<K, W>>, W, unknown>;
 } {
 	const gen = (function* (): Generator<
-		QueryDescriptor & Requires<Query<K, V>>,
+		AskDescriptor & Requires<Asks<K, V>>,
 		V,
 		unknown
 	> {
 		const result = yield {
-			type: "query" as const,
+			type: "ask" as const,
 			label,
-		} as QueryDescriptor & Requires<Query<K, V>>;
+		} as AskDescriptor & Requires<Asks<K, V>>;
 		return result as V;
 	})();
-	(gen as any).as = <W>() => query<W, K>(label);
+	(gen as any).as = <W>() => ask<W, K>(label);
+	return gen as any;
+}
+
+// receive() — wait for an external send() to deliver a value with this label.
+// The payload is serialized to the event log and returned verbatim on replay,
+// so V should be a serializable shape (primitives, plain objects, arrays).
+export function receive<V, K extends string = string>(
+	label: K,
+): Generator<ReceiveDescriptor & Requires<Receives<K, V>>, V, unknown> & {
+	as: <W>() => Generator<ReceiveDescriptor & Requires<Receives<K, W>>, W, unknown>;
+} {
+	const gen = (function* (): Generator<
+		ReceiveDescriptor & Requires<Receives<K, V>>,
+		V,
+		unknown
+	> {
+		const result = yield {
+			type: "receive" as const,
+			label,
+		} as ReceiveDescriptor & Requires<Receives<K, V>>;
+		return result as V;
+	})();
+	(gen as any).as = <W>() => receive<W, K>(label);
 	return gen as any;
 }
 

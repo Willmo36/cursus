@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventLog } from "./event-log";
 import { Interpreter } from "./interpreter";
-import { activity, all, child, handler, loop, loopBreak, publish, query, race, sleep, workflow } from "./types";
+import { activity, all, ask, child, handler, loop, loopBreak, publish, race, receive, sleep, workflow } from "./types";
 import type { WorkflowRegistryInterface } from "./types";
 
 describe("Interpreter", () => {
@@ -211,7 +211,7 @@ describe("Interpreter", () => {
 	describe("Phase C: signals (query)", () => {
 		it("pauses on query and resumes when signal is received", async () => {
 			const wf = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -233,7 +233,7 @@ describe("Interpreter", () => {
 
 		it("replays signal from event log", async () => {
 			const wf = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -257,8 +257,8 @@ describe("Interpreter", () => {
 
 		it("handles multiple sequential query calls", async () => {
 			const wf = workflow(function* () {
-				const email = yield* query<string>("email");
-				const password = yield* query<string>("password");
+				const email = yield* receive<string>("email");
+				const password = yield* receive<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -410,7 +410,7 @@ describe("Interpreter", () => {
 	describe("Phase F: all() with signals", () => {
 		it("collects multiple signals in any order and returns tuple in declaration order", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("email"), query("password"));
+				return yield* all(receive("email"), receive("password"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -438,7 +438,7 @@ describe("Interpreter", () => {
 
 		it("records all_started and all_completed events", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("a"), query("b"));
+				return yield* all(receive("a"), receive("b"));
 			});
 
 			const log = new EventLog();
@@ -462,7 +462,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_started",
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -475,7 +475,7 @@ describe("Interpreter", () => {
 
 		it("replays all() from event log", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("name"), query("age"));
+				return yield* all(receive("name"), receive("age"));
 			});
 
 			// seq 1 = query "name", seq 2 = query "age", seq 3 = all command
@@ -484,7 +484,7 @@ describe("Interpreter", () => {
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -508,7 +508,7 @@ describe("Interpreter", () => {
 
 		it("exposes waitingForAll with remaining signal names", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("email"), query("password"));
+				return yield* all(receive("email"), receive("password"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -536,7 +536,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -568,7 +568,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const log = new EventLog();
@@ -586,13 +586,13 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "all_started",
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "ask" }],
 				}),
 			);
 			// Registry-resolved queries record a marker, never the value.
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "read_resolved",
+					type: "ask_resolved",
 					label: "profile",
 				}),
 			);
@@ -606,7 +606,7 @@ describe("Interpreter", () => {
 
 		it("query falls through to signal when no registry match", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), receive("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -634,7 +634,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			// seq 1 = query "payment", seq 2 = query "profile", seq 3 = all command
@@ -643,7 +643,7 @@ describe("Interpreter", () => {
 				{
 					type: "all_started",
 					seq: 3,
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -681,7 +681,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -715,7 +715,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -735,7 +735,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const log = new EventLog();
@@ -756,7 +756,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry);
@@ -777,7 +777,7 @@ describe("Interpreter", () => {
 
 			const wf = workflow(function* () {
 				try {
-					yield* all(query("payment"), query("profile"));
+					yield* all(receive("payment"), ask("profile"));
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -929,7 +929,7 @@ describe("Interpreter", () => {
 
 		it("returns an unsubscribe function", async () => {
 			const wf = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -1230,7 +1230,7 @@ describe("Interpreter", () => {
 
 		it("cancel() breaks out of query and sets cancelled state", async () => {
 			const wf = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -1307,7 +1307,7 @@ describe("Interpreter", () => {
 
 		it("cancelled workflow logs workflow_cancelled event", async () => {
 			const wf = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -1377,8 +1377,8 @@ describe("Interpreter", () => {
 		it("pauses and resumes when any matching signal arrives", async () => {
 			const wf = workflow(function* () {
 				const result = yield* race(
-					query("add"),
-					query("remove"),
+					receive("add"),
+					receive("remove"),
 				);
 				return result.winner === 0
 					? `add:${result.value}`
@@ -1401,7 +1401,7 @@ describe("Interpreter", () => {
 
 		it("returns { winner, value } with correct discriminant", async () => {
 			const wf = workflow(function* () {
-				return yield* race(query("a"), query("b"));
+				return yield* race(receive("a"), receive("b"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -1419,7 +1419,7 @@ describe("Interpreter", () => {
 
 		it("ignores signals not in the race", async () => {
 			const wf = workflow(function* () {
-				const { winner } = yield* race(query("a"), query("b"));
+				const { winner } = yield* race(receive("a"), receive("b"));
 				return winner === 0 ? "a" : "b";
 			});
 
@@ -1439,8 +1439,8 @@ describe("Interpreter", () => {
 		it("exposes waitingForAny getter", async () => {
 			const wf = workflow(function* () {
 					const { winner } = yield* race(
-						query("a"),
-						query("b"),
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -1456,7 +1456,7 @@ describe("Interpreter", () => {
 
 		it("replays from event log", async () => {
 			const wf = workflow(function* () {
-					const result = yield* race(query("a"), query("b"));
+					const result = yield* race(receive("a"), receive("b"));
 					return result.winner === 0
 						? `a:${result.value}`
 						: `b:${result.value}`;
@@ -1468,7 +1468,7 @@ describe("Interpreter", () => {
 				{
 					type: "race_started",
 					seq: 3,
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -1493,8 +1493,8 @@ describe("Interpreter", () => {
 
 		it("multiple sequential calls replay correctly", async () => {
 			const wf = workflow(function* () {
-					const first = yield* race(query("a"), query("b"));
-					const second = yield* race(query("a"), query("b"));
+					const first = yield* race(receive("a"), receive("b"));
+					const second = yield* race(receive("a"), receive("b"));
 					const firstName = first.winner === 0 ? "a" : "b";
 					const secondName = second.winner === 0 ? "a" : "b";
 					return `${firstName}-${secondName}`;
@@ -1507,7 +1507,7 @@ describe("Interpreter", () => {
 				{
 					type: "race_started",
 					seq: 3,
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 2,
 				},
 				{
@@ -1520,7 +1520,7 @@ describe("Interpreter", () => {
 				{
 					type: "race_started",
 					seq: 6,
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 					timestamp: 4,
 				},
 				{
@@ -1546,8 +1546,8 @@ describe("Interpreter", () => {
 		it("records race_started and race_completed events", async () => {
 			const wf = workflow(function* () {
 					const { winner } = yield* race(
-						query("a"),
-						query("b"),
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -1567,7 +1567,7 @@ describe("Interpreter", () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: "race_started",
-					items: [{ type: "query" }, { type: "query" }],
+					items: [{ type: "receive" }, { type: "receive" }],
 				}),
 			);
 			expect(events).toContainEqual(
@@ -1582,8 +1582,8 @@ describe("Interpreter", () => {
 		it("cancel breaks out of waiting", async () => {
 			const wf = workflow(function* () {
 					const { winner } = yield* race(
-						query("a"),
-						query("b"),
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? "a" : "b";
 				});
@@ -1993,7 +1993,7 @@ describe("Interpreter", () => {
 	describe("Phase G.2: child signal routing", () => {
 		it("delegates signal to child workflow", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("data");
+					const val = yield* receive("data");
 					return `child got: ${val}`;
 				});
 
@@ -2018,7 +2018,7 @@ describe("Interpreter", () => {
 
 		it("parent reports child's receiving", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("info");
+					const val = yield* receive("info");
 					return `got: ${val}`;
 				});
 
@@ -2037,7 +2037,7 @@ describe("Interpreter", () => {
 
 		it("parent reports child's waitingForAll", async () => {
 			const childWorkflow = workflow(function* () {
-				return yield* all(query("a"), query("b"));
+				return yield* all(receive("a"), receive("b"));
 			});
 
 			const parentWorkflow = workflow(function* () {
@@ -2056,8 +2056,8 @@ describe("Interpreter", () => {
 		it("parent reports child's waitingForAny", async () => {
 			const childWorkflow = workflow(function* () {
 					const { winner, value } = yield* race(
-						query("x"),
-						query("y"),
+						receive("x"),
+						receive("y"),
 					);
 					return winner === 0 ? `x:${value}` : `y:${value}`;
 				});
@@ -2077,7 +2077,7 @@ describe("Interpreter", () => {
 
 		it("delegates signal through nested grandchild", async () => {
 			const grandchild = workflow(function* () {
-				const val = yield* query("deep");
+				const val = yield* receive("deep");
 				return `grandchild: ${val}`;
 			});
 
@@ -2105,7 +2105,7 @@ describe("Interpreter", () => {
 
 		it("cancel propagates to active child", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("data");
+					const val = yield* receive("data");
 					return `got: ${val}`;
 				});
 
@@ -2334,7 +2334,7 @@ describe("Interpreter", () => {
 								setTimeout(() => resolve("auto-result"), 5000),
 							),
 					),
-					query("manual"),
+					receive("manual"),
 				);
 			});
 
@@ -2403,7 +2403,7 @@ describe("Interpreter", () => {
 
 		it("races two query branches — first signal received wins", async () => {
 			const wf = workflow(function* () {
-				return yield* race(query("approve"), query("reject"));
+				return yield* race(receive("approve"), receive("reject"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2423,9 +2423,9 @@ describe("Interpreter", () => {
 		it("races three query branches — third signal wins", async () => {
 			const wf = workflow(function* () {
 				return yield* race(
-					query("single"),
-					query("optA"),
-					query("optB"),
+					receive("single"),
+					receive("optA"),
+					receive("optB"),
 				);
 			});
 
@@ -2447,7 +2447,7 @@ describe("Interpreter", () => {
 
 		it("races activity against child (child waits for signal)", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("data");
+					const val = yield* receive("data");
 					return `child got: ${val}`;
 				});
 
@@ -2513,7 +2513,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* race(query("dep"), sleep(5000));
+				return yield* race(ask("dep"), sleep(5000));
 			});
 
 			const interpreter = new Interpreter(
@@ -2530,7 +2530,7 @@ describe("Interpreter", () => {
 
 		it("cancel cleans up child in race", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("data");
+					const val = yield* receive("data");
 					return `got: ${val}`;
 				});
 
@@ -2556,7 +2556,7 @@ describe("Interpreter", () => {
 
 		it("exposes all signal names via waitingForAny during multi-signal race", async () => {
 			const wf = workflow(function* () {
-				return yield* race(query("approve"), query("reject"));
+				return yield* race(receive("approve"), receive("reject"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2574,7 +2574,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const wf = workflow(function* () {
-				return yield* race(query("approve"), sleep(5000));
+				return yield* race(receive("approve"), sleep(5000));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2597,7 +2597,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const wf = workflow(function* () {
-				return yield* race(query("approve"), sleep(100));
+				return yield* race(receive("approve"), sleep(100));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2616,7 +2616,7 @@ describe("Interpreter", () => {
 			vi.useFakeTimers();
 
 			const wf = workflow(function* () {
-				return yield* race(query("approve"), sleep(5000));
+				return yield* race(receive("approve"), sleep(5000));
 			});
 
 			// First run: signal wins
@@ -2647,7 +2647,7 @@ describe("Interpreter", () => {
 	describe("Profunctor: signal routing through combinators", () => {
 		it("handler calling child with query receives signal", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("input");
+					const val = yield* receive("input");
 					return `child: ${val}`;
 				});
 
@@ -2685,8 +2685,8 @@ describe("Interpreter", () => {
 		it("race with multiple query routes signal to correct branch", async () => {
 			const wf = workflow(function* () {
 				const { winner, value } = yield* race(
-					query("approve"),
-					query("reject"),
+					receive("approve"),
+					receive("reject"),
 				);
 				return winner === 0 ? `approved: ${value}` : `rejected: ${value}`;
 			});
@@ -2706,7 +2706,7 @@ describe("Interpreter", () => {
 
 		it("test runtime delivers signals into child workflows", async () => {
 			const childWorkflow = workflow(function* () {
-					const val = yield* query("data");
+					const val = yield* receive("data");
 					return `child: ${val}`;
 				});
 
@@ -2731,7 +2731,7 @@ describe("Interpreter", () => {
 
 		it("nested child in handler routes signals through full chain", async () => {
 			const grandchild = workflow(function* () {
-					const val = yield* query("value");
+					const val = yield* receive("value");
 					return `deep: ${val}`;
 				});
 
@@ -2771,8 +2771,8 @@ describe("Interpreter", () => {
 		it("child with race routes correct signal", async () => {
 			const childWorkflow = workflow(function* () {
 					const { winner, value } = yield* race(
-						query("a"),
-						query("b"),
+						receive("a"),
+						receive("b"),
 					);
 					return winner === 0 ? `a:${value}` : `b:${value}`;
 				});
@@ -2799,7 +2799,7 @@ describe("Interpreter", () => {
 	describe("Phase L: all", () => {
 		it("collects multiple signals and returns tuple in order", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("a"), query("b"));
+				return yield* all(receive("a"), receive("b"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -2841,7 +2841,7 @@ describe("Interpreter", () => {
 		it("mixes signal and activity in same all() call", async () => {
 			const wf = workflow(function* () {
 					return yield* all(
-						query("name"),
+						receive("name"),
 						activity("greet", async () => "hello"),
 					);
 				});
@@ -2928,7 +2928,7 @@ describe("Interpreter", () => {
 			let activityStarted = false;
 			const wf = workflow(function* () {
 					return yield* all(
-						query("sig"),
+						receive("sig"),
 						activity(
 							"slow",
 							() =>
@@ -2963,7 +2963,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* all(query("payment"), query("profile"));
+				return yield* all(receive("payment"), ask("profile"));
 			});
 
 			const interpreter = new Interpreter(
@@ -2987,9 +2987,9 @@ describe("Interpreter", () => {
 		it("signals reach the correct query branch", async () => {
 			const wf = workflow(function* () {
 				return yield* all(
-					query("a"),
-					query("b"),
-					query("c"),
+					receive("a"),
+					receive("b"),
+					receive("c"),
 				);
 			});
 
@@ -3021,7 +3021,7 @@ describe("Interpreter", () => {
 
 		it("exposes waitingForAll with remaining signal names", async () => {
 			const wf = workflow(function* () {
-				return yield* all(query("x"), query("y"));
+				return yield* all(receive("x"), receive("y"));
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog());
@@ -3261,7 +3261,7 @@ describe("Interpreter", () => {
 			const wf = workflow(function* () {
 				return yield* loop(function* () {
 					iterations++;
-					const msg = yield* query("input").as<string>();
+					const msg = yield* receive("input").as<string>();
 					if (msg === "quit") {
 						yield* loopBreak("done");
 					}
@@ -3386,7 +3386,7 @@ describe("Interpreter", () => {
 		it("replays loop from event log", async () => {
 			const wf = workflow(function* () {
 				return yield* loop(function* () {
-					const msg = yield* query("input").as<string>();
+					const msg = yield* receive("input").as<string>();
 					if (msg === "quit") {
 						yield* loopBreak("done");
 					}
@@ -3419,12 +3419,12 @@ describe("Interpreter", () => {
 			const wf = workflow(function* () {
 				return yield* race(
 					loop(function* () {
-						const msg = yield* query("chat").as<string>();
+						const msg = yield* receive("chat").as<string>();
 						if (msg === "quit") {
 							yield* loopBreak("chat-done");
 						}
 					}),
-					query("cancel").as<string>(),
+					receive("cancel").as<string>(),
 				);
 			});
 
@@ -3448,7 +3448,7 @@ describe("Interpreter", () => {
 		});
 	});
 
-	describe("query() (workflow dependency)", () => {
+	describe("ask() (workflow dependency)", () => {
 		it("delegates to registry.waitFor and returns the result", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
@@ -3459,7 +3459,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				const config = yield* query("config");
+				const config = yield* ask("config");
 				return `got: ${config}`;
 			});
 
@@ -3473,7 +3473,7 @@ describe("Interpreter", () => {
 			});
 		});
 
-		it("records read_resolved marker (no value) for registry-resolved queries", async () => {
+		it("records ask_resolved marker (no value) for registry-resolved queries", async () => {
 			const mockRegistry: WorkflowRegistryInterface = {
 				has: vi.fn().mockReturnValue(true),
 				waitFor: vi.fn().mockResolvedValue("config-data"),
@@ -3483,7 +3483,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* query("config");
+				return yield* ask("config");
 			});
 
 			const log = new EventLog();
@@ -3493,7 +3493,7 @@ describe("Interpreter", () => {
 			const events = log.events();
 			expect(events).toContainEqual(
 				expect.objectContaining({
-					type: "read_resolved",
+					type: "ask_resolved",
 					label: "config",
 				}),
 			);
@@ -3502,7 +3502,7 @@ describe("Interpreter", () => {
 			const queryResolved = events.find((e) => e.type === "receive_resolved");
 			expect(queryResolved).toBeUndefined();
 			// Marker must not carry the value.
-			const marker = events.find((e) => e.type === "read_resolved") as
+			const marker = events.find((e) => e.type === "ask_resolved") as
 				| { value?: unknown }
 				| undefined;
 			expect(marker).toBeDefined();
@@ -3523,7 +3523,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* query("config");
+				return yield* ask("config");
 			});
 
 			const log = new EventLog();
@@ -3555,7 +3555,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				const svc = yield* query("services");
+				const svc = yield* ask("services");
 				return (svc as typeof liveServices).placeOrder();
 			});
 
@@ -3582,7 +3582,7 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* query("config");
+				return yield* ask("config");
 			});
 
 			const log = new EventLog();
@@ -3604,7 +3604,7 @@ describe("Interpreter", () => {
 
 			const wf = workflow(function* () {
 				try {
-					yield* query("config");
+					yield* ask("config");
 					return "unreachable";
 				} catch {
 					return "recovered";
@@ -3630,7 +3630,7 @@ describe("Interpreter", () => {
 
 			const wf = workflow(function* () {
 				try {
-					yield* query("config");
+					yield* ask("config");
 					return "success";
 				} catch {
 					return "caught";
@@ -3660,14 +3660,14 @@ describe("Interpreter", () => {
 			};
 
 			const wf = workflow(function* () {
-				return yield* query("myself");
+				return yield* ask("myself");
 			});
 
 			const interpreter = new Interpreter(wf, new EventLog(), mockRegistry, "myself");
 			await interpreter.run();
 
 			expect(interpreter.status).toBe("failed");
-			expect(interpreter.error).toContain("cannot query itself");
+			expect(interpreter.error).toContain("cannot ask itself");
 			expect(mockRegistry.waitFor).not.toHaveBeenCalled();
 		});
 	});

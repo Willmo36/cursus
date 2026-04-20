@@ -8,7 +8,7 @@ import type {
 	CheckDeps,
 	ExtractPublishes,
 	ReqsOf,
-	SignalMapOf,
+	ReceiveMapOf,
 	WorkflowEvent,
 	WorkflowEventObserver,
 	WorkflowReturn,
@@ -61,7 +61,7 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 	): RegistryBuilder<Provides & Record<K, {
 		result: WorkflowReturn<F>;
 		published: ExtractPublishes<ReqsOf<F>>;
-		signals: SignalMapOf<F>;
+		signals: ReceiveMapOf<F>;
 	}>>;
 
 	merge<Other extends Record<string, RegistryEntry>>(

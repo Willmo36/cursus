@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
-import { activity, publish, query, workflow } from "./types";
-import type { Publishes, Query, Requirements } from "./types";
+import { ask, activity, publish, receive, workflow} from "./types";
+import type { Publishes, Receives, Requirements } from "./types";
 
 type AssertEqual<T, U> = [T] extends [U] ? [U] extends [T] ? true : false : false;
 
@@ -48,7 +48,7 @@ describe("Registry builder", () => {
 		});
 
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* query("profile").as<{ name: string }>();
+			const profile = yield* ask("profile").as<{ name: string }>();
 			return yield* activity("checkout", async () => `order for ${profile.name}`);
 		});
 
@@ -67,7 +67,7 @@ describe("Registry builder", () => {
 		});
 
 		const dashboardWorkflow = workflow(function* () {
-			const session = yield* query("session").as<{ token: string }>();
+			const session = yield* ask("session").as<{ token: string }>();
 			return `dashboard: ${session.token}`;
 		});
 
@@ -80,7 +80,7 @@ describe("Registry builder", () => {
 
 	it("allows workflows with only Signal requirements (no registry deps)", () => {
 		const loginWorkflow = workflow(function* () {
-			const creds = yield* query("credentials").as<{ user: string }>();
+			const creds = yield* receive("credentials").as<{ user: string }>();
 			return creds.user;
 		});
 
@@ -104,11 +104,11 @@ describe("Registry builder", () => {
 
 	it("allows workflow with query dependency (can be signal or registry match)", () => {
 		const checkoutWorkflow = workflow(function* () {
-			const profile = yield* query("profile").as<{ name: string }>();
+			const profile = yield* ask("profile").as<{ name: string }>();
 			return profile.name;
 		});
 
-		// Query deps are flexible — can be satisfied by registry OR signals
+		// Receives deps are flexible — can be satisfied by registry OR signals
 		const registry = createRegistry(new MemoryStorage())
 			.add("checkout", checkoutWorkflow);
 
@@ -139,7 +139,7 @@ describe("Registry builder", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* query("profile").as<{ name: string }>();
+				const profile = yield* ask("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 
@@ -225,7 +225,7 @@ describe("Registry builder", () => {
 				.add("profile", profileWf);
 
 			const orderWf = workflow(function* () {
-				const profile = yield* query("profile").as<{ name: string }>();
+				const profile = yield* ask("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 

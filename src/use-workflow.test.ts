@@ -11,7 +11,7 @@ import { runWorkflow } from "./run-workflow";
 import { MemoryStorage } from "./storage";
 import type { WorkflowEvent } from "./types";
 import type { AnyWorkflow } from "./types";
-import { activity, all, publish, query, race, workflow } from "./types";
+import { ask, activity, all, publish, receive, race, workflow} from "./types";
 import { useWorkflow } from "./use-workflow";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -63,7 +63,7 @@ describe("useWorkflow", () => {
 
 		it("provides signal function that pushes data into workflow", async () => {
 			const w = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -87,8 +87,8 @@ describe("useWorkflow", () => {
 		it("exposes waitingForAny when workflow uses race with signals", async () => {
 			const w = workflow(function* () {
 				const { winner } = yield* race(
-					query("a"),
-					query("b"),
+					receive("a"),
+					receive("b"),
 				);
 				return winner === 0 ? "a" : "b";
 			});
@@ -169,8 +169,8 @@ describe("useWorkflow", () => {
 
 		it("exposes what signal the workflow is waiting for", async () => {
 			const w = workflow(function* () {
-				const email = yield* query<string>("email");
-				const password = yield* query<string>("password");
+				const email = yield* receive<string>("email");
+				const password = yield* receive<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -185,7 +185,7 @@ describe("useWorkflow", () => {
 
 		it("collects multiple signals with all", async () => {
 			const w = workflow(function* () {
-				return yield* all(query("email"), query("password"));
+				return yield* all(receive("email"), receive("password"));
 			});
 
 			const { result } = renderHook(() =>
@@ -344,8 +344,8 @@ describe("useWorkflow", () => {
 
 		it("persists events incrementally so intermediate state survives remount", async () => {
 			const w = workflow(function* () {
-				const email = yield* query<string>("email");
-				const password = yield* query<string>("password");
+				const email = yield* receive<string>("email");
+				const password = yield* receive<string>("password");
 				return `${email}:${password}`;
 			});
 
@@ -419,7 +419,7 @@ describe("useWorkflow", () => {
 
 		it("sends signals to the registry workflow", async () => {
 			const w = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -445,8 +445,8 @@ describe("useWorkflow", () => {
 
 		it("state reactively updates as registry workflow progresses", async () => {
 			const w = workflow(function* () {
-				const a = yield* query<string>("step1");
-				const b = yield* query<string>("step2");
+				const a = yield* receive<string>("step1");
+				const b = yield* receive<string>("step2");
 				return `${a}:${b}`;
 			});
 
@@ -515,9 +515,9 @@ describe("useWorkflow", () => {
 	describe("published", () => {
 		it("published is undefined before publish, then set after", async () => {
 			const w = workflow(function* () {
-				const { user } = yield* query<{ user: string }>("login");
+				const { user } = yield* receive<{ user: string }>("login");
 				yield* publish({ user });
-				yield* query("login");
+				yield* receive("login");
 			});
 
 			const { result } = renderHook(() =>
@@ -544,7 +544,7 @@ describe("useWorkflow", () => {
 		it("inline workflow is cancelled on unmount", async () => {
 			let activityResolved = false;
 			const w = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				yield* activity("after", async () => {
 					activityResolved = true;
 					return "done";
@@ -571,7 +571,7 @@ describe("useWorkflow", () => {
 
 		it("cancel() function is exposed and works", async () => {
 			const w = workflow(function* () {
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `got: ${data}`;
 			});
 
@@ -596,7 +596,7 @@ describe("useWorkflow", () => {
 			let runCount = 0;
 			const w = workflow(function* () {
 				runCount++;
-				const data = yield* query<string>("submit");
+				const data = yield* receive<string>("submit");
 				return `run${runCount}: ${data}`;
 			});
 
@@ -636,7 +636,7 @@ describe("useWorkflow", () => {
 			});
 
 			const localWorkflow = workflow(function* () {
-				const user = yield* query("login");
+				const user = yield* ask("login");
 				return `local got: ${user}`;
 			});
 
@@ -655,13 +655,13 @@ describe("useWorkflow", () => {
 
 		it("signal then query then activity completes", async () => {
 			const profileWorkflow = workflow(function* () {
-				const profile = yield* query("profile-data");
+				const profile = yield* receive("profile-data");
 				return profile;
 			});
 
 			const checkoutWorkflow = workflow(function* () {
-				const payment = yield* query("payment");
-				const profile = yield* query("profile");
+				const payment = yield* receive("payment");
+				const profile = yield* ask("profile");
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
 				});
@@ -706,14 +706,14 @@ describe("useWorkflow", () => {
 
 		it("debug panel shows all events for all() with signal + workflow dep", async () => {
 			const profileWorkflow = workflow(function* () {
-				const profile = yield* query("profile-data");
+				const profile = yield* receive("profile-data");
 				return profile;
 			});
 
 			const checkoutWf = workflow(function* () {
 				const [payment, profile] = yield* all(
-					query("payment"),
-					query("profile"),
+					receive("payment"),
+					ask("profile"),
 				);
 				const order = yield* activity("place-order", async () => {
 					return `${(profile as { name: string }).name}:${payment}`;
@@ -935,7 +935,7 @@ describe("useWorkflow", () => {
 
 		it("seeds events and continues execution for partial snapshot", async () => {
 			const w = workflow(function* () {
-				const name = yield* query("name");
+				const name = yield* receive("name");
 				return `hello ${name}`;
 			});
 
@@ -1060,7 +1060,7 @@ describe("useWorkflow", () => {
 
 		it("useWorkflow sends typed signals", async () => {
 			const loginWorkflow = workflow(function* () {
-				const name = yield* query("credentials").as<string>();
+				const name = yield* receive("credentials").as<string>();
 				return `Welcome ${name}`;
 			});
 
@@ -1098,7 +1098,7 @@ describe("useWorkflow", () => {
 			});
 
 			const orderWorkflow = workflow(function* () {
-				const profile = yield* query("profile").as<{ name: string }>();
+				const profile = yield* ask("profile").as<{ name: string }>();
 				return `order for ${profile.name}`;
 			});
 
@@ -1151,7 +1151,7 @@ describe("useWorkflow", () => {
 
 		it("sends signals to a registry workflow", async () => {
 			const loginWorkflow = workflow(function* () {
-				const name = yield* query("credentials").as<string>();
+				const name = yield* receive("credentials").as<string>();
 				return `Welcome ${name}`;
 			});
 

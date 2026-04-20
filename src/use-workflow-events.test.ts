@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { createBindings } from "./bindings";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
-import { activity, query, workflow } from "./types";
+import { activity, receive, workflow } from "./types";
 import type { AnyWorkflow } from "./types";
 import { useWorkflowEvents } from "./use-workflow-events";
 
@@ -74,7 +74,7 @@ describe("useWorkflowEvents", () => {
 
 	it("updates events when a signal is sent to a waiting workflow", async () => {
 		const formWorkflow = workflow(function* () {
-			const data = yield* query<string>("submit");
+			const data = yield* receive<string>("submit");
 			return `got: ${data}`;
 		});
 
@@ -156,7 +156,7 @@ describe("useWorkflowEvents", () => {
 
 	it("shows all events for a local workflow that completes with signals", async () => {
 		const localWorkflow = workflow(function* () {
-			const data = yield* query<string>("submit");
+			const data = yield* receive<string>("submit");
 			return yield* activity("process", async () => `processed: ${data}`);
 		});
 

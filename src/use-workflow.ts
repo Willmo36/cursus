@@ -17,7 +17,7 @@ import type { WorkflowSnapshot } from "./run-workflow";
 import { checkVersion, MemoryStorage } from "./storage";
 import type {
 	AnyWorkflow,
-	SignalMapOf,
+	ReceiveMapOf,
 	Workflow,
 	WorkflowEvent,
 	WorkflowEventObserver,
@@ -34,13 +34,13 @@ type UseWorkflowOptions = {
 
 type UseWorkflowResult<
 	T,
-	SignalMap extends Record<string, unknown> = Record<string, unknown>,
+	ReceiveMap extends Record<string, unknown> = Record<string, unknown>,
 > = {
 	state: WorkflowState<T>;
 	published: unknown;
-	signal: <K extends keyof SignalMap & string>(
+	signal: <K extends keyof ReceiveMap & string>(
 		name: K,
-		payload: SignalMap[K],
+		payload: ReceiveMap[K],
 	) => void;
 	cancel: () => void;
 	reset: () => void;
@@ -66,7 +66,7 @@ export function useWorkflow<W extends AnyWorkflow>(
 	workflowId: string,
 	workflowFn: W,
 	options?: UseWorkflowOptions,
-): UseWorkflowResult<W extends Workflow<infer T, any> ? T : unknown, SignalMapOf<W>>;
+): UseWorkflowResult<W extends Workflow<infer T, any> ? T : unknown, ReceiveMapOf<W>>;
 
 // Implementation
 export function useWorkflow(

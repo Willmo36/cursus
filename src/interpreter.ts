@@ -382,8 +382,10 @@ export class Interpreter {
 				return this.executeLoop(command);
 			case "loop_break":
 				return this.executeLoopBreak(command);
-			case "query":
-				return this.executeQuery(command);
+			case "ask":
+				return this.executeAsk(command);
+			case "receive":
+				return this.executeReceive(command);
 			default: {
 				const _exhaustive: never = command;
 				throw new Error(`Unknown command type: ${_exhaustive}`);
@@ -450,30 +452,15 @@ export class Interpreter {
 		}
 	}
 
-	private async executeQuery(
-		command: Extract<Command, { type: "query" }>,
+	// ask(): resolve from the registry. Marker-only event; replay re-hydrates.
+	private async executeAsk(
+		command: Extract<Command, { type: "ask" }>,
 	): Promise<unknown> {
-		// Replay: signal-resolved query returns the cached value.
-		const signalResolved = this.log.findCompleted(command.seq, "receive_resolved");
-		if (signalResolved) {
-			if (this.registry?.has(command.label)) {
-				throw new Error(
-					`Log at seq ${command.seq} has a receive_resolved event for "${command.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
-				);
-			}
-			return (signalResolved as ReceiveResolvedEvent).value;
-		}
-
-		// Replay: workflow-resolved query re-hydrates via the registry. The marker
-		// event has no value; ask the registry for the current hydrated value.
-		const workflowMarker = this.log.findCompleted(
-			command.seq,
-			"read_resolved",
-		);
-		if (workflowMarker) {
+		const marker = this.log.findCompleted(command.seq, "ask_resolved");
+		if (marker) {
 			if (!this.registry?.has(command.label)) {
 				throw new Error(
-					`Cannot replay workflow query "${command.label}": registry has no entry. Did the registry change between runs?`,
+					`Cannot replay ask("${command.label}"): registry has no entry. Did the registry change between runs?`,
 				);
 			}
 			return this.registry.waitFor(command.label, {
@@ -482,38 +469,46 @@ export class Interpreter {
 			});
 		}
 
-		// Self-reference detection: a workflow cannot query its own output
+		// Self-reference detection: a workflow cannot ask for its own output
 		if (command.label === this._workflowId) {
 			throw new Error(
-				`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+				`Workflow "${this._workflowId}" cannot ask itself. Use a different label or restructure the dependency.`,
 			);
 		}
 
-		// Auto-match: if the registry has a workflow with this label, use waitFor
-		// and record a marker-only event. The value is never serialized to the log —
-		// it re-hydrates via the registry on every replay.
-		if (this.registry?.has(command.label)) {
-			try {
-				const result = await this.registry.waitFor(command.label, {
-					start: true,
-					caller: this._workflowId,
-				});
-
-				this.log.append({
-					type: "read_resolved",
-					label: command.label,
-					seq: command.seq,
-					timestamp: Date.now(),
-				});
-
-				return result;
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				throw new Error(message);
-			}
+		if (!this.registry?.has(command.label)) {
+			throw new Error(
+				`ask("${command.label}") failed: no workflow registered with this label. Use receive() for external send() values.`,
+			);
 		}
 
-		// No registry match: pause until signal() is called with this label
+		try {
+			const result = await this.registry.waitFor(command.label, {
+				start: true,
+				caller: this._workflowId,
+			});
+			this.log.append({
+				type: "ask_resolved",
+				label: command.label,
+				seq: command.seq,
+				timestamp: Date.now(),
+			});
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			throw new Error(message);
+		}
+	}
+
+	// receive(): wait for an external send(). Value is logged and replayed verbatim.
+	private async executeReceive(
+		command: Extract<Command, { type: "receive" }>,
+	): Promise<unknown> {
+		const resolved = this.log.findCompleted(command.seq, "receive_resolved");
+		if (resolved) {
+			return (resolved as ReceiveResolvedEvent).value;
+		}
+
 		this._status = "waiting";
 		this._receiving = command.label;
 		this._receivingType = "query";
@@ -823,33 +818,12 @@ export class Interpreter {
 				case "loop_break": {
 					throw new Error("loop_break cannot be used inside an all branch");
 				}
-				case "query": {
-					// Replay: signal-resolved query returns the cached value.
-					const queryResolved = this.log.findCompleted(
-						item.seq,
-						"receive_resolved",
-					);
-					if (queryResolved) {
-						if (this.registry?.has(item.label)) {
-							return Promise.reject(new Error(
-								`Log at seq ${item.seq} has a receive_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
-							));
-						}
-						return Promise.resolve({
-							index,
-							value: (queryResolved as ReceiveResolvedEvent).value,
-						});
-					}
-
-					// Replay: workflow-resolved query re-hydrates via the registry.
-					const workflowMarker = this.log.findCompleted(
-						item.seq,
-						"read_resolved",
-					);
-					if (workflowMarker) {
+				case "ask": {
+					const marker = this.log.findCompleted(item.seq, "ask_resolved");
+					if (marker) {
 						if (!this.registry?.has(item.label)) {
 							return Promise.reject(new Error(
-								`Cannot replay workflow query "${item.label}": registry has no entry.`,
+								`Cannot replay ask("${item.label}"): registry has no entry.`,
 							));
 						}
 						return this.registry.waitFor(item.label, {
@@ -858,30 +832,43 @@ export class Interpreter {
 						}).then((value) => ({ index, value }));
 					}
 
-					// Self-reference check
 					if (item.label === this._workflowId) {
 						return Promise.reject(new Error(
-							`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+							`Workflow "${this._workflowId}" cannot ask itself. Use a different label or restructure the dependency.`,
 						));
 					}
 
-					// Auto-match registry: record a marker, never cache the value.
-					if (this.registry?.has(item.label)) {
-						return this.registry.waitFor(item.label, {
-							start: true,
-							caller: this._workflowId,
-						}).then((result) => {
-							this.log.append({
-								type: "read_resolved",
-								label: item.label,
-								seq: item.seq,
-								timestamp: Date.now(),
-							});
-							return { index, value: result };
+					if (!this.registry?.has(item.label)) {
+						return Promise.reject(new Error(
+							`ask("${item.label}") failed: no workflow registered with this label.`,
+						));
+					}
+
+					return this.registry.waitFor(item.label, {
+						start: true,
+						caller: this._workflowId,
+					}).then((result) => {
+						this.log.append({
+							type: "ask_resolved",
+							label: item.label,
+							seq: item.seq,
+							timestamp: Date.now(),
+						});
+						return { index, value: result };
+					});
+				}
+				case "receive": {
+					const resolved = this.log.findCompleted(
+						item.seq,
+						"receive_resolved",
+					);
+					if (resolved) {
+						return Promise.resolve({
+							index,
+							value: (resolved as ReceiveResolvedEvent).value,
 						});
 					}
 
-					// No registry match: wait for signal
 					return new Promise<{ index: number; value: unknown }>((resolve) => {
 						allWaiters.push({
 							signal: item.label,
@@ -1078,33 +1065,12 @@ export class Interpreter {
 				case "loop_break": {
 					throw new Error("loop_break cannot be used inside a race branch");
 				}
-				case "query": {
-					// Replay: signal-resolved query returns the cached value.
-					const queryResolved = this.log.findCompleted(
-						item.seq,
-						"receive_resolved",
-					);
-					if (queryResolved) {
-						if (this.registry?.has(item.label)) {
-							return Promise.reject(new Error(
-								`Log at seq ${item.seq} has a receive_resolved event for "${item.label}" which is now a registered workflow. This log was written under a prior event-schema version; clear the log to reset.`,
-							));
-						}
-						return Promise.resolve({
-							index,
-							value: (queryResolved as ReceiveResolvedEvent).value,
-						});
-					}
-
-					// Replay: workflow-resolved query re-hydrates via the registry.
-					const workflowMarker = this.log.findCompleted(
-						item.seq,
-						"read_resolved",
-					);
-					if (workflowMarker) {
+				case "ask": {
+					const marker = this.log.findCompleted(item.seq, "ask_resolved");
+					if (marker) {
 						if (!this.registry?.has(item.label)) {
 							return Promise.reject(new Error(
-								`Cannot replay workflow query "${item.label}": registry has no entry.`,
+								`Cannot replay ask("${item.label}"): registry has no entry.`,
 							));
 						}
 						return this.registry.waitFor(item.label, {
@@ -1113,30 +1079,43 @@ export class Interpreter {
 						}).then((value) => ({ index, value }));
 					}
 
-					// Self-reference check
 					if (item.label === this._workflowId) {
 						return Promise.reject(new Error(
-							`Workflow "${this._workflowId}" cannot query itself. Use a different label or restructure the dependency.`,
+							`Workflow "${this._workflowId}" cannot ask itself. Use a different label or restructure the dependency.`,
 						));
 					}
 
-					// Auto-match registry: record a marker, never cache the value.
-					if (this.registry?.has(item.label)) {
-						return this.registry.waitFor(item.label, {
-							start: true,
-							caller: this._workflowId,
-						}).then((result) => {
-							this.log.append({
-								type: "read_resolved",
-								label: item.label,
-								seq: item.seq,
-								timestamp: Date.now(),
-							});
-							return { index, value: result };
+					if (!this.registry?.has(item.label)) {
+						return Promise.reject(new Error(
+							`ask("${item.label}") failed: no workflow registered with this label.`,
+						));
+					}
+
+					return this.registry.waitFor(item.label, {
+						start: true,
+						caller: this._workflowId,
+					}).then((result) => {
+						this.log.append({
+							type: "ask_resolved",
+							label: item.label,
+							seq: item.seq,
+							timestamp: Date.now(),
+						});
+						return { index, value: result };
+					});
+				}
+				case "receive": {
+					const resolved = this.log.findCompleted(
+						item.seq,
+						"receive_resolved",
+					);
+					if (resolved) {
+						return Promise.resolve({
+							index,
+							value: (resolved as ReceiveResolvedEvent).value,
 						});
 					}
 
-					// No registry match: wait for signal
 					return new Promise<{ index: number; value: unknown }>(
 						(resolve) => {
 							raceWaiters.push({

@@ -7,7 +7,7 @@ import { RegistryContext } from "./registry-provider";
 import type {
 	AnyWorkflow,
 	CheckDeps,
-	SignalMapOf,
+	ReceiveMapOf,
 	Workflow,
 	WorkflowReturn,
 	WorkflowState,
@@ -37,7 +37,7 @@ type UseWorkflowHook<Provides extends Record<string, RegistryEntry>> = {
 	<W extends AnyWorkflow>(
 		workflowId: string,
 		workflowFn: W & CheckDeps<W, Provides>,
-	): UseWorkflowResult<WorkflowReturn<W>, SignalMapOf<W>>;
+	): UseWorkflowResult<WorkflowReturn<W>, ReceiveMapOf<W>>;
 };
 
 export function createBindings<Provides extends Record<string, RegistryEntry>>(

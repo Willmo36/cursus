@@ -9,7 +9,7 @@ import { createBindings } from "./bindings";
 import { createRegistry } from "./registry-builder";
 import { MemoryStorage } from "./storage";
 import type { AnyWorkflow } from "./types";
-import { activity, publish, query, workflow } from "./types";
+import { activity, publish, receive, workflow } from "./types";
 import { usePublished } from "./use-published";
 
 function createWrapper(
@@ -29,7 +29,7 @@ function createWrapper(
 describe("usePublished", () => {
 	it("returns undefined before publish", async () => {
 		const w = workflow(function* () {
-			yield* query("go");
+			yield* receive("go");
 			yield* publish("value");
 			return "done";
 		});
@@ -55,7 +55,7 @@ describe("usePublished", () => {
 	it("returns selected value after publish", async () => {
 		const w = workflow(function* () {
 			yield* publish({ count: 42, label: "hello" });
-			yield* query("done");
+			yield* receive("done");
 			return "ok";
 		});
 
@@ -78,9 +78,9 @@ describe("usePublished", () => {
 	it("returns stable reference when selected value is unchanged", async () => {
 		const w = workflow(function* () {
 			yield* publish({ count: 1, unrelated: "a" });
-			const cmd = yield* query<string>("update");
+			const cmd = yield* receive<string>("update");
 			yield* publish({ count: 1, unrelated: cmd });
-			yield* query("done");
+			yield* receive("done");
 			return "ok";
 		});
 
