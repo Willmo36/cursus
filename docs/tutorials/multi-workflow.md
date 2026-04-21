@@ -9,7 +9,7 @@ Build a multi-workflow e-commerce app where authentication, profile, cart, and c
 By the end you'll understand:
 
 - `createRegistry` and `createBindings` for type-safe registries
-- Cross-workflow `query` dependencies
+- Cross-workflow `ask()` dependencies
 - `publish` for shared intermediate state
 - `merge` for composing registries across modules
 - `usePublished` for efficient state selection
@@ -37,13 +37,13 @@ Start with a self-contained auth module that has its own registry:
 
 ```ts
 // src/auth.ts
-import { workflow, query, activity, publish, handler } from "cursus";
+import { workflow, ask, receive, activity, publish, handler } from "cursus";
 import { createRegistry } from "cursus";
 
 export type User = { name: string; email: string };
 
 const loginWorkflow = workflow(function* () {
-  const creds = yield* query("credentials").as<{
+  const creds = yield* receive("credentials").as<{
     email: string;
     password: string;
   }>();
@@ -59,7 +59,7 @@ const loginWorkflow = workflow(function* () {
 
 const sessionWorkflow = workflow(function* () {
   // Block until login completes — the registry resolves this automatically
-  const user = yield* query("login").as<User>();
+  const user = yield* ask("login").as<User>();
 
   yield* publish(user);
 
@@ -81,7 +81,8 @@ export const authRegistry = createRegistry()
 
 Key points:
 
-- **`query("login").as<User>()`** inside `sessionWorkflow` creates a cross-workflow dependency. When both workflows are in the same registry, the interpreter automatically waits for `login` to complete and feeds its result into `session`.
+- **`ask("login").as<User>()`** inside `sessionWorkflow` creates a cross-workflow dependency. When both workflows are in the same registry, the interpreter automatically waits for `login` to complete and feeds its result into `session`.
+- **`receive()` vs `ask()`**: `receive("credentials")` waits for a UI-sent signal; `ask("login")` reads another workflow's output. The distinction is where the value comes from, not how you consume it.
 - **`createRegistry()`** without arguments defaults to `MemoryStorage`. We'll pass `LocalStorage` at the app level.
 - The module exports a `RegistryBuilder`, not a built `Registry` — we'll merge it later.
 
@@ -89,7 +90,7 @@ Key points:
 
 ```ts
 // src/shop.ts
-import { workflow, query, publish, handler, activity } from "cursus";
+import { workflow, ask, receive, publish, handler, activity } from "cursus";
 import { createRegistry } from "cursus";
 import type { User } from "./auth";
 
@@ -99,7 +100,7 @@ const cartWorkflow = workflow(function* () {
   let items: CartItem[] = [];
 
   // Wait for the first item
-  const first = yield* query("add-item").as<CartItem>();
+  const first = yield* receive("add-item").as<CartItem>();
   items = [first];
   yield* publish(items);
 
@@ -129,9 +130,9 @@ export type OrderConfirmation = {
 };
 
 const checkoutWorkflow = workflow(function* () {
-  // These two queries resolve from other workflows in the registry
-  const session = yield* query("session").as<User>();
-  const cartItems = yield* query("cart").as<CartItem[]>();
+  // These two ask() calls resolve from other workflows in the registry
+  const session = yield* ask("session").as<User>();
+  const cartItems = yield* ask("cart").as<CartItem[]>();
 
   const order = yield* activity("place-order", async () => {
     await new Promise((r) => setTimeout(r, 1000));
@@ -379,25 +380,25 @@ export function App() {
 
 When the app loads:
 
-1. `useWorkflow("login")` starts the login workflow → it blocks at `query("credentials")` → status is `"waiting"`
-2. `useWorkflow("checkout")` starts the checkout workflow → it blocks at `query("session")` → the registry auto-starts `session` → which blocks at `query("login")` → waiting for login to complete
+1. `useWorkflow("login")` starts the login workflow → it blocks at `receive("credentials")` → status is `"waiting"`
+2. `useWorkflow("checkout")` starts the checkout workflow → it blocks at `ask("session")` → the registry auto-starts `session` → which blocks at `ask("login")` → waiting for login to complete
 
 When the user logs in:
 
 3. `signal("credentials", ...)` → login's `activity("authenticate")` runs → login completes with `User`
-4. Session's `query("login")` resolves → session calls `publish(user)` → session enters its handler loop
-5. Checkout is still blocked on `query("cart")` — waiting for the cart workflow to complete
+4. Session's `ask("login")` resolves → session calls `publish(user)` → session enters its handler loop
+5. Checkout is still blocked on `ask("cart")` — waiting for the cart workflow to complete
 
 When the user adds items and clicks checkout:
 
 6. `signal("checkout", undefined)` → cart's handler calls `done(items)` → cart completes with `CartItem[]`
-7. Checkout's `query("cart")` resolves → `activity("place-order")` runs → checkout completes
+7. Checkout's `ask("cart")` resolves → `activity("place-order")` runs → checkout completes
 
 The registry handles all of this coordination. You never manually pass data between workflows.
 
 ## Circular Dependency Detection
 
-What if `session` queried `"checkout"` and `checkout` queried `"session"`? The registry detects cycles immediately:
+What if `session` asked for `"checkout"` and `checkout` asked for `"session"`? The registry detects cycles immediately:
 
 ```
 Error: Circular dependency detected: checkout -> session -> checkout

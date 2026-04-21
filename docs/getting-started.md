@@ -22,10 +22,10 @@ Optional peer dependencies: `react >= 18.0.0`, `react-dom >= 18.0.0` (required f
 A workflow is a generator function wrapped with `workflow()`:
 
 ```ts
-import { workflow, query, activity } from "cursus";
+import { workflow, receive, activity } from "cursus";
 
 const greetingWorkflow = workflow(function* () {
-  const name = yield* query<string>("name");
+  const name = yield* receive<string>("name");
   const greeting = yield* activity("greet", async () => {
     return `Hello, ${name}!`;
   });
@@ -35,11 +35,16 @@ const greetingWorkflow = workflow(function* () {
 
 This workflow:
 
-1. Waits for a `"name"` signal from the UI
+1. Waits for a `"name"` signal from the UI via `receive()`
 2. Runs a `"greet"` activity
 3. Returns the result
 
 Every `yield*` is a checkpoint. If the page reloads after step 1, the engine replays the stored signal and skips straight to step 2.
+
+**Two primitives pull external values into a workflow:**
+
+- `receive(label)` — wait for an external `signal()` call. The payload is recorded in the event log and replayed verbatim, so it must be JSON-serializable.
+- `ask(label)` — read the current output of another workflow registered under `label`. The value is re-hydrated live on every replay, so non-serializable values (functions, class instances, service bundles) are safe.
 
 ## Using it in React
 
@@ -99,7 +104,7 @@ const { state } = useWorkflow("greeter", greetingWorkflow, {
 });
 ```
 
-Events are persisted incrementally. When the workflow completes, storage is compacted to just the terminal event.
+Events are persisted incrementally. When a workflow completes, its full event log stays in storage so replay on remount can produce the same result without re-running side-effectful activities.
 
 ## What's Next
 

@@ -35,7 +35,7 @@ const snapshot = await runWorkflow("checkout", checkoutWorkflow, {
 });
 ```
 
-If the workflow blocks on a query (e.g. `query`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
+If the workflow blocks on a signal (`receive`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
 
 ## Client-Side Hydration
 
@@ -77,7 +77,7 @@ type WorkflowSnapshot = {
 };
 ```
 
-All fields are JSON-serializable, so you can `JSON.stringify` the snapshot for any transport mechanism.
+All fields are JSON-serializable, so you can `JSON.stringify` the snapshot for any transport mechanism. The event log only stores activity results and receive payloads — `publish` and `return` values are reproduced live by replay on the client, so workflows that publish non-serializable values still SSR correctly as long as their activity/receive inputs are serializable.
 
 ## Framework Examples
 
@@ -136,4 +136,4 @@ const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
 
 - **Signals**: Workflows that block on signals return `state.status === "waiting"`. The client must provide the signal to continue.
 - **Timers**: `sleep()` blocks `runWorkflow` for the full duration. Avoid long sleeps in server-executed workflows.
-- **Cross-workflow deps**: `runWorkflow` doesn't support `query` for cross-workflow dependencies — these require a registry, which is a client-side concept. Workflows that use cross-workflow `query` should be hydrated via registries, not `runWorkflow`.
+- **Cross-workflow deps**: `runWorkflow` doesn't support `ask()` for cross-workflow dependencies — these require a registry, which is a client-side concept. Workflows that use `ask()` should be hydrated via registries, not `runWorkflow`.

@@ -15,11 +15,11 @@ React bindings available via `cursus/react`. Devtools via `cursus/devtools`.
 Define a workflow as a generator function:
 
 ```ts
-import { workflow, query, activity } from "cursus";
+import { workflow, receive, activity } from "cursus";
 
 const loginWorkflow = workflow(function* () {
   // Pause until the user submits credentials
-  const creds = yield* query<{ username: string; password: string }>("credentials");
+  const creds = yield* receive<{ username: string; password: string }>("credentials");
 
   // Run a side effect — result is recorded in the event log
   const user = yield* activity("authenticate", async () => {
@@ -72,21 +72,21 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 ## Features
 
 - **Durable execution** — event-sourced replay survives page reloads
-- **Queries** — `query` for UI-to-workflow communication
+- **Receive & ask** — `receive` for UI-to-workflow signals, `ask` for cross-workflow reads
 - **Activities** — async side effects with automatic replay skipping
 - **Timers** — durable `sleep` that survives reloads
 - **all & race** — concurrent branches with `all()` and first-to-complete `race()`
 - **Child workflows** — compose via `yield*` delegation
-- **Cross-workflow dependencies** — `query` with circular dependency detection
+- **Cross-workflow dependencies** — `ask()` with circular dependency detection
 - **Signal loops** — `handler()` for long-running interactive workflows
-- **Publish** — expose intermediate workflow state to consumers
+- **Publish** — expose intermediate workflow state to consumers (non-serializable values OK)
 - **Registries** — share workflows across the component tree via React context
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — try/catch + loop for retry patterns
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
 - **SSR** — `runWorkflow` for server-side execution, snapshot hydration via `useWorkflow`
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
-- **Type-safe** — query types inferred from workflow definition
+- **Type-safe** — signal and activity types inferred from workflow definition; non-serializable payloads rejected at compile time
 
 ## API Overview
 
@@ -96,15 +96,15 @@ Free functions yielded inside a workflow generator:
 
 | Command | Description |
 |---------|-------------|
-| `activity(name, fn)` | Execute a side effect (API call, computation). Result is recorded. |
-| `query(label)` | Pause until a named query is resolved from the UI. |
+| `activity(name, fn)` | Execute a side effect (API call, computation). Result is recorded. Return type must be serializable. |
+| `receive(label)` | Pause until an external `signal(label, payload)` delivers a value. Payload must be serializable. |
+| `ask(id)` | Read the current output of another registered workflow. Value is recomputed live on replay — non-serializable values (services, class instances) are safe. |
 | `sleep(ms)` | Durable timer — survives page reload. |
 | `all(...branches)` | Wait for multiple branches concurrently, return all results. |
 | `race(...branches)` | Race concurrent branches, cancel the losers. |
 | `child(name, wf)` | Run a nested sub-workflow with its own event log. |
-| `query(id)` | Cross-workflow: block until another registered workflow completes or publishes. |
 | `handler().on(...).as()` | Builder for multi-signal loop with `done()` to exit. |
-| `publish(value)` | Publish a value to consumers without completing. |
+| `publish(value)` | Publish a value to consumers without completing. Value is never serialized to the log. |
 
 ### useWorkflow Hook
 
@@ -154,7 +154,7 @@ function App() {
 
 // Inside checkoutWorkflow:
 const checkoutWorkflow = workflow(function* () {
-  const profile = yield* query("profile").as<Profile>();
+  const profile = yield* ask("profile").as<Profile>();
   // ...
 });
 ```
@@ -208,7 +208,7 @@ expect(result).toEqual({ displayName: "Alice" });
 |---------------|----------|
 | `LocalStorage` | Browser persistence (survives reload) |
 | `MemoryStorage` | Tests, ephemeral workflows |
-| Custom `WorkflowStorage` | Implement `load`, `append`, `compact`, `clear` for any backend |
+| Custom `WorkflowStorage` | Implement `load`, `append`, `clear` for any backend |
 
 ## Tutorials
 

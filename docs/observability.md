@@ -53,23 +53,28 @@ Every workflow operation produces one or more events:
 | Event | Fields | When |
 |-------|--------|------|
 | `workflow_started` | `timestamp` | Workflow begins |
-| `workflow_completed` | `result`, `timestamp` | Workflow returns |
+| `workflow_completed` | `timestamp` | Workflow returns |
 | `workflow_failed` | `error`, `stack?`, `timestamp` | Uncaught error |
 | `workflow_cancelled` | `timestamp` | Workflow cancelled |
 | `activity_scheduled` | `name`, `seq`, `timestamp` | Activity starts |
-| `activity_completed` | `seq`, `result`, `timestamp` | Activity succeeds |
+| `activity_completed` | `seq`, `result`, `timestamp` | Activity succeeds — result is logged |
 | `activity_failed` | `seq`, `error`, `stack?`, `timestamp` | Activity throws |
-| `query_resolved` | `label`, `value`, `seq`, `timestamp` | Query resolved (signal or registry) |
+| `receive_resolved` | `label`, `value`, `seq`, `timestamp` | An external `signal()` delivered a value |
+| `ask_resolved` | `label`, `seq`, `timestamp` | A registry workflow was asked (marker; value is live) |
 | `timer_started` | `seq`, `durationMs`, `timestamp` | Sleep begins |
 | `timer_fired` | `seq`, `timestamp` | Sleep completes |
 | `child_started` | `name`, `workflowId`, `seq`, `timestamp` | Child workflow begins |
-| `child_completed` | `workflowId`, `seq`, `result`, `timestamp` | Child workflow returns |
+| `child_completed` | `workflowId`, `seq`, `childLog`, `timestamp` | Child workflow returns — embeds the child's own log |
 | `child_failed` | `workflowId`, `seq`, `error`, `stack?`, `timestamp` | Child workflow throws |
 | `all_started` | `items`, `seq`, `timestamp` | `all` begins |
-| `all_completed` | `seq`, `results`, `timestamp` | All items resolved |
+| `all_completed` | `seq`, `timestamp` | All branches resolved |
 | `race_started` | `seq`, `items`, `timestamp` | Race begins |
-| `race_completed` | `seq`, `winner`, `value`, `timestamp` | Race resolved |
-| `workflow_published` | `value`, `seq`, `timestamp` | Workflow published a value |
+| `race_completed` | `seq`, `winner`, `timestamp` | Race resolved; winning branch index recorded |
+| `workflow_published` | `seq`, `timestamp` | Workflow called `publish()` |
+| `loop_started` | `seq`, `timestamp` | Loop begins |
+| `loop_completed` | `seq`, `timestamp` | Loop exited via `loopBreak` |
+
+Only two events carry payload data: `activity_completed.result` and `receive_resolved.value`. These are the two places where external data enters the log. All other value-bearing positions (`publish`, `return`, `loopBreak`, `all` / `race` results, child returns) are recomputed in memory on replay, so non-serializable values are safe in those positions. See [Storage](./storage.md#event-log-lifetime).
 
 ## Event Versioning
 
@@ -80,7 +85,7 @@ import { WorkflowRegistry, EVENT_SCHEMA_VERSION, LIBRARY_VERSION } from "cursus"
 
 const trace = registry.getTrace("checkout");
 // {
-//   schemaVersion: 1,
+//   schemaVersion: 5,
 //   libraryVersion: "0.1.0",
 //   workflowId: "checkout",
 //   events: [ ... ]

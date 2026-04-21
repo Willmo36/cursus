@@ -29,7 +29,7 @@ expect(result).toBe("expected value");
 |--------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock functions keyed by activity name. Unmocked activities run their real implementation. |
 | `signals` | `Array<{ name, payload }>` | Pre-queued signals, delivered automatically when the workflow waits for them. |
-| `workflowResults` | `Record<string, unknown>` | Mock results for cross-workflow `query` dependencies. |
+| `workflowResults` | `Record<string, unknown>` | Mock results for cross-workflow `ask()` dependencies. |
 
 ## Mock Activities
 
@@ -51,8 +51,8 @@ Signals are automatically delivered when the workflow enters a waiting state. Th
 ```ts
 // Sequential receive calls
 const myWorkflow = workflow(function* () {
-  const email = yield* query<string>("email");
-  const password = yield* query<string>("password");
+  const email = yield* receive<string>("email");
+  const password = yield* receive<string>("password");
   return `${email}:${password}`;
 });
 
@@ -92,11 +92,11 @@ const result = await createTestRuntime(counterWorkflow, {
 
 ## Cross-Workflow Dependencies
 
-Mock `query` results for cross-workflow dependencies with `workflowResults`:
+Mock `ask()` results for cross-workflow dependencies with `workflowResults`:
 
 ```ts
 const myWorkflow = workflow(function* () {
-  const user = yield* query("login");
+  const user = yield* ask("login").as<string>();
   return `got: ${user}`;
 });
 
@@ -169,8 +169,8 @@ Signal payloads are type-checked against the signals used by your workflow:
 
 ```ts
 const myWorkflow = workflow(function* () {
-  const email = yield* query<string>("email");
-  const count = yield* query<number>("count");
+  const email = yield* receive<string>("email");
+  const count = yield* receive<number>("count");
   return `${email}:${count}`;
 });
 

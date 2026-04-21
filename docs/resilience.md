@@ -50,13 +50,13 @@ const data = yield* loop(function* () {
 
 ## Error recovery across workflows
 
-When one workflow depends on another via `query`, failures propagate as exceptions. The consuming workflow can catch and handle them:
+When one workflow depends on another via `ask()`, failures propagate as exceptions. The consuming workflow can catch and handle them:
 
 ```ts
 const orderWorkflow = workflow(function* () {
-  const shipping = yield* query("shipping").as<ShippingInfo>();
+  const shipping = yield* ask("shipping").as<ShippingInfo>();
   try {
-    const receipt = yield* query("payment").as<Receipt>();
+    const receipt = yield* ask("payment").as<Receipt>();
     return { status: "confirmed", ...shipping, ...receipt };
   } catch (e) {
     return {

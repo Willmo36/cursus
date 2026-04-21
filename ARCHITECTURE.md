@@ -11,7 +11,7 @@ Durable workflows in the browser. A workflow is a **generator function** that yi
 ```ts
 const checkout = workflow(function* () {
   const cart = yield* activity("fetchCart", fetchCart);
-  const payment = yield* query<PaymentInfo>("payment-submitted");
+  const payment = yield* receive<PaymentInfo>("payment-submitted");
   const order = yield* activity("charge", async () => chargeCard(payment));
   return { orderId: order.id };
 });
@@ -30,11 +30,12 @@ Commands are the yield values — declarative descriptions of side effects:
 
 | Command | Purpose |
 |---------|---------|
-| `activity(name, fn)` | Execute a side-effecting function (API call, storage, etc.) |
-| `query(label)` | Pause until an external query is resolved (user input, event) |
+| `activity(name, fn)` | Execute a side-effecting function (API call, storage, etc.). Result is serialized into the log. |
+| `receive(label)` | Pause until an external `signal(label, payload)` arrives. Payload is serialized into the log. |
+| `ask(label)` | Read the current output of a registered workflow. Value is recomputed live on replay; never serialized. |
 | `sleep(ms)` | Durable timer — survives page reload |
 | `child(name, wf)` | Start a nested/child workflow |
-| `publish(value)` | Expose intermediate workflow state to consumers |
+| `publish(value)` | Expose intermediate workflow state to consumers. Value lives in memory; log only records the marker. |
 | `all(...)` | Wait for multiple branches concurrently |
 | `race(...)` | Race branches, first to complete wins |
 | `loop(body)` / `loopBreak(value)` | Repeat until break |
@@ -45,18 +46,22 @@ An append-only, ordered log persisted to browser storage:
 
 ```ts
 type Event =
-  | { type: "workflow_started"; input: unknown; timestamp: number }
+  | { type: "workflow_started"; timestamp: number }
   | { type: "activity_scheduled"; name: string; seq: number }
-  | { type: "activity_completed"; seq: number; result: unknown }
+  | { type: "activity_completed"; seq: number; result: unknown }   // result serialized
   | { type: "activity_failed"; seq: number; error: string }
-  | { type: "query_resolved"; label: string; value: unknown }
+  | { type: "receive_resolved"; label: string; value: unknown; seq: number }  // value serialized
+  | { type: "ask_resolved"; label: string; seq: number }           // marker only
   | { type: "timer_started"; seq: number; durationMs: number }
   | { type: "timer_fired"; seq: number }
   | { type: "child_started"; name: string; workflowId: string }
-  | { type: "child_completed"; workflowId: string; result: unknown }
-  | { type: "workflow_completed"; result: unknown }
+  | { type: "child_completed"; workflowId: string; childLog: Event[] }  // embeds child's log
+  | { type: "workflow_published"; seq: number }                    // marker only
+  | { type: "workflow_completed" }                                 // marker only
   | { type: "workflow_failed"; error: string };
 ```
+
+Only two events carry payload data: `activity_completed.result` and `receive_resolved.value`. Everything else is a marker that records *that* something happened, not the value. Published values, workflow returns, `all`/`race` results, and `loopBreak` values are recomputed in memory on replay — producers can return non-serializable shapes (services, class instances) as long as their activity/receive inputs are serializable.
 
 ### Interpreter (the runtime)
 
@@ -64,7 +69,7 @@ The interpreter drives the generator and manages the event log:
 
 1. **On first run:** Steps the generator, executes commands for real, appends events to the log
 2. **On replay (page reload):** Steps the generator, but instead of executing commands, returns the recorded results from the event log. When the log is exhausted, switches to live execution.
-3. **On signal:** Appends a query_resolved event, resumes the generator if it was waiting for that query
+3. **On signal:** Appends a receive_resolved event and resumes the generator if it was waiting on `receive()` for that label
 
 The key architectural insight: **the workflow function is a deterministic projection of the event log**. State is never serialized directly — it's reconstructed by replaying events through the workflow code.
 
@@ -142,11 +147,11 @@ The test interpreter runs the generator synchronously, injecting results without
 
 | Example | Workflow Features Used |
 |---------|----------------------|
-| SSO login | `activity` (redirect/token exchange), `query` (callback) |
-| Login before proceeding | `query` (credentials), `activity` (auth call), conditional branching |
-| Multipage job application | `child` (nested workflows per page), `signal` (browser back = signal) |
-| Chat room | Long-running workflow with repeated `query` (messages), `signal` (join/leave/message) |
-| Email then password wizard | Sequential `query` (email), then `query` (password), `activity` (validate) |
+| SSO login | `activity` (redirect/token exchange), `receive` (callback) |
+| Login before proceeding | `receive` (credentials), `activity` (auth call), conditional branching |
+| Multipage job application | `child` (nested workflows per page), `receive` (browser back = signal) |
+| Chat room | Long-running workflow with repeated `receive` (messages), `signal` (join/leave/message) |
+| Email then password wizard | Sequential `receive` (email), then `receive` (password), `activity` (validate) |
 | Cookie banner | No storage of final result — the `result` is computed from the event log history itself |
 
 ## Design Constraints
@@ -160,11 +165,11 @@ The test interpreter runs the generator synchronously, injecting results without
 
 ## Decisions
 
-1. **`query` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
+1. **`receive` does not render UI.** The workflow pauses, and the React component inspects the workflow's "waiting for" state to decide what to render. Keeps workflow functions pure.
 
 2. **Parallel activities supported.** `yield* all(...)` for concurrent branches (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
-3. **History compaction deferred.** Not needed for initial version.
+3. **No history compaction.** Completed workflows keep their full event log. Replay on remount re-runs the generator against stored activity/receive events — fast-forwarding through side effects, reproducing publish/return values live in memory. This lets workflows return non-serializable values at the cost of storage growth proportional to workflow length.
 
 ## Algebraic Structure
 
@@ -181,7 +186,7 @@ This is why workflows compose: `yield*` is associative, and the interpreter can 
 `Workflow<A, R>` is a profunctor — contravariant in its requirements input (what queries it needs) and covariant in its result output (what value it produces). In concrete terms:
 
 - **Covariant (result):** If workflow A returns `T`, a parent can `yield* child("a", A)` and receive `T`. The `.map()` combinator transforms the output.
-- **Contravariant (requirements):** If workflow A needs `Query<"submit", string>`, the parent inherits that requirement. The `.provide()` combinator satisfies requirements.
+- **Contravariant (requirements):** If workflow A needs `Receives<"submit", string>`, the parent inherits that requirement. The `.provide()` combinator satisfies requirements.
 
 `child()` composes both directions — the child's result flows to the parent, and signals sent to the parent are forwarded to active children. This preserves the profunctor structure: `yield* child("x", wf)` is equivalent to inlining `wf`.
 

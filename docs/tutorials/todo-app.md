@@ -8,7 +8,7 @@ Build a todo app where the entire application state lives inside a durable workf
 
 By the end you'll understand:
 
-- `workflow`, `query`, `activity`, `publish`, `handler`
+- `workflow`, `receive`, `activity`, `publish`, `handler`
 - `useWorkflow` for React integration
 - How event-sourcing replay makes state durable
 
@@ -25,7 +25,7 @@ npm install cursus
 
 ```ts
 // src/workflows.ts
-import { workflow, query, publish, handler, activity } from "cursus";
+import { workflow, receive, publish, handler, activity } from "cursus";
 
 type Todo = {
   id: string;
@@ -45,7 +45,7 @@ export const todoWorkflow = workflow(function* () {
   let todos: Todo[] = [];
 
   // Wait for the first item
-  const firstText = yield* query("add").as<string>();
+  const firstText = yield* receive("add").as<string>();
   todos = [{ id: crypto.randomUUID(), text: firstText, done: false }];
   yield* publish(todos);
 
@@ -76,7 +76,7 @@ export const todoWorkflow = workflow(function* () {
 
 Let's walk through what's happening:
 
-1. **`query("add").as<string>()`** — pauses the workflow until the UI sends an `"add"` signal. The workflow is in `"waiting"` status.
+1. **`receive("add").as<string>()`** — pauses the workflow until the UI sends an `"add"` signal. The workflow is in `"waiting"` status.
 2. **`publish(todos)`** — pushes the current list to the UI without ending the workflow. Components see it via `useWorkflow`'s `published` field.
 3. **`handler().on(...).as<Todo[]>()`** — enters a loop that waits for one of four signals. Each `.on()` branch is a generator that can call `publish` to update consumers. The loop continues until a branch calls `done(value)`, which becomes the return value of the handler.
 

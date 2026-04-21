@@ -39,7 +39,7 @@ function useWorkflow<T>(
 |-------|------|
 | `state` | `WorkflowState<T>` |
 | `published` | `unknown` |
-| `signal(name, payload)` | `(name: K, payload: SignalMap[K]) => void` |
+| `signal(name, payload)` | `(name: K, payload: ReceiveMap[K]) => void` — delivers a payload to the workflow's waiting `receive(name)` |
 | `cancel()` | `() => void` |
 | `reset()` | `() => void` |
 
@@ -205,7 +205,6 @@ Persists to `window.localStorage`. Keys: `${prefix}:${workflowId}` for events, `
 type WorkflowStorage = {
   load(workflowId: string): Promise<WorkflowEvent[]>;
   append(workflowId: string, events: WorkflowEvent[]): Promise<void>;
-  compact(workflowId: string, events: WorkflowEvent[]): Promise<void>;
   clear(workflowId: string): Promise<void>;
   loadVersion?(workflowId: string): Promise<number | undefined>;
   saveVersion?(workflowId: string, version: number): Promise<void>;
@@ -230,8 +229,8 @@ Free functions imported from `"cursus"` for building workflows:
 
 ```ts
 import {
-  workflow, activity, query, sleep, publish,
-  race, all, child, loop, loopBreak,
+  workflow, activity, ask, receive, sleep, publish,
+  race, all, child, loop, loopBreak, handler,
 } from "cursus";
 ```
 
@@ -249,68 +248,88 @@ Wraps a generator function as a workflow, returning a `Workflow` instance with `
 function activity<T>(
   name: string,
   fn: (signal: AbortSignal) => Promise<T>,
-): Generator<ActivityDescriptor, T, unknown>;
+): [T] extends [Serializable<T>]
+  ? Generator<ActivityDescriptor, T, unknown>
+  : Serializable<T>;
 ```
 
 Run an async activity. On replay, the stored result is returned without calling `fn`.
 
-### query
+Because the result is serialized into the event log, `T` is constrained to a JSON-serializable shape. Passing `() => void` or `Map<K,V>` or a class instance produces a readable compile-time error at the `yield*` site.
 
-`query` has three overloads covering all waiting patterns — it auto-matches the registry (for cross-workflow dependencies) or falls through to signal:
-
-**1. One query, once** — wait for a single value by label and return it:
+### ask
 
 ```ts
-function query<V, K extends string>(label: K): Workflow<V, Query<K, V>>;
+function ask<V, K extends string>(label: K): Generator<AskDescriptor, V, unknown> & {
+  as: <W>() => Generator<AskDescriptor, W, unknown>;
+};
 ```
 
-**2. One query, loop** — receive the same label repeatedly until the handler calls `done`:
+Resolve a value from a registered workflow's output (published or returned). The registry must have a workflow registered at `label`; otherwise `ask()` throws.
+
+On replay, the registry re-runs the target workflow and produces its value live — the value is never stored in the event log. This means `V` is unconstrained: `ask()` can return service bundles, class instances, closures, or anything the producer workflow yields.
 
 ```ts
-function query<T, K extends string>(
-  label: K,
-  handler: (payload: V, done: <D>(value: D) => Workflow<never>) => Generator,
-): Workflow<T, Query<K, V>>;
+const services = yield* ask("api-services").as<ApiServices>();
 ```
 
-**3. N queries, loop** — dispatch to named handlers until one calls `done`:
+### receive
 
 ```ts
-function query<T>(
-  handlers: Record<string, (payload, done) => Generator>,
-): Workflow<T, Query<K, V>>;
+function receive<V, K extends string>(label: K): Generator<ReceiveDescriptor, V, unknown> & {
+  as: <W>() => [W] extends [Serializable<W>]
+    ? Generator<ReceiveDescriptor, W, unknown>
+    : Serializable<W>;
+};
 ```
 
-**Example — a todo store using all three forms:**
+Wait for an external `signal(label, payload)` call. The payload is recorded in the event log and returned verbatim on replay.
+
+Because the payload is serialized, `V` must be JSON-serializable. Non-serializable payload types produce a compile-time error at `.as<V>()`.
+
+```ts
+const email = yield* receive<string>("email");
+const loginData = yield* receive("login").as<{ user: string; token: string }>();
+```
+
+### handler
+
+`handler()` builds a multi-signal receive loop. Chain `.on(signalName, fn)` for each signal, then `.as<T>()` to produce the generator. The loop runs until a handler calls `done(value)`:
+
+```ts
+const result = yield* handler()
+  .on("add", function* (item: string) {
+    items.push(item);
+    yield* publish(items);
+  })
+  .on("checkout", function* (_payload, done) {
+    yield* done(items);
+  })
+  .as<string[]>();
+```
+
+**Example — a todo store using receive + handler:**
 
 ```ts
 const todoStore = workflow(function* () {
-  // 1. One query, once — wait for the user's name
-  const name = yield* query("login").as<string>();
+  // Wait for a single signal
+  const name = yield* receive("login").as<string>();
 
-  // 2. One query, loop — collect todos one at a time
-  const todos: string[] = yield* query("add-todo", function* (text: string, done) {
-    todos.push(text);
-    if (todos.length >= 3) {
-      yield* done(todos);
-    }
-  });
-
-  // 3. N queries, loop — manage the list until checkout
-  let items = todos;
-  const final = yield* query<string[]>({
-    add: function* (text: string) {
+  // Multi-signal loop — runs until a handler calls done
+  let items: string[] = [];
+  const final = yield* handler()
+    .on("add", function* (text: string) {
       items = [...items, text];
       yield* publish(items);
-    },
-    remove: function* (index: number) {
+    })
+    .on("remove", function* (index: number) {
       items = items.filter((_, i) => i !== index);
       yield* publish(items);
-    },
-    checkout: function* (_payload, done) {
+    })
+    .on("checkout", function* (_payload, done) {
       yield* done(items);
-    },
-  });
+    })
+    .as<string[]>();
 
   return { user: name, items: final };
 });
@@ -409,13 +428,33 @@ type AnyWorkflow = Workflow<unknown, never>;
 
 Utility type for a `Workflow` with unknown return type and no requirements.
 
-### SignalMapOf
+### ReceiveMapOf
 
 ```ts
-type SignalMapOf<F> = // infers query map from a workflow function
+type ReceiveMapOf<F> = // infers receive label/value map from a workflow function
 ```
 
-Extracts the query label/value map from a workflow function type. Used internally by `useWorkflow` for type-safe `signal()` calls.
+Extracts the receive label/value map from a workflow function type. Used internally by `useWorkflow` for type-safe `signal(name, payload)` calls.
+
+### Serializable
+
+```ts
+type Serializable<T>
+```
+
+Structural check that `T` round-trips cleanly through `JSON.stringify` / `JSON.parse`. Primitives, plain objects, arrays, and `Date` pass. Functions, `Map`, `Set`, `Promise`, `RegExp`, `bigint`, and `symbol` are rejected; objects containing any of those as members are also rejected.
+
+Applied automatically to `activity()` return types and `receive().as<V>()` payloads — non-serializable shapes surface as readable compile-time errors.
+
+### Asks / Receives / Publishes
+
+```ts
+type Asks<K extends string, V>       // requirement: value V from registry workflow K
+type Receives<K extends string, V>   // requirement: signal named K with payload V
+type Publishes<V>                    // producer: emits values of type V
+```
+
+Phantom requirement tags tracked in the `R` parameter of `Workflow<A, R>`. Accumulate through `yield*` composition with no runtime cost.
 
 ### CancelledError
 
@@ -453,8 +492,8 @@ function createTestRuntime<T>(
 | Field | Type | Description |
 |-------|------|-------------|
 | `activities` | `Record<string, (...args) => unknown>` | Mock activity implementations |
-| `signals` | `Array<{ name: K; payload: SignalMap[K] }>` | Pre-queued signals |
-| `workflowResults` | `Record<string, unknown>` | Mock `query` results for cross-workflow dependencies |
+| `signals` | `Array<{ name: K; payload: ReceiveMap[K] }>` | Pre-queued signals |
+| `workflowResults` | `Record<string, unknown>` | Mock `ask()` results for cross-workflow dependencies |
 
 ## Observability
 
@@ -489,7 +528,7 @@ Envelope wrapping a workflow's event log with version metadata. Returned by `reg
 ### EVENT_SCHEMA_VERSION
 
 ```ts
-const EVENT_SCHEMA_VERSION: number; // currently 1
+const EVENT_SCHEMA_VERSION: number; // currently 5
 ```
 
 Monotonic integer incremented when event shapes change.

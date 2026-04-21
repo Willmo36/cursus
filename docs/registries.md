@@ -64,52 +64,55 @@ Registry workflows are started automatically on first `useWorkflow` call and sha
 
 ## Cross-Workflow Dependencies
 
-Workflows can wait on other workflows in the same registry using `query`:
+Workflows read from other workflows in the same registry using `ask()`:
 
 ```ts
-import { workflow, query, activity } from "cursus";
+import { workflow, ask, receive, activity } from "cursus";
 
 const checkoutWorkflow = workflow(function* () {
-  const payment = yield* query("payment");
-  const profile = yield* query("profile");
+  const payment = yield* receive("payment").as<PaymentInfo>();
+  const profile = yield* ask("profile").as<Profile>();
   return yield* activity("place-order", async () => {
-    return `${profile.name}: ${payment}`;
+    return `${profile.name}: ${payment.total}`;
   });
 });
 ```
 
-`query` auto-starts the target workflow if it hasn't been started yet. If it's already completed or published, the result is returned immediately.
+`ask()` auto-starts the target workflow if it hasn't been started yet. If the target has already published a value or completed, the result returns immediately. On replay, the registry re-hydrates the target so `ask()` always returns its current live value — **the value is never stored in the event log**, so workflows can return non-serializable things (service bundles, class instances).
 
-### Publish + query
+### Publish + ask
 
-For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `query` get the published value immediately:
+For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `ask()` get the published value immediately:
 
 ```ts
-import { workflow, query, publish, activity } from "cursus";
+import { workflow, ask, receive, publish, activity } from "cursus";
 
 const sessionWorkflow = workflow(function* () {
-  const { user } = yield* query("login");
+  const { user } = yield* receive("login").as<{ user: string }>();
   yield* publish({ user });
   // keeps running — handles revocation, tier changes, etc.
-  yield* query("login");
+  yield* receive("revoke");
 });
 
 const checkoutWorkflow = workflow(function* () {
-  const account = yield* query("session");
+  const account = yield* ask("session").as<{ user: string }>();
   return yield* activity("place-order", async () => {
     return `order for ${account.user}`;
   });
 });
 ```
 
-Resolution order for `query` against the registry: published value → completed → wait. If no workflow matches the label, the query falls through to signal.
+Resolution order for `ask()`: published value → completed → wait for one of those. The registry must have a workflow registered at that label; otherwise `ask()` throws.
 
-## Mixing Queries in all
+## Mixing ask and receive in all
 
-You can mix signal-backed and workflow-backed queries in `all`:
+You can mix signal-backed and workflow-backed branches in `all`:
 
 ```ts
-const [payment, profile] = yield* all(query("payment"), query("profile"));
+const [payment, profile] = yield* all(
+  receive("payment").as<PaymentInfo>(),
+  ask("profile").as<Profile>(),
+);
 ```
 
 ## Inline Workflows Alongside Registries
@@ -134,7 +137,7 @@ The registry detects circular dependencies at runtime and fails with a clear err
 Circular dependency detected: A -> B -> A
 ```
 
-This applies to both `query` and `all` with workflow generators.
+This applies to both `ask` and `all` with workflow generators.
 
 ## Merging Registries
 

@@ -46,9 +46,6 @@ const myStorage: WorkflowStorage = {
   async append(workflowId: string, events: WorkflowEvent[]): Promise<void> {
     // Append events to the existing log
   },
-  async compact(workflowId: string, events: WorkflowEvent[]): Promise<void> {
-    // Replace the entire log (used after workflow completion)
-  },
   async clear(workflowId: string): Promise<void> {
     // Delete all stored data for this workflow
   },
@@ -65,9 +62,11 @@ const myStorage: WorkflowStorage = {
 
 The `loadVersion` and `saveVersion` methods are optional. Custom implementations without them simply skip version checks.
 
-## Compaction
+## Event Log Lifetime
 
-When a workflow reaches a terminal state (`completed` or `failed`), storage is compacted — the full event log is replaced with just the terminal event. This keeps storage lean while preserving the final result for replay.
+The full event log is retained for the lifetime of a workflow, including after it completes or fails. Replay on reload re-runs the generator against the stored events — activities and receives fast-forward from their logged results, so no side effects re-fire. Storage size grows linearly with workflow length; long-running workflows with many steps should factor this in.
+
+Only two event types carry payload data: `activity_completed` (result) and `receive_resolved` (value). Everything else is a marker that records *that* something happened, not what the value was. Values produced by `publish`, `return`, `loopBreak`, or branches inside `all`/`race` are recomputed in memory on replay, so non-serializable values are safe in those positions.
 
 ## Versioning
 
