@@ -1,6 +1,6 @@
 // ABOUTME: SSO OAuth flow workflow: initiate, wait for callback, exchange token.
-// ABOUTME: Demonstrates the activity-query-activity pattern.
-import { activity, query, workflow } from "cursus";
+// ABOUTME: Demonstrates the activity-receive-activity pattern.
+import { activity, receive, workflow } from "cursus";
 
 type SsoSession = {
 	provider: string;
@@ -14,7 +14,7 @@ export const ssoWorkflow = workflow(function* () {
 		return "https://provider.example.com/authorize?client_id=demo&state=abc123";
 	});
 
-	const callbackCode = yield* query("sso-callback").as<string>();
+	const callbackCode = yield* receive("sso-callback").as<string>();
 
 	const session = yield* activity("exchange-token", async () => {
 		await new Promise((r) => setTimeout(r, 1200));

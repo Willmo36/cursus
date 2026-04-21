@@ -1,6 +1,6 @@
 // ABOUTME: Workflow definitions for the shop example.
 // ABOUTME: Catalog fetches products, cart manages items via signals, checkout coordinates login and cart.
-import { activity, all, handler, publish, query, workflow } from "cursus";
+import { activity, all, ask, handler, publish, receive, workflow } from "cursus";
 import {
 	type ApiFetch,
 	addToCart,
@@ -63,8 +63,8 @@ type CheckoutSignals = {
 export function createCheckoutWorkflow(apiFetch: ApiFetch) {
 	return workflow(function* () {
 		const [credentials, items] = yield* all(
-			query("login").as<{ email: string; password: string }>(),
-			query("cart").as<CartItem[]>(),
+			receive("login").as<{ email: string; password: string }>(),
+			ask("cart").as<CartItem[]>(),
 		);
 
 		const user = yield* activity("authenticate", (signal) =>

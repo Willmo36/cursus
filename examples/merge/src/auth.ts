@@ -1,12 +1,11 @@
 // ABOUTME: Auth registry module with login and session workflows.
 // ABOUTME: Session publishes the user profile for other modules to consume.
-import { activity, createRegistry, publish, query, workflow } from "cursus";
-import { MemoryStorage } from "cursus";
+import { activity, ask, createRegistry, MemoryStorage, publish, receive, workflow } from "cursus";
 
 export type User = { name: string; email: string };
 
 const loginWorkflow = workflow(function* () {
-	const credentials = yield* query("credentials").as<{ email: string; password: string }>();
+	const credentials = yield* receive("credentials").as<{ email: string; password: string }>();
 
 	const user = yield* activity("authenticate", async () => {
 		await new Promise((r) => setTimeout(r, 500));
@@ -17,7 +16,7 @@ const loginWorkflow = workflow(function* () {
 });
 
 const sessionWorkflow = workflow(function* () {
-	const user = yield* query("login").as<User>();
+	const user = yield* ask("login").as<User>();
 	yield* publish(user);
 	return user;
 });

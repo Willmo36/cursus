@@ -1,6 +1,6 @@
 // ABOUTME: Multi-page job application workflow collecting personal info and education.
-// ABOUTME: Demonstrates sequential query calls with a final submission activity.
-import { activity, query, workflow } from "cursus";
+// ABOUTME: Demonstrates sequential receive calls with a final submission activity.
+import { activity, receive, workflow } from "cursus";
 
 type PersonalInfo = {
 	name: string;
@@ -19,8 +19,8 @@ type Application = {
 };
 
 export const applicationWorkflow = workflow(function* () {
-	const personalInfo = yield* query("personal-info").as<PersonalInfo>();
-	const education = yield* query("education").as<Education>();
+	const personalInfo = yield* receive("personal-info").as<PersonalInfo>();
+	const education = yield* receive("education").as<Education>();
 
 	const confirmationId = yield* activity("submit", async () => {
 		await new Promise((r) => setTimeout(r, 1500));

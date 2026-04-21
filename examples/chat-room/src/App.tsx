@@ -143,8 +143,8 @@ function useHydratedMessages(): ChatMessage[] {
 		storage.load(WORKFLOW_ID).then((log) => {
 			const messages: ChatMessage[] = [];
 			for (const event of log) {
-				if (event.type === "signal_received" && event.signal === "chat-event") {
-					const payload = event.payload as
+				if (event.type === "receive_resolved" && event.label === "chat-event") {
+					const payload = event.value as
 						| { type: "message"; username: string; text: string }
 						| { type: "close" };
 					if (payload.type === "message") {

@@ -1,6 +1,6 @@
 // ABOUTME: Two-step signup workflow collecting email and password, then creating an account.
 // ABOUTME: Demonstrates all() to collect both fields in any order.
-import { activity, all, query, workflow } from "cursus";
+import { activity, all, receive, workflow } from "cursus";
 
 type SignupResult = {
 	email: string;
@@ -9,8 +9,8 @@ type SignupResult = {
 
 export const signupWorkflow = workflow(function* () {
 	const [email, password] = yield* all(
-		query("email").as<string>(),
-		query("password").as<string>(),
+		receive("email").as<string>(),
+		receive("password").as<string>(),
 	);
 
 	const token = yield* activity("create-account", async () => {

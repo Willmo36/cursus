@@ -1,6 +1,6 @@
 // ABOUTME: Payment and order workflows demonstrating error recovery with try/catch.
 // ABOUTME: The payment activity fails intermittently; the workflow retries within a loop.
-import { activity, loop, loopBreak, query, sleep, workflow } from "cursus";
+import { activity, ask, loop, loopBreak, receive, sleep, workflow } from "cursus";
 
 type CardInfo = {
 	number: string;
@@ -12,7 +12,7 @@ type Receipt = {
 };
 
 export const paymentWorkflow = workflow(function* () {
-	const card = yield* query("card").as<CardInfo>();
+	const card = yield* receive("card").as<CardInfo>();
 
 	const receipt = yield* loop(function* () {
 		try {
@@ -52,9 +52,9 @@ export type OrderResult =
 	| { status: "payment-failed"; name: string; address: string; error: string };
 
 export const orderWorkflow = workflow(function* () {
-	const shipping = yield* query("shipping").as<ShippingInfo>();
+	const shipping = yield* receive("shipping").as<ShippingInfo>();
 	try {
-		const receipt = yield* query("payment").as<Receipt>();
+		const receipt = yield* ask("payment").as<Receipt>();
 		return {
 			status: "confirmed" as const,
 			...shipping,

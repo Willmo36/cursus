@@ -1,6 +1,6 @@
 // ABOUTME: Login workflow with retry loop for failed authentication attempts.
-// ABOUTME: Demonstrates query + activity in a loop with conditional branching.
-import { activity, query, workflow } from "cursus";
+// ABOUTME: Demonstrates receive + activity in a loop with conditional branching.
+import { activity, receive, workflow } from "cursus";
 
 type Credentials = {
 	username: string;
@@ -15,7 +15,7 @@ type UserProfile = {
 
 export const loginWorkflow = workflow(function* () {
 	for (;;) {
-		const creds = yield* query("credentials").as<Credentials>();
+		const creds = yield* receive("credentials").as<Credentials>();
 
 		const authenticated = yield* activity("authenticate", async () => {
 			await new Promise((r) => setTimeout(r, 800));

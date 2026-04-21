@@ -1,6 +1,6 @@
 // ABOUTME: Data-fetch workflow that races an API call against a timeout.
 // ABOUTME: Demonstrates race to implement the timeout-an-activity pattern.
-import { activity, query, race, sleep, workflow } from "cursus";
+import { activity, race, receive, sleep, workflow } from "cursus";
 
 export type FetchResult =
 	| { status: "ok"; data: string }
@@ -41,7 +41,7 @@ export type ApprovalResult =
 	| { status: "escalated" };
 
 export const approvalWorkflow = workflow(function* () {
-	const result = yield* race(query("approve").as<string>(), sleep(10_000));
+	const result = yield* race(receive("approve").as<string>(), sleep(10_000));
 	if (result.winner === 0) {
 		return { status: "approved" as const, by: result.value };
 	}
