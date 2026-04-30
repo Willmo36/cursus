@@ -18,7 +18,7 @@ import { MemoryStorage } from "cursus";
 const storage = new MemoryStorage();
 ```
 
-This is the default when no storage is provided to `useWorkflow`.
+This is the default when no storage is provided to `createRegistry`.
 
 ### LocalStorage
 
@@ -83,7 +83,7 @@ No migration logic — just wipe and restart.
 
 ### Registry Mode
 
-Versioning in registries is configured per-workflow via `checkVersion` before building:
+Versioning is configured per-workflow via `checkVersion` before building:
 
 ```ts
 const registry = createRegistry(storage)
@@ -96,15 +96,6 @@ await checkVersion(storage, "checkout", 2);
 ```
 
 Only versioned workflows get the check. In this example, `profile` has no version and skips the check entirely.
-
-### Inline Mode
-
-```ts
-const { state } = useWorkflow("checkout", checkoutWorkflow, {
-  storage,
-  version: 2,
-});
-```
 
 ### When to Bump the Version
 

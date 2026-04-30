@@ -33,19 +33,6 @@ const registry = createRegistry(storage)
   .build({ onEvent: [logger, analyticsObserver] });
 ```
 
-### In Inline Workflows
-
-Pass observers via `onEvent` in `useWorkflow` options:
-
-```tsx
-const { state } = useWorkflow("checkout", checkoutWorkflow, {
-  storage,
-  onEvent: (workflowId, event) => {
-    console.log(event.type);
-  },
-});
-```
-
 ## Event Types
 
 Every workflow operation produces one or more events:

@@ -91,19 +91,14 @@ Possible: IndexedDB, server-side, in-memory (for testing).
 ### React Integration
 
 ```ts
-// Inline mode
-const { state, published, signal, cancel, reset } = useWorkflow(
-  "checkout", checkoutWorkflow, { storage }
-);
-
-// Registry mode (via createBindings)
+// Registry mode — the only mode
 const { useWorkflow, Provider } = createBindings(registry);
-const { state, signal } = useWorkflow("checkout");
+const { state, published, signal, cancel, reset } = useWorkflow("checkout");
 ```
 
-The hook:
-- Creates/resumes the interpreter on mount
-- Replays the event log to catch up
+The registry is the runtime. All workflows are registered up front; `useWorkflow` looks them up by ID and subscribes to state changes. The hook:
+- Calls `registry.start(id)` on mount (idempotent — no-op if already running)
+- Subscribes to state changes via `registry.onStateChange`
 - Re-renders on state changes (activity completion, signal receipt, workflow completion)
 - Provides `signal()` to push data into the workflow (user interactions = signals)
 - Provides `reset()` to clear the event log and restart
@@ -169,7 +164,7 @@ The test interpreter runs the generator synchronously, injecting results without
 
 2. **Parallel activities supported.** `yield* all(...)` for concurrent branches (e.g. sending analytics alongside a main operation). Adds complexity to replay logic but is needed.
 
-3. **No history compaction.** Completed workflows keep their full event log. Replay on remount re-runs the generator against stored activity/receive events — fast-forwarding through side effects, reproducing publish/return values live in memory. This lets workflows return non-serializable values at the cost of storage growth proportional to workflow length.
+3. **No history compaction.** Completed workflows keep their full event log. Replay on remount re-runs the generator against stored activity/receive events — fast-forwarding through side effects, reproducing publish/return values live in memory. This lets workflows return non-serializable values at the cost of storage growth proportional to workflow length. SSR is the primary durability driver: the server runs the registry, serializes the event log as a snapshot, and the client seeds it into storage before mounting — the registry replays and hydrates without loading flashes or duplicate activity calls.
 
 ## Algebraic Structure
 

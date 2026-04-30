@@ -34,16 +34,24 @@ const loginWorkflow = workflow(function* () {
 });
 ```
 
-Use it in a component:
+Register it and use it in a component:
 
 ```tsx
-import { LocalStorage } from "cursus";
-import { useWorkflow } from "cursus/react";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
 
-const storage = new LocalStorage();
+const registry = createRegistry(new LocalStorage())
+  .add("login", loginWorkflow)
+  .build();
+
+const { useWorkflow, Provider } = createBindings(registry);
+
+function App() {
+  return <Provider><LoginPage /></Provider>;
+}
 
 function LoginPage() {
-  const { state, signal, reset } = useWorkflow("login", loginWorkflow, { storage });
+  const { state, signal, reset } = useWorkflow("login");
 
   if (state.status === "waiting") {
     return <LoginForm onSubmit={(creds) => signal("credentials", creds)} />;
@@ -84,7 +92,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — try/catch + loop for retry patterns
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
-- **SSR** — `runWorkflow` for server-side execution, snapshot hydration via `useWorkflow`
+- **SSR** — server-side registry execution, event-seeding hydration
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
 - **Type-safe** — signal and activity types inferred from workflow definition; non-serializable payloads rejected at compile time
 
@@ -115,7 +123,7 @@ const {
   signal,     // (name, payload) => void — send data into the workflow
   cancel,     // () => void — cancel with AbortSignal propagation
   reset,      // () => void — clear event log and restart
-} = useWorkflow(id, workflowFn, { storage, version?, onEvent?, snapshot? });
+} = useWorkflow(id); // requires a registry Provider ancestor
 ```
 
 `WorkflowState<T>` is a discriminated union:

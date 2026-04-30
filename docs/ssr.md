@@ -6,134 +6,194 @@ sidebar_position: 8
 
 Cursus workflows run inside `useEffect`, which doesn't execute on the server. Without SSR support, server-rendered pages always show the initial "running" state, causing a loading flash on hydration.
 
-`runWorkflow()` solves this by executing a workflow on the server and producing a serializable snapshot. Pass the snapshot to `useWorkflow` on the client so the initial render matches the server output.
+The SSR pattern: run the workflow via a registry on the server, serialize the resulting event log as a snapshot, and seed it into storage on the client before mounting. The client's registry replays from those events and picks up where the server left off — no loading flash, no duplicate activity calls.
 
 ## How It Works
 
-1. **Server**: `runWorkflow()` executes the workflow and returns a `WorkflowSnapshot`
-2. **Transport**: You serialize the snapshot however your framework requires (RSC props, `<script>` tag, loader data, etc.)
-3. **Client**: `useWorkflow` uses the snapshot for `useState` initializers, then seeds events into storage for replay
+1. **Server**: Build a registry with `MemoryStorage`, start the target workflow, wait for it to settle (complete or block on `receive`), serialize the events
+2. **Transport**: Pass the snapshot however your framework requires (`<script>` tag, RSC props, loader data)
+3. **Client**: Seed the snapshot events into `LocalStorage` before mounting the registry `Provider`
 
-The interpreter replays from the event log — it never re-executes activities that already ran on the server.
+The interpreter replays from the seeded events — activities fast-forward from stored results, no side effects re-fire.
 
 ## Server-Side Execution
 
 ```ts
-import { runWorkflow, MemoryStorage } from "cursus";
+import { createRegistry, MemoryStorage } from "cursus";
+import { productWorkflow } from "./workflow";
 
-const snapshot = await runWorkflow("checkout", checkoutWorkflow);
-// snapshot.state.status === "completed"
-// snapshot.state.result === { orderId: "123" }
-// snapshot.events === [ ... full event log ... ]
-```
+const storage = new MemoryStorage();
+const registry = createRegistry(storage)
+  .add("product", productWorkflow)
+  .build();
 
-`runWorkflow` accepts an optional storage:
+// Start the workflow and wait for it to settle
+await new Promise<void>((resolve) => {
+  let resolved = false;
 
-```ts
-const snapshot = await runWorkflow("checkout", checkoutWorkflow, {
-  storage: new MemoryStorage(),
+  registry._registry.onStateChange("product", () => {
+    if (resolved) return;
+    const state = registry.getState("product");
+    if (state && (state.status === "completed" || state.status === "waiting" || state.status === "failed")) {
+      resolved = true;
+      resolve();
+    }
+  });
+
+  registry.start("product").then(() => {
+    if (!resolved) { resolved = true; resolve(); }
+  });
 });
+
+const state = registry.getState("product") ?? { status: "running" };
+const events = registry.getEvents("product");
+const published = registry._registry.getInterpreter("product")?.published;
+
+const snapshot = { workflowId: "product", events, state, published };
 ```
 
-If the workflow blocks on a signal (`receive`), `runWorkflow` returns immediately with `state.status === "waiting"`. The snapshot captures events up to the blocking point.
+If the workflow blocks on `receive`, `registry.start()` never resolves — the `onStateChange` listener catches the `"waiting"` state and resolves the Promise. If the workflow completes without blocking, `start()` resolves and the promise settles immediately.
 
 ## Client-Side Hydration
 
-Pass the snapshot to `useWorkflow`:
+Seed the snapshot events into storage before mounting:
 
 ```tsx
-import { useWorkflow } from "cursus/react";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
+import { hydrateRoot } from "react-dom/client";
+import { productWorkflow } from "./workflow";
 
-function CheckoutPage({ snapshot }) {
-  const { state } = useWorkflow("checkout", checkoutWorkflow, {
-    storage,
-    snapshot,
-  });
+const snapshot = window.__SNAPSHOT__;
 
-  // First render uses snapshot values — no loading flash
-  if (state.status === "completed") {
-    return <OrderConfirmation order={state.result} />;
-  }
-  // ...
+// Seed server-produced events so the registry replays without re-running activities
+const storage = new LocalStorage("ssr");
+await storage.append(snapshot.workflowId, snapshot.events);
+
+const registry = createRegistry(storage)
+  .add("product", productWorkflow)
+  .build();
+
+const { Provider } = createBindings(registry);
+
+hydrateRoot(
+  document.getElementById("root")!,
+  <Provider>
+    <App snapshot={snapshot} />
+  </Provider>,
+);
+```
+
+Inside the app, `useWorkflow("product")` picks up the registry's replayed state immediately:
+
+```tsx
+function App({ snapshot }) {
+  const { state, published, signal, reset } = useWorkflow("product");
+  // state matches the server-rendered state on first render — no flash
 }
 ```
-
-### Behavior by Snapshot State
-
-| Snapshot state | Client behavior |
-|---|---|
-| `completed` / `failed` | No interpreter runs. State is initialized from snapshot. |
-| `waiting` | Events are seeded into storage. Interpreter replays to the waiting point and resumes. |
-| `running` | Events are seeded. Interpreter replays and continues executing remaining steps. |
-
-## WorkflowSnapshot Type
-
-```ts
-type WorkflowSnapshot = {
-  workflowId: string;
-  events: WorkflowEvent[];
-  state: WorkflowState;
-  published: unknown;
-};
-```
-
-All fields are JSON-serializable, so you can `JSON.stringify` the snapshot for any transport mechanism. The event log only stores activity results and receive payloads — `publish` and `return` values are reproduced live by replay on the client, so workflows that publish non-serializable values still SSR correctly as long as their activity/receive inputs are serializable.
 
 ## Framework Examples
 
 ### Next.js (App Router)
 
 ```tsx
-// app/checkout/page.tsx
-import { runWorkflow } from "cursus";
+// app/product/page.tsx
+import { createRegistry, MemoryStorage } from "cursus";
+import { productWorkflow } from "./workflow";
 
-export default async function CheckoutPage() {
-  const snapshot = await runWorkflow("checkout", checkoutWorkflow);
-  return <CheckoutClient snapshot={snapshot} />;
+export default async function ProductPage() {
+  const storage = new MemoryStorage();
+  const registry = createRegistry(storage)
+    .add("product", productWorkflow)
+    .build();
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+    registry._registry.onStateChange("product", () => {
+      if (resolved) return;
+      const s = registry.getState("product");
+      if (s && s.status !== "running") { resolved = true; resolve(); }
+    });
+    registry.start("product").then(() => { if (!resolved) { resolved = true; resolve(); } });
+  });
+
+  const snapshot = {
+    workflowId: "product",
+    events: registry.getEvents("product"),
+    state: registry.getState("product") ?? { status: "running" },
+    published: registry._registry.getInterpreter("product")?.published,
+  };
+
+  return <ProductClient snapshot={snapshot} />;
 }
 ```
 
 ```tsx
-// app/checkout/checkout-client.tsx
+// app/product/product-client.tsx
 "use client";
-import { useWorkflow } from "cursus/react";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
+import { productWorkflow } from "./workflow";
 
-export function CheckoutClient({ snapshot }) {
-  const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
-  // ...
+export async function ProductClient({ snapshot }) {
+  const storage = new LocalStorage("product");
+  await storage.append(snapshot.workflowId, snapshot.events);
+
+  const registry = createRegistry(storage)
+    .add("product", productWorkflow)
+    .build();
+
+  const { Provider } = createBindings(registry);
+
+  return (
+    <Provider>
+      <ProductPage snapshot={snapshot} />
+    </Provider>
+  );
 }
 ```
 
 ### Remix / React Router
 
 ```tsx
+// routes/product.tsx
 export async function loader() {
-  const snapshot = await runWorkflow("checkout", checkoutWorkflow);
-  return { snapshot };
+  const storage = new MemoryStorage();
+  const registry = createRegistry(storage)
+    .add("product", productWorkflow)
+    .build();
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+    registry._registry.onStateChange("product", () => {
+      if (resolved) return;
+      const s = registry.getState("product");
+      if (s && s.status !== "running") { resolved = true; resolve(); }
+    });
+    registry.start("product").then(() => { if (!resolved) { resolved = true; resolve(); } });
+  });
+
+  return {
+    snapshot: {
+      workflowId: "product",
+      events: registry.getEvents("product"),
+      state: registry.getState("product") ?? { status: "running" },
+      published: registry._registry.getInterpreter("product")?.published,
+    },
+  };
 }
 
-export default function Checkout() {
+export default function Product() {
   const { snapshot } = useLoaderData();
-  const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
-  // ...
+  // Seeding events must happen before rendering; do it in a client-side entry point
+  // or use a useLayoutEffect to seed before useWorkflow fires.
 }
-```
-
-### Manual (`<script>` tag)
-
-```html
-<script>
-  window.__WORKFLOW_SNAPSHOT__ = ${JSON.stringify(snapshot)};
-</script>
-```
-
-```tsx
-const snapshot = (window as any).__WORKFLOW_SNAPSHOT__;
-const wf = useWorkflow("checkout", checkoutWorkflow, { storage, snapshot });
 ```
 
 ## Limitations
 
-- **Signals**: Workflows that block on signals return `state.status === "waiting"`. The client must provide the signal to continue.
-- **Timers**: `sleep()` blocks `runWorkflow` for the full duration. Avoid long sleeps in server-executed workflows.
-- **Cross-workflow deps**: `runWorkflow` doesn't support `ask()` for cross-workflow dependencies — these require a registry, which is a client-side concept. Workflows that use `ask()` should be hydrated via registries, not `runWorkflow`.
+- **Signals**: Workflows that block on `receive` return `state.status === "waiting"`. The client must provide the signal to continue.
+- **Timers**: `sleep()` causes `registry.start()` to never resolve for the duration. Avoid long sleeps in server-executed workflows; use `race(sleep, receive)` instead.
+- **Cross-workflow deps**: The server-side registry runs all registered workflows. For workflows that depend on each other via `ask()`, register all of them in the server registry. The dependency chain runs to completion before you read events.
+- **Non-serializable published values**: `published` is serialized into the snapshot for transport. If a workflow publishes a non-serializable value (a class instance, service bundle), the snapshot's `published` field will be `undefined` after JSON round-trip — but the client registry will reconstruct the value live via replay.

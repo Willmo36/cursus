@@ -48,18 +48,28 @@ Every `yield*` is a checkpoint. If the page reloads after step 1, the engine rep
 
 ## Using it in React
 
-The `useWorkflow` hook runs a workflow and gives you reactive state:
+The registry is the runtime. Create one, register your workflows, wrap your app in the `Provider`, then consume workflows with `useWorkflow`:
 
 ```tsx
-import { MemoryStorage } from "cursus";
-import { useWorkflow } from "cursus/react";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
+
+const registry = createRegistry(new LocalStorage("my-app"))
+  .add("greeter", greetingWorkflow)
+  .build();
+
+const { useWorkflow, Provider } = createBindings(registry);
+
+function App() {
+  return (
+    <Provider>
+      <Greeter />
+    </Provider>
+  );
+}
 
 function Greeter() {
-  const { state, signal } = useWorkflow(
-    "greeter",
-    greetingWorkflow,
-    { storage: new MemoryStorage() },
-  );
+  const { state, signal } = useWorkflow("greeter");
 
   if (state.status === "waiting") {
     return (
@@ -94,14 +104,14 @@ function Greeter() {
 
 ## Persistence
 
-By default, inline workflows use an ephemeral `MemoryStorage`. To survive page reloads, pass `LocalStorage`:
+The registry's storage is set when you call `createRegistry(storage)`. Pass `LocalStorage` to survive page reloads:
 
-```tsx
+```ts
 import { LocalStorage } from "cursus";
 
-const { state } = useWorkflow("greeter", greetingWorkflow, {
-  storage: new LocalStorage("my-app"),
-});
+const registry = createRegistry(new LocalStorage("my-app"))
+  .add("greeter", greetingWorkflow)
+  .build();
 ```
 
 Events are persisted incrementally. When a workflow completes, its full event log stays in storage so replay on remount can produce the same result without re-running side-effectful activities.

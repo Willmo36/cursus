@@ -11,27 +11,17 @@ Exhaustive reference for all public exports from `cursus`.
 ### useWorkflow
 
 ```ts
-// Registry mode — consumes a workflow from a registry Provider
-function useWorkflow<T>(
-  workflowId: string,
-): UseWorkflowResult<T>;
+// Consumes a workflow from the registry Provider in context
+function useWorkflow<T>(workflowId: string): UseWorkflowResult<T>;
 
-// Inline mode — runs a workflow directly
-function useWorkflow<T>(
-  workflowId: string,
-  workflowFn: Workflow<T>,
-  options?: UseWorkflowOptions,
-): UseWorkflowResult<T>;
+// Consumes a workflow from an explicit typed registry (no Provider needed)
+function useWorkflow<P, K extends keyof P & string>(
+  workflowId: K,
+  registry: Registry<P>,
+): UseWorkflowResult<P[K]["result"], P[K]["signals"]>;
 ```
 
-**UseWorkflowOptions:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `storage` | `WorkflowStorage` | Storage backend. Defaults to registry storage or ephemeral `MemoryStorage`. |
-| `onEvent` | `WorkflowEventObserver \| WorkflowEventObserver[]` | Event observer(s) |
-| `version` | `number` | Version stamp. Mismatched version wipes storage and restarts. |
-| `snapshot` | `WorkflowSnapshot` | SSR snapshot for hydration. |
+Requires a registry `Provider` ancestor (or an explicit `registry` argument). Throws if neither is present.
 
 **UseWorkflowResult:**
 
@@ -127,8 +117,6 @@ Manages shared workflow instances. Created via `createRegistry().build()`.
 | `onStateChange(id, callback)` | Subscribe to state changes. Returns unsubscribe function. |
 | `getTrace(id)` | Get a `WorkflowTrace` envelope with version metadata and events. |
 | `onWorkflowsChange(callback)` | Subscribe to workflow additions/removals. Returns unsubscribe function. |
-| `observe(id, interpreter)` | Register an external interpreter (used by inline workflows). |
-| `unobserve(id)` | Remove an observed interpreter. |
 
 ### createRegistry
 

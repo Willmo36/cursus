@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Registries
 
-Registries let you share workflows across your component tree. Instead of each component running its own inline workflow, you define a set of named workflows once and provide them via React context.
+Registries are the runtime for cursus workflows. You define a set of named workflows once, provide them via React context, and any component in the tree can consume them by ID.
 
 This is how you build multi-step flows where different components drive different parts of the same workflow, or where workflows depend on each other's results.
 
@@ -114,20 +114,6 @@ const [payment, profile] = yield* all(
   ask("profile").as<Profile>(),
 );
 ```
-
-## Inline Workflows Alongside Registries
-
-You can run inline workflows inside a registry provider. They get access to the registry for cross-workflow dependencies:
-
-```tsx
-function CheckoutPage() {
-  // Inline workflow that depends on the registry's "profile" workflow
-  const { state } = useWorkflow("checkout", checkoutWorkflow);
-  // ...
-}
-```
-
-To use different storage for an inline workflow, pass `storage` explicitly in options.
 
 ## Circular Dependency Detection
 
