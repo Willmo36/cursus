@@ -153,6 +153,23 @@ const registry = createRegistry(storage)
 
 See [Observability](./observability.md) for more.
 
+## Per-Workflow Storage
+
+By default all workflows share the registry's storage. Pass a third argument to `.add()` to override storage for a specific workflow:
+
+```ts
+import { createRegistry, LocalStorage, MemoryStorage } from "cursus";
+
+const registry = createRegistry(new LocalStorage("my-app"))
+  .add("checkout", checkoutWorkflow)
+  .add("credentials", credentialsWorkflow, new MemoryStorage())
+  .build();
+```
+
+`credentials` events are never written to disk — signal payloads (passwords, tokens) stay in memory only and are gone on page unload. `checkout` and any other workflows continue to use `LocalStorage` as normal.
+
+If `checkout` depends on `credentials` via `ask()`, it will block on reload until the user re-enters their credentials. That's the correct behaviour — the sensitive data must be re-supplied.
+
 ## Reset
 
 Reset a registry workflow through the hook — this clears storage and restarts:

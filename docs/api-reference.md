@@ -124,14 +124,17 @@ Manages shared workflow instances. Created via `createRegistry().build()`.
 function createRegistry(storage?: WorkflowStorage): RegistryBuilder;
 ```
 
-Builder for type-safe registries. Chain `.add(id, workflow)` to register workflows, then `.build()` to produce a `Registry`. Defaults to `MemoryStorage` when no storage is provided.
+Builder for type-safe registries. Chain `.add(id, workflow, storage?)` to register workflows, then `.build()` to produce a `Registry`. Defaults to `MemoryStorage` when no storage is provided.
 
 ```ts
 const registry = createRegistry(new LocalStorage())
   .add("profile", profileWorkflow)
   .add("checkout", checkoutWorkflow)
+  .add("credentials", credentialsWorkflow, new MemoryStorage()) // never persisted
   .build();
 ```
+
+The optional third argument to `.add()` overrides the storage backend for that workflow only. Useful for workflows that handle sensitive data (passwords, tokens) that should never be written to disk.
 
 The builder tracks provided types — later `add()` calls can depend on earlier ones, and the compiler verifies that all dependencies are satisfied.
 

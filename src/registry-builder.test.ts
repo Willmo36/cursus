@@ -414,4 +414,51 @@ describe("Registry builder", () => {
 			expect(registry.getWorkflowIds().sort()).toEqual(["a", "b", "c"]);
 		});
 	});
+
+	describe("per-workflow storage", () => {
+		it("uses the per-workflow storage instead of the default", async () => {
+			const defaultStorage = new MemoryStorage();
+			const sensitiveStorage = new MemoryStorage();
+
+			const wf = workflow(function* () {
+				return yield* activity("work", async () => "result");
+			});
+
+			const registry = createRegistry(defaultStorage)
+				.add("sensitive", wf, sensitiveStorage)
+				.build();
+
+			await registry.start("sensitive");
+
+			// Events should be in sensitiveStorage, not defaultStorage
+			const eventsInSensitive = await sensitiveStorage.load("sensitive");
+			const eventsInDefault = await defaultStorage.load("sensitive");
+
+			expect(eventsInSensitive.length).toBeGreaterThan(0);
+			expect(eventsInDefault).toEqual([]);
+		});
+
+		it("other workflows still use the default storage", async () => {
+			const defaultStorage = new MemoryStorage();
+			const sensitiveStorage = new MemoryStorage();
+
+			const wf = workflow(function* () {
+				return yield* activity("work", async () => "result");
+			});
+
+			const registry = createRegistry(defaultStorage)
+				.add("normal", wf)
+				.add("sensitive", wf, sensitiveStorage)
+				.build();
+
+			await registry.start("normal");
+			await registry.start("sensitive");
+
+			const normalEvents = await defaultStorage.load("normal");
+			const sensitiveInDefault = await defaultStorage.load("sensitive");
+
+			expect(normalEvents.length).toBeGreaterThan(0);
+			expect(sensitiveInDefault).toEqual([]);
+		});
+	});
 });

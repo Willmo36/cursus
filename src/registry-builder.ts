@@ -60,6 +60,7 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 	add<K extends string, F extends AnyWorkflow | ((...args: any[]) => Generator<any, any, any>)>(
 		id: K,
 		workflowFn: F & CheckDeps<F, Provides>,
+		storage?: WorkflowStorage,
 	): RegistryBuilder<Provides & Record<K, {
 		result: WorkflowReturn<F>;
 		published: ExtractPublishes<ReqsOf<F>>;
@@ -100,9 +101,9 @@ function makeBuilder(
 		_workflows: workflows,
 		_storageMap: storageMap,
 		_defaultStorage: defaultStorage,
-		add(id: string, wf: AnyWorkflow) {
+		add(id: string, wf: AnyWorkflow, storage?: WorkflowStorage) {
 			workflows[id] = wf;
-			storageMap[id] = defaultStorage;
+			storageMap[id] = storage ?? defaultStorage;
 			return builder;
 		},
 		merge(other: RegistryBuilder, resolver?: MergeResolver) {
