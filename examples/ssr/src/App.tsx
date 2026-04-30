@@ -1,7 +1,7 @@
 // ABOUTME: Client-side app component that wraps ProductPage with useWorkflow.
 // ABOUTME: Uses registry-based hook after hydration from the server snapshot.
 
-import type { WorkflowSnapshot } from "cursus";
+import type { WorkflowSnapshot, WorkflowState } from "cursus";
 import { useWorkflow } from "cursus/react";
 import { ProductPage } from "./ProductPage";
 import type { Product, ProductResult, ProductSignals } from "./workflow";
