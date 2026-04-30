@@ -60,6 +60,7 @@ export {
 	all,
 	CANCELLED,
 	CancelledError,
+	DepVersionMismatchError,
 	COMPLETED,
 	child,
 	FAILED,

@@ -80,6 +80,8 @@ const checkoutWorkflow = workflow(function* () {
 
 `ask()` auto-starts the target workflow if it hasn't been started yet. If the target has already published a value or completed, the result returns immediately. On replay, the registry re-hydrates the target so `ask()` always returns its current live value — **the value is never stored in the event log**, so workflows can return non-serializable things (service bundles, class instances).
 
+The dependency's version is recorded at resolution time. If you bump a dependency's version, any consumer whose stored log references the old version is automatically wiped and restarted — no manual consumer version bump needed. See [Storage > Dependency Graph Version Busting](./storage.md#dependency-graph-version-busting).
+
 ### Publish + ask
 
 For long-lived workflows that produce a value without completing, use `publish`. Consumers calling `ask()` get the published value immediately:

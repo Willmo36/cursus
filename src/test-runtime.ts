@@ -108,6 +108,7 @@ export async function createTestRuntime<W extends Workflow<any, any>>(
 			async start(): Promise<void> {},
 			publish() {},
 			getPublishSeq() { return 0; },
+			getVersion() { return undefined; },
 		};
 	}
 

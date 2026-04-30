@@ -135,6 +135,14 @@ const registry = createRegistry(new LocalStorage())
 
 The builder tracks provided types — later `add()` calls can depend on earlier ones, and the compiler verifies that all dependencies are satisfied.
 
+`.build()` accepts an options object:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `onEvent` | `WorkflowEventObserver \| WorkflowEventObserver[]` | — | Observer(s) fired for every event across all workflows |
+| `onStoragePressure` | `(workflowId, eventCount, byteEstimate) => void` | — | Called when a workflow's event count hits the threshold |
+| `storagePressureThreshold` | `number` | `500` | Event count that triggers `onStoragePressure` |
+
 ### merge
 
 ```ts
@@ -496,6 +504,14 @@ class CancelledError extends Error
 ```
 
 Thrown into the generator when a workflow is cancelled.
+
+### DepVersionMismatchError
+
+```ts
+class DepVersionMismatchError extends Error
+```
+
+Thrown by the interpreter during replay when a dependency workflow's version has changed since the `ask_resolved` event was recorded. The registry catches this automatically and wipes the consumer's event log before restarting. Exported for advanced use cases where you need to handle it yourself.
 
 ### WorkflowRegistryInterface
 

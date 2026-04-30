@@ -18,6 +18,16 @@ export class CancelledError extends Error {
 	}
 }
 
+// Thrown by the interpreter when a dependency workflow's version has changed
+// since the ask_resolved event was recorded. The registry catches this to wipe
+// the consumer's event log and restart it fresh.
+export class DepVersionMismatchError extends Error {
+	constructor(label: string, recorded: number | undefined, current: number | undefined) {
+		super(`Dep "${label}" version changed: stored=${recorded}, current=${current}`);
+		this.name = "DepVersionMismatchError";
+	}
+}
+
 // --- Requirement tags ---
 
 // Declares that a workflow asks for a named, typed value from a registered
@@ -353,10 +363,13 @@ export type ReceiveResolvedEvent = {
 // Marker that a registry ask was performed. No value is stored — on replay
 // the registry re-hydrates and produces the value live. This keeps
 // non-serializable values (e.g. method bundles) safe across durable storage.
+// depVersion records the dep workflow's version at resolution time so replay
+// can detect when a dep has been bumped and bust the consumer's event log.
 export type AskResolvedEvent = {
 	type: "ask_resolved";
 	label: string;
 	seq: number;
+	depVersion?: number;
 	timestamp: number;
 };
 
@@ -971,6 +984,7 @@ export type WorkflowRegistryInterface = {
 	start(workflowId: string): Promise<void>;
 	publish(workflowId: string, value: unknown): void;
 	getPublishSeq(workflowId: string): number;
+	getVersion(workflowId: string): number | undefined;
 };
 
 // --- Observers ---

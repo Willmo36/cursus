@@ -547,6 +547,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -579,6 +580,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -644,6 +646,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -705,6 +708,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -739,6 +743,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -759,6 +764,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -780,6 +786,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -800,6 +807,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -1163,6 +1171,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -2541,6 +2550,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -2992,6 +3002,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3155,6 +3166,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3188,6 +3200,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: publishFn,
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3213,6 +3226,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3241,6 +3255,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: publishFn,
 			getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3370,6 +3385,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3487,6 +3503,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3511,6 +3528,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3551,6 +3569,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3583,6 +3602,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3610,6 +3630,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3631,6 +3652,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3657,6 +3679,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {
@@ -3688,6 +3711,7 @@ describe("Interpreter", () => {
 				start: vi.fn(),
 				publish: vi.fn(),
 				getPublishSeq: vi.fn().mockReturnValue(0),
+			getVersion: vi.fn().mockReturnValue(undefined),
 			};
 
 			const wf = workflow(function* () {

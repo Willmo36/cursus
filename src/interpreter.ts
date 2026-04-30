@@ -7,6 +7,7 @@ import {
 	type AllCompletedEvent,
 	type AnyWorkflow,
 	CancelledError,
+	DepVersionMismatchError,
 	type Command,
 	type Descriptor,
 	type RaceCompletedEvent,
@@ -326,6 +327,9 @@ export class Interpreter {
 				// cancel() already set state and logged the event
 				return undefined;
 			}
+			if (err instanceof DepVersionMismatchError) {
+				throw err;
+			}
 			const message = err instanceof Error ? err.message : String(err);
 			const stack = err instanceof Error ? err.stack : undefined;
 			this._status = "failed";
@@ -454,6 +458,11 @@ export class Interpreter {
 					`Cannot replay ask("${command.label}"): registry has no entry. Did the registry change between runs?`,
 				);
 			}
+			const recordedVersion = (marker as { depVersion?: number }).depVersion;
+			const currentVersion = this.registry.getVersion(command.label);
+			if (recordedVersion !== currentVersion) {
+				throw new DepVersionMismatchError(command.label, recordedVersion, currentVersion);
+			}
 			return this.registry.waitFor(command.label, {
 				start: true,
 				caller: this._workflowId,
@@ -482,6 +491,7 @@ export class Interpreter {
 				type: "ask_resolved",
 				label: command.label,
 				seq: command.seq,
+				depVersion: this.registry.getVersion(command.label),
 				timestamp: Date.now(),
 			});
 			return result;
@@ -826,6 +836,11 @@ export class Interpreter {
 								`Cannot replay ask("${item.label}"): registry has no entry.`,
 							));
 						}
+						const recordedVersion = (marker as { depVersion?: number }).depVersion;
+						const currentVersion = this.registry.getVersion(item.label);
+						if (recordedVersion !== currentVersion) {
+							return Promise.reject(new DepVersionMismatchError(item.label, recordedVersion, currentVersion));
+						}
 						return this.registry.waitFor(item.label, {
 							start: true,
 							caller: this._workflowId,
@@ -852,6 +867,7 @@ export class Interpreter {
 							type: "ask_resolved",
 							label: item.label,
 							seq: item.seq,
+							depVersion: this.registry.getVersion(item.label),
 							timestamp: Date.now(),
 						});
 						return { index, value: result };
@@ -1085,6 +1101,11 @@ export class Interpreter {
 								`Cannot replay ask("${item.label}"): registry has no entry.`,
 							));
 						}
+						const recordedVersion = (marker as { depVersion?: number }).depVersion;
+						const currentVersion = this.registry.getVersion(item.label);
+						if (recordedVersion !== currentVersion) {
+							return Promise.reject(new DepVersionMismatchError(item.label, recordedVersion, currentVersion));
+						}
 						return this.registry.waitFor(item.label, {
 							start: true,
 							caller: this._workflowId,
@@ -1111,6 +1132,7 @@ export class Interpreter {
 							type: "ask_resolved",
 							label: item.label,
 							seq: item.seq,
+							depVersion: this.registry.getVersion(item.label),
 							timestamp: Date.now(),
 						});
 						return { index, value: result };

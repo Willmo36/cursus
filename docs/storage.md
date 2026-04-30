@@ -72,30 +72,39 @@ Only two event types carry payload data: `activity_completed` (result) and `rece
 
 When a workflow's code structure changes (adding/removing/reordering `yield*` steps), persisted event logs become incompatible. Instead of crashing with replay errors, you can version workflows so stale logs are detected and wiped cleanly.
 
-### How It Works
+### Workflow Versions
 
-1. On start, the engine compares the stored version to the current version
-2. If they match (or no version is set), proceed normally
-3. If they differ, clear storage and restart fresh
-4. If no version was stored yet (first run), save the version and proceed
-
-No migration logic — just wipe and restart.
-
-### Registry Mode
-
-Versioning is configured per-workflow via `checkVersion` before building:
+Pass a version number to `createRegistry` options (this is done via the `versions` option on `WorkflowRegistry` directly, or through `checkVersion` before starting):
 
 ```ts
-const registry = createRegistry(storage)
-  .add("checkout", checkoutWorkflow)
-  .add("profile", profileWorkflow)
-  .build();
+import { checkVersion } from "cursus";
 
-// Check version before starting
-await checkVersion(storage, "checkout", 2);
+// Called before registry.start(id) — wipes storage if version mismatches
+const wiped = await checkVersion(storage, "checkout", 2);
+// wiped: true if storage was cleared due to version mismatch
 ```
 
-Only versioned workflows get the check. In this example, `profile` has no version and skips the check entirely.
+It's a no-op when `version` is `undefined` or when storage lacks version methods.
+
+### Dependency Graph Version Busting
+
+When a workflow uses `ask()` to depend on another workflow, the version of that dependency is recorded in the event log at resolution time. On replay, if the dependency's version has changed, the consumer's event log is automatically wiped and the workflow restarts fresh — even if the consumer's own version didn't change.
+
+This means bumping a dependency's version cascades to all consumers:
+
+```ts
+// dep was at version 1 — checkout's stored log references dep@v1
+// bump dep to version 2:
+const registry = new WorkflowRegistry(
+  { dep: depWorkflow, checkout: checkoutWorkflow },
+  storage,
+  { versions: { dep: 2 } },
+);
+// On start: checkout's log is detected as stale (dep@v1 ≠ dep@v2) and wiped
+await registry.start("checkout"); // runs fresh
+```
+
+No explicit consumer version bump is needed — the registry detects the mismatch automatically at the `ask()` replay point.
 
 ### When to Bump the Version
 
@@ -112,8 +121,6 @@ Don't bump for:
 
 ### checkVersion
 
-The `checkVersion` helper is exported for advanced use cases:
-
 ```ts
 import { checkVersion } from "cursus";
 
@@ -121,4 +128,21 @@ const wiped = await checkVersion(storage, "checkout", 2);
 // wiped: true if storage was cleared due to version mismatch
 ```
 
-It's a no-op when `version` is `undefined` or when storage lacks version methods.
+## Storage Pressure
+
+Long-running workflows (especially `handler()` loops) can accumulate large event logs over time. Use the `onStoragePressure` hook to detect this and respond — log to Sentry, alert the team, or prompt the user to restart:
+
+```ts
+const registry = createRegistry(new LocalStorage("my-app"))
+  .add("chat", chatWorkflow)
+  .build({
+    onStoragePressure: (workflowId, eventCount, byteEstimate) => {
+      Sentry.captureMessage("Workflow log growing large", {
+        extra: { workflowId, eventCount, byteEstimate },
+      });
+    },
+    storagePressureThreshold: 500, // default: 500 events
+  });
+```
+
+The hook fires after each persist when the total event count meets or exceeds the threshold. No events are evicted — the hook is informational only. The `byteEstimate` is a rough `JSON.stringify` size of the full event array.

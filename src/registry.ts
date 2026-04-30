@@ -6,6 +6,7 @@ import { Interpreter } from "./interpreter";
 import { checkVersion } from "./storage";
 import {
 	type AnyWorkflow,
+	DepVersionMismatchError,
 	type WorkflowEvent,
 	type WorkflowEventObserver,
 	type WorkflowRegistryInterface,
@@ -47,6 +48,8 @@ export class WorkflowRegistry<K extends string = string>
 	private deps = new Map<string, Set<string>>();
 	private observers: WorkflowEventObserver[];
 	private versions?: Partial<Record<K, number>>;
+	private onStoragePressure?: (workflowId: string, eventCount: number, byteEstimate: number) => void;
+	private storagePressureThreshold: number;
 
 	constructor(
 		workflows: Record<K, AnyWorkflow>,
@@ -55,11 +58,15 @@ export class WorkflowRegistry<K extends string = string>
 			observers?: WorkflowEventObserver[];
 			versions?: Partial<Record<K, number>>;
 			storageMap?: Record<string, WorkflowStorage>;
+			onStoragePressure?: (workflowId: string, eventCount: number, byteEstimate: number) => void;
+			storagePressureThreshold?: number;
 		},
 	) {
 		this._defaultStorage = storage;
 		this.observers = options?.observers ?? [];
 		this.versions = options?.versions;
+		this.onStoragePressure = options?.onStoragePressure;
+		this.storagePressureThreshold = options?.storagePressureThreshold ?? 500;
 		this.entries = new Map();
 		for (const [id, wf] of Object.entries(workflows) as [
 			string,
@@ -85,6 +92,10 @@ export class WorkflowRegistry<K extends string = string>
 
 	has(id: string): boolean {
 		return this.entries.has(id);
+	}
+
+	getVersion(id: string): number | undefined {
+		return this.versions?.[id as K];
 	}
 
 	private getEntry(id: string): WorkflowEntry {
@@ -167,6 +178,10 @@ export class WorkflowRegistry<K extends string = string>
 				await entry.storage.append(id, newEvents);
 				persistedCount = allEvents.length;
 			}
+			if (this.onStoragePressure && allEvents.length >= this.storagePressureThreshold) {
+				const byteEstimate = JSON.stringify(allEvents).length;
+				this.onStoragePressure(id, allEvents.length, byteEstimate);
+			}
 		};
 
 		interpreter.onStateChange(() => {
@@ -176,7 +191,18 @@ export class WorkflowRegistry<K extends string = string>
 			}
 		});
 
-		await interpreter.run();
+		try {
+			await interpreter.run();
+		} catch (err) {
+			if (err instanceof DepVersionMismatchError) {
+				// Dep version changed — wipe this workflow's log and restart fresh
+				entry.interpreter = undefined;
+				await entry.storage.clear(id);
+				await this.start(id);
+				return;
+			}
+			throw err;
+		}
 
 		// Persist final events
 		await persistEvents();
