@@ -1152,4 +1152,143 @@ describe("WorkflowRegistry", () => {
 			expect(trace.workflowId).toBe("greet");
 		});
 	});
+
+	describe("dep-graph version busting", () => {
+		it("busts dependent workflow when dependency version changes", async () => {
+			// dep produces a value that changes between versions
+			let depCallCount = 0;
+			const dep = workflow(function* () {
+				depCallCount++;
+				return yield* activity("dep-work", async () => `result-${depCallCount}`);
+			});
+
+			// consumer has its own activity so we can detect whether it replayed or re-ran
+			let consumerActivityCallCount = 0;
+			const consumer = workflow(function* () {
+				const val = yield* ask<string>("dep");
+				return yield* activity("consumer-work", async () => {
+					consumerActivityCallCount++;
+					return `consumed: ${val}`;
+				});
+			});
+
+			const storage = new MemoryStorage();
+
+			// First run — dep version 1
+			const registry1 = new WorkflowRegistry(
+				{ dep, consumer },
+				storage,
+				{ versions: { dep: 1 } },
+			);
+			await registry1.start("dep");
+			await registry1.start("consumer");
+			expect(await registry1.waitFor("consumer")).toBe("consumed: result-1");
+			expect(consumerActivityCallCount).toBe(1);
+
+			// Second run — dep version 2, consumer version unchanged
+			// consumer's stored ask_resolved recorded dep@v1 → should detect mismatch and wipe consumer events
+			// If wiped: consumer-work re-runs (consumerActivityCallCount → 2), result uses new dep value
+			// If NOT wiped: consumer-work replays from stored result, stays at 1
+			const registry2 = new WorkflowRegistry(
+				{ dep, consumer },
+				storage,
+				{ versions: { dep: 2 } },
+			);
+			await registry2.start("dep");
+			await registry2.start("consumer");
+			expect(consumerActivityCallCount).toBe(2);
+			expect(await registry2.waitFor("consumer")).toBe("consumed: result-2");
+		});
+
+		it("does not bust dependent when dependency version is unchanged", async () => {
+			const dep = workflow(function* () {
+				return yield* activity("dep-work", async () => "stable");
+			});
+
+			let consumerActivityCallCount = 0;
+			const consumer = workflow(function* () {
+				const val = yield* ask<string>("dep");
+				return yield* activity("consumer-work", async () => {
+					consumerActivityCallCount++;
+					return `consumed: ${val}`;
+				});
+			});
+
+			const storage = new MemoryStorage();
+
+			const registry1 = new WorkflowRegistry(
+				{ dep, consumer },
+				storage,
+				{ versions: { dep: 1 } },
+			);
+			await registry1.start("dep");
+			await registry1.start("consumer");
+			expect(consumerActivityCallCount).toBe(1);
+
+			// Same dep version — consumer's stored events are valid, activity should NOT re-run
+			const registry2 = new WorkflowRegistry(
+				{ dep, consumer },
+				storage,
+				{ versions: { dep: 1 } },
+			);
+			await registry2.start("dep");
+			await registry2.start("consumer");
+			expect(consumerActivityCallCount).toBe(1); // still 1 — replayed from storage
+			expect(await registry2.waitFor("consumer")).toBe("consumed: stable");
+		});
+	});
+
+	describe("onStoragePressure hook", () => {
+		it("calls onStoragePressure when event count exceeds threshold", async () => {
+			const pressureCalls: Array<{ workflowId: string; eventCount: number }> = [];
+
+			// Use activities to generate many events without needing to signal
+			const wf = workflow(function* () {
+				yield* activity("a1", async () => 1);
+				yield* activity("a2", async () => 2);
+				yield* activity("a3", async () => 3);
+				yield* activity("a4", async () => 4);
+				return "done";
+			});
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ work: wf },
+				storage,
+				{
+					onStoragePressure: (workflowId, eventCount) => {
+						pressureCalls.push({ workflowId, eventCount });
+					},
+					storagePressureThreshold: 3,
+				},
+			);
+
+			await registry.start("work");
+
+			expect(pressureCalls.length).toBeGreaterThan(0);
+			expect(pressureCalls[0].workflowId).toBe("work");
+			expect(pressureCalls[0].eventCount).toBeGreaterThanOrEqual(3);
+		});
+
+		it("does not call onStoragePressure below threshold", async () => {
+			const pressureCalls: number[] = [];
+
+			const wf = workflow(function* () {
+				return yield* activity("quick", async () => "done");
+			});
+
+			const storage = new MemoryStorage();
+			const registry = new WorkflowRegistry(
+				{ quick: wf },
+				storage,
+				{
+					onStoragePressure: () => pressureCalls.push(1),
+					storagePressureThreshold: 100,
+				},
+			);
+
+			await registry.start("quick");
+			expect(pressureCalls.length).toBe(0);
+		});
+	});
 });

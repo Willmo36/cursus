@@ -71,7 +71,11 @@ export type RegistryBuilder<Provides extends Record<string, RegistryEntry> = {}>
 		resolver?: MergeResolver,
 	): RegistryBuilder<Provides & Other>;
 
-	build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }): Registry<Provides>;
+	build(options?: {
+		onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
+		onStoragePressure?: (workflowId: string, eventCount: number, byteEstimate: number) => void;
+		storagePressureThreshold?: number;
+	}): Registry<Provides>;
 
 	/** @internal */
 	readonly _workflows: Record<string, AnyWorkflow>;
@@ -114,13 +118,22 @@ function makeBuilder(
 			}
 			return makeBuilder(defaultStorage, merged, mergedStorage);
 		},
-		build(options?: { onEvent?: WorkflowEventObserver | WorkflowEventObserver[] }) {
+		build(options?: {
+			onEvent?: WorkflowEventObserver | WorkflowEventObserver[];
+			onStoragePressure?: (workflowId: string, eventCount: number, byteEstimate: number) => void;
+			storagePressureThreshold?: number;
+		}) {
 			const observers = options?.onEvent
 				? Array.isArray(options.onEvent)
 					? options.onEvent
 					: [options.onEvent]
 				: undefined;
-			const inner = new WorkflowRegistry(workflows, defaultStorage, { observers, storageMap });
+			const inner = new WorkflowRegistry(workflows, defaultStorage, {
+				observers,
+				storageMap,
+				onStoragePressure: options?.onStoragePressure,
+				storagePressureThreshold: options?.storagePressureThreshold,
+			});
 			const registry = Object.create(inner);
 			registry._registry = inner;
 			return registry as unknown as Registry;
