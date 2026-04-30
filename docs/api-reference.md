@@ -167,6 +167,51 @@ const result = yield* handler()
   .as<string[]>();
 ```
 
+## SSR
+
+### runRegistry
+
+```ts
+function runRegistry<Provides>(
+  registry: Registry<Provides>,
+  ids?: Array<keyof Provides & string>,
+): Promise<RegistrySnapshot<Provides>>;
+```
+
+Runs all (or selected) workflows in the registry to completion or until they block on `receive`, then returns a per-workflow snapshot for client-side hydration. Each snapshot is JSON-serializable.
+
+```ts
+import { createRegistry, MemoryStorage, runRegistry } from "cursus";
+
+const registry = createRegistry(new MemoryStorage())
+  .add("product", productWorkflow)
+  .build();
+
+const snapshots = await runRegistry(registry);
+// snapshots.product — WorkflowSnapshot
+```
+
+### WorkflowSnapshot
+
+```ts
+type WorkflowSnapshot = {
+  workflowId: string;
+  events: WorkflowEvent[];
+  state: WorkflowState;
+  published: unknown;
+};
+```
+
+### RegistrySnapshot
+
+```ts
+type RegistrySnapshot<Provides> = {
+  [K in keyof Provides & string]: WorkflowSnapshot;
+};
+```
+
+See [SSR & Hydration](./ssr.md) for full usage patterns.
+
 ## Storage
 
 ### MemoryStorage

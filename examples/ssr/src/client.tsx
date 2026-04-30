@@ -2,22 +2,17 @@
 // ABOUTME: Seeds server events into storage before mounting so the registry replays correctly.
 
 import { createRegistry, LocalStorage } from "cursus";
+import type { WorkflowSnapshot } from "cursus";
 import { createBindings } from "cursus/react";
 import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
-import type { WorkflowEvent, WorkflowState } from "cursus";
 
 import { App } from "./App";
 import { productWorkflow } from "./workflow";
 
 declare global {
 	interface Window {
-		__SNAPSHOT__: {
-			workflowId: string;
-			events: WorkflowEvent[];
-			state: WorkflowState;
-			published: unknown;
-		};
+		__SNAPSHOT__: WorkflowSnapshot;
 	}
 }
 

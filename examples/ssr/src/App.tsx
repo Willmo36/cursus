@@ -1,19 +1,12 @@
 // ABOUTME: Client-side app component that wraps ProductPage with useWorkflow.
 // ABOUTME: Uses registry-based hook after hydration from the server snapshot.
 
+import type { WorkflowSnapshot } from "cursus";
 import { useWorkflow } from "cursus/react";
 import { ProductPage } from "./ProductPage";
 import type { Product, ProductResult, ProductSignals } from "./workflow";
-import type { WorkflowEvent, WorkflowState } from "cursus";
 
-type Snapshot = {
-	workflowId: string;
-	events: WorkflowEvent[];
-	state: WorkflowState;
-	published: unknown;
-};
-
-export function App({ snapshot }: { snapshot: Snapshot }) {
+export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
 	const { state, published, signal, reset } = useWorkflow("product");
 
 	const product = (published ?? snapshot.published) as Product | undefined;

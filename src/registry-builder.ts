@@ -28,6 +28,8 @@ export type Registry<Provides extends Record<string, RegistryEntry> = {}> = {
 	reset(id: keyof Provides & string): Promise<void>;
 	getState<K extends keyof Provides & string>(id: K): WorkflowState<Provides[K]["result"]> | undefined;
 	getEvents(id: keyof Provides & string): WorkflowEvent[];
+	getPublished(id: keyof Provides & string): unknown;
+	onStateChange(id: keyof Provides & string, callback: () => void): () => void;
 	getWorkflowIds(): string[];
 	readonly storage: WorkflowStorage;
 	/** @internal */

@@ -92,7 +92,7 @@ Close the tab, reopen it — the workflow resumes exactly where it left off.
 - **Versioning** — version-stamp workflows to detect and wipe stale event logs
 - **Resilience** — try/catch + loop for retry patterns
 - **Testing** — `createTestRuntime` with mock activities and pre-queued signals
-- **SSR** — server-side registry execution, event-seeding hydration
+- **SSR** — `runRegistry()` for server-side execution, event-seeding hydration on the client
 - **Observability** — `WorkflowEventObserver`, `useWorkflowEvents`, built-in `WorkflowDebugPanel`
 - **Type-safe** — signal and activity types inferred from workflow definition; non-serializable payloads rejected at compile time
 

@@ -1,20 +1,13 @@
 // ABOUTME: Presentational product page component shared by server and client.
 // ABOUTME: Renders product details, review form, and debug info from plain props.
 
-import type { WorkflowEvent, WorkflowState } from "cursus";
+import type { WorkflowSnapshot, WorkflowState } from "cursus";
 import { useState } from "react";
 
 import type { Product, ProductResult } from "./workflow";
 
-type Snapshot = {
-	workflowId: string;
-	events: WorkflowEvent[];
-	state: WorkflowState;
-	published: unknown;
-};
-
 type ProductPageProps = {
-	snapshot: Snapshot;
+	snapshot: WorkflowSnapshot;
 	product: Product | undefined;
 	state: WorkflowState<ProductResult>;
 	onSignal?: (name: string, payload: string) => void;

@@ -5,6 +5,8 @@ export { default as eventSchema } from "./event-schema.json";
 export { WorkflowRegistry } from "./registry";
 export type { MergeResolver, Registry } from "./registry-builder";
 export { createRegistry } from "./registry-builder";
+export type { RegistrySnapshot, WorkflowSnapshot } from "./run-registry";
+export { runRegistry } from "./run-registry";
 export { checkVersion, LocalStorage, MemoryStorage } from "./storage";
 export { createTestRuntime } from "./test-runtime";
 export type {
