@@ -1,26 +1,46 @@
 // ABOUTME: Client entry point that hydrates server-rendered HTML.
-// ABOUTME: Reads the workflow snapshot injected by the server and calls hydrateRoot().
+// ABOUTME: Seeds server events into storage before mounting so the registry replays correctly.
 
-import type { WorkflowSnapshot } from "cursus";
+import { createRegistry, LocalStorage } from "cursus";
+import { createBindings } from "cursus/react";
 import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
+import type { WorkflowEvent, WorkflowState } from "cursus";
 
 import { App } from "./App";
+import { productWorkflow } from "./workflow";
 
 declare global {
 	interface Window {
-		__SNAPSHOT__: WorkflowSnapshot;
+		__SNAPSHOT__: {
+			workflowId: string;
+			events: WorkflowEvent[];
+			state: WorkflowState;
+			published: unknown;
+		};
 	}
 }
 
 const snapshot = window.__SNAPSHOT__;
+
+// Seed server-side events into localStorage so the registry replays without re-running activities
+const storage = new LocalStorage("ssr");
+await storage.append(snapshot.workflowId, snapshot.events);
+
+const registry = createRegistry(storage)
+	.add("product", productWorkflow)
+	.build();
+
+const { Provider } = createBindings(registry);
 
 const root = document.getElementById("root");
 if (root) {
 	hydrateRoot(
 		root,
 		<StrictMode>
-			<App snapshot={snapshot} />
+			<Provider>
+				<App snapshot={snapshot} />
+			</Provider>
 		</StrictMode>,
 	);
 }

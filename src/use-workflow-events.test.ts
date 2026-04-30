@@ -118,34 +118,31 @@ describe("useWorkflowEvents", () => {
 		});
 	});
 
-	it("shows all events for a local workflow that completes", async () => {
+	it("shows all events for a registry workflow that completes", async () => {
 		const localWorkflow = workflow(function* () {
 			return yield* activity("compute", async () => "result");
 		});
 
 		const storage = new MemoryStorage();
-		const { useWorkflow, wrapper } = createWrapper({}, storage);
+		const { useWorkflow, wrapper } = createWrapper({ local: localWorkflow }, storage);
 
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				local: useWorkflow("local", localWorkflow),
+				local: useWorkflow("local"),
 			}),
 			{ wrapper },
 		);
 
-		// First: verify the local workflow ID appears in events
 		await waitFor(() => {
 			const ids = result.current.events.map((l) => l.id);
 			expect(ids).toContain("local");
 		});
 
-		// Then: verify the workflow completes
 		await waitFor(() => {
 			expect(result.current.local.state.status).toBe("completed");
 		});
 
-		// Finally: verify events are visible
 		await waitFor(() => {
 			const localLog = result.current.events.find((l) => l.id === "local");
 			expect(localLog?.events).toContainEqual(
@@ -154,19 +151,19 @@ describe("useWorkflowEvents", () => {
 		});
 	});
 
-	it("shows all events for a local workflow that completes with signals", async () => {
+	it("shows all events for a registry workflow that completes with signals", async () => {
 		const localWorkflow = workflow(function* () {
 			const data = yield* receive<string>("submit");
 			return yield* activity("process", async () => `processed: ${data}`);
 		});
 
 		const storage = new MemoryStorage();
-		const { useWorkflow, wrapper } = createWrapper({}, storage);
+		const { useWorkflow, wrapper } = createWrapper({ local: localWorkflow }, storage);
 
 		const { result } = renderHook(
 			() => ({
 				events: useWorkflowEvents(),
-				local: useWorkflow("local", localWorkflow),
+				local: useWorkflow("local"),
 			}),
 			{ wrapper },
 		);

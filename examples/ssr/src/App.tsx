@@ -1,19 +1,20 @@
 // ABOUTME: Client-side app component that wraps ProductPage with useWorkflow.
-// ABOUTME: Hydrates the server-rendered snapshot and adds client-side interactivity.
+// ABOUTME: Uses registry-based hook after hydration from the server snapshot.
 
-import type { WorkflowSnapshot } from "cursus";
-import { LocalStorage } from "cursus";
 import { useWorkflow } from "cursus/react";
 import { ProductPage } from "./ProductPage";
 import type { Product, ProductResult, ProductSignals } from "./workflow";
-import { productWorkflow } from "./workflow";
+import type { WorkflowEvent, WorkflowState } from "cursus";
 
-const storage = new LocalStorage("ssr");
+type Snapshot = {
+	workflowId: string;
+	events: WorkflowEvent[];
+	state: WorkflowState;
+	published: unknown;
+};
 
-export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
-	const { state, published, signal, reset } = useWorkflow(
-		"product", productWorkflow, { storage, snapshot },
-	);
+export function App({ snapshot }: { snapshot: Snapshot }) {
+	const { state, published, signal, reset } = useWorkflow("product");
 
 	const product = (published ?? snapshot.published) as Product | undefined;
 
@@ -21,7 +22,7 @@ export function App({ snapshot }: { snapshot: WorkflowSnapshot }) {
 		<ProductPage
 			snapshot={snapshot}
 			product={product}
-			state={state}
+			state={state as WorkflowState<ProductResult>}
 			onSignal={(name, payload) =>
 				signal(name as keyof ProductSignals, payload)
 			}

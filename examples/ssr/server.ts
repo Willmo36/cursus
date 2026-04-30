@@ -1,10 +1,10 @@
-// ABOUTME: Node.js HTTP server that runs a workflow and serves server-rendered HTML.
+// ABOUTME: Node.js HTTP server that runs a workflow via a registry and serves server-rendered HTML.
 // ABOUTME: Demonstrates real SSR — product data is in the initial HTML response.
 
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
-import { runWorkflow } from "cursus";
+import { createRegistry, MemoryStorage } from "cursus";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { ProductPage } from "./src/ProductPage";
@@ -43,18 +43,47 @@ const server = createServer(async (req, res) => {
 		return;
 	}
 
-	// For all other routes, run the workflow and serve SSR HTML
+	// For all other routes, run the workflow via a registry and serve SSR HTML
 	try {
-		const snapshot = await runWorkflow("product", productWorkflow);
+		const storage = new MemoryStorage();
+		const registry = createRegistry(storage)
+			.add("product", productWorkflow)
+			.build();
 
-		const product = snapshot.published as Product | undefined;
+		// Start the workflow and wait for it to settle (complete or block on receive)
+		await new Promise<void>((resolve) => {
+			let resolved = false;
+
+			registry._registry.onStateChange("product", () => {
+				if (resolved) return;
+				const state = registry.getState("product");
+				if (state && (state.status === "completed" || state.status === "waiting" || state.status === "failed")) {
+					resolved = true;
+					resolve();
+				}
+			});
+
+			registry.start("product").then(() => {
+				if (!resolved) {
+					resolved = true;
+					resolve();
+				}
+			});
+		});
+
+		const state = registry.getState("product") ?? { status: "running" as const };
+		const events = registry.getEvents("product");
+		const interpreter = registry._registry.getInterpreter("product");
+		const published = interpreter?.published as Product | undefined;
+
+		// Snapshot for client hydration: seed events into client storage before mount
+		const snapshot = { workflowId: "product", events, state, published };
+
 		const html = renderToString(
 			createElement(ProductPage, {
 				snapshot,
-				product,
-				state: snapshot.state,
-				receiving: snapshot.receiving,
-				result: undefined,
+				product: published,
+				state,
 			}),
 		);
 

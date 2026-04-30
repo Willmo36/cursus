@@ -9,7 +9,7 @@ import { App } from "./App";
 import { createApiFetch } from "./api";
 import { ErrorToggleCtx } from "./error-toggle";
 import { storage } from "./storage";
-import { createCartWorkflow, createCheckoutWorkflow } from "./workflows";
+import { createCatalogWorkflow, createCartWorkflow, createCheckoutWorkflow } from "./workflows";
 
 function Root() {
 	const [forceError, setForceError] = useState(false);
@@ -23,6 +23,7 @@ function Root() {
 
 	const { Provider } = useMemo(() => {
 		const registry = createRegistry(storage)
+			.add("catalog", createCatalogWorkflow(apiFetch))
 			.add("cart", createCartWorkflow(apiFetch))
 			.add("checkout", createCheckoutWorkflow(apiFetch))
 			.build();

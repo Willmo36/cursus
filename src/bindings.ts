@@ -5,11 +5,6 @@ import { createElement, type ReactNode } from "react";
 import type { Registry, RegistryEntry } from "./registry-builder";
 import { RegistryContext } from "./registry-provider";
 import type {
-	AnyWorkflow,
-	CheckDeps,
-	ReceiveMapOf,
-	Workflow,
-	WorkflowReturn,
 	WorkflowState,
 } from "./types";
 import { usePublished as usePublishedBase } from "./use-published";
@@ -27,17 +22,9 @@ type UseWorkflowResult<T, SignalMap extends Record<string, unknown>> = {
 };
 
 type UseWorkflowHook<Provides extends Record<string, RegistryEntry>> = {
-	// Overload 1: registry workflow by ID
 	<K extends keyof Provides & string>(
 		workflowId: K,
 	): UseWorkflowResult<Provides[K]["result"], Provides[K]["signals"]>;
-
-	// Overload 2: inline workflow with dep checking
-	// biome-ignore lint/suspicious/noExplicitAny: need any for Workflow instance inference
-	<W extends AnyWorkflow>(
-		workflowId: string,
-		workflowFn: W & CheckDeps<W, Provides>,
-	): UseWorkflowResult<WorkflowReturn<W>, ReceiveMapOf<W>>;
 };
 
 export function createBindings<Provides extends Record<string, RegistryEntry>>(
@@ -52,13 +39,7 @@ export function createBindings<Provides extends Record<string, RegistryEntry>>(
 	}
 
 	// biome-ignore lint/suspicious/noExplicitAny: runtime delegates to base useWorkflow
-	const useWorkflow: UseWorkflowHook<Provides> = ((
-		workflowId: string,
-		workflowFn?: any,
-	) => {
-		if (workflowFn) {
-			return useWorkflowBase(workflowId, workflowFn);
-		}
+	const useWorkflow: UseWorkflowHook<Provides> = ((workflowId: string) => {
 		return useWorkflowBase(workflowId, registry as any);
 	}) as any;
 
